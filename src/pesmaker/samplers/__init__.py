@@ -1,2 +1,2 @@
-"""Sampling backends such as GPUMD, LAMMPS, and foundation potentials."""
-
+# Copyright (c) 2026 Ting Liang. All rights reserved.
+"""Sampling backend interfaces for foundation potentials and MLIPs."""

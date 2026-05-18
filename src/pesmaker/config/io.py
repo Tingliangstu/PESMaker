@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ting Liang. All rights reserved.
+"""Load PESMaker YAML and TOML configuration files."""
+
 from __future__ import annotations
 
 import tomllib
@@ -8,6 +11,7 @@ from pesmaker.config.schema import PESMakerConfig
 
 
 def load_config(path: str | Path) -> PESMakerConfig:
+    """Load and validate a PESMaker configuration file."""
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(config_path)
@@ -17,6 +21,7 @@ def load_config(path: str | Path) -> PESMakerConfig:
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:
+    """Read a YAML or TOML file into a raw mapping."""
     suffix = path.suffix.lower()
     if suffix in {".yaml", ".yml"}:
         try:

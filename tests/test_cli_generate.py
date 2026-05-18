@@ -1,7 +1,11 @@
+# Copyright (c) 2026 Ting Liang. All rights reserved.
+"""CLI integration tests for structure generation."""
+
 from pesmaker.cli import main
 
 
 def test_cli_generate_writes_structures(tmp_path):
+    """The generate command should write perturbed structures and a manifest."""
     cif_path = tmp_path / "te.cif"
     cif_path.write_text(
         """data_te
@@ -52,6 +56,7 @@ generation:
 
 
 def test_cli_generate_uses_unique_folders_for_duplicate_stems(tmp_path):
+    """Duplicate input stems should not overwrite each other's outputs."""
     cif_path = tmp_path / "te.cif"
     cif_path.write_text(
         """data_te

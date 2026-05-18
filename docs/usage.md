@@ -8,8 +8,7 @@ Create a YAML input file:
 project: Te_mp_19_test
 
 structures:
-  - path: path/to/input.cif
-    role: initial
+  - path/to/input.cif
 
 generation:
   supercell: [4, 4, 4]
@@ -45,10 +44,35 @@ The output directory contains generated VASP structure files and a manifest:
 
 ```text
 runs/Te_mp_19_test/generated/
-  structure_000000.vasp
-  structure_000001.vasp
-  ...
+  input/
+    structure_000000.vasp
+    structure_000001.vasp
+    ...
   manifest.jsonl
+```
+
+For multiple CIF files, list them directly:
+
+```yaml
+project: Te_batch
+
+structures:
+  - Te-mp-19.cif
+  - Te-mp-23.cif
+  - Te-mp-1009490.cif
+
+generation:
+  supercell: [4, 4, 4]
+  perturb:
+    pert_num: 20
+```
+
+For many CIF files in a directory, use an include pattern:
+
+```yaml
+structures:
+  include:
+    - initial_structures/*.cif
 ```
 
 ## Perturbation parameters

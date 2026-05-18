@@ -1,7 +1,11 @@
+# Copyright (c) 2026 Ting Liang. All rights reserved.
+"""Tests for PESMaker configuration parsing."""
+
 from pesmaker.config.schema import PESMakerConfig
 
 
 def test_config_from_mapping_minimal():
+    """Minimal configs should get sensible default workflow engines."""
     config = PESMakerConfig.from_mapping(
         {
             "project": "demo",
@@ -16,6 +20,7 @@ def test_config_from_mapping_minimal():
 
 
 def test_dataset_split_must_sum_to_one():
+    """Dataset split ratios must be normalized."""
     try:
         PESMakerConfig.from_mapping(
             {
@@ -31,6 +36,7 @@ def test_dataset_split_must_sum_to_one():
 
 
 def test_training_model_alias_selects_engine():
+    """The concise `training.model` key should select the training engine."""
     config = PESMakerConfig.from_mapping(
         {
             "project": "demo",
@@ -44,6 +50,7 @@ def test_training_model_alias_selects_engine():
 
 
 def test_structures_accept_simple_path_list():
+    """Users can list structure paths directly without `{path: ...}`."""
     config = PESMakerConfig.from_mapping(
         {
             "project": "demo",
@@ -58,6 +65,7 @@ def test_structures_accept_simple_path_list():
 
 
 def test_structures_accept_include_patterns(tmp_path, monkeypatch):
+    """Users can collect many structures with an `include` glob pattern."""
     structure_dir = tmp_path / "initial_structures"
     structure_dir.mkdir()
     (structure_dir / "a.cif").write_text("", encoding="utf-8")

@@ -1,4 +1,5 @@
-"""PESMaker package."""
+# Copyright (c) 2026 Ting Liang. All rights reserved.
+"""PESMaker package public API."""
 
 from pesmaker.config.schema import PESMakerConfig
 

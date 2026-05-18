@@ -1,31 +1,24 @@
-project: TiO2_demo
+project: Te_batch
 
 structures:
-  - path: POSCAR
-    role: initial
+  - Te-mp-19.cif
+  - Te-mp-23.cif
+  - Te-mp-1009490.cif
 
 generation:
-  supercell: [2, 2, 2]
+  supercell: [4, 4, 4]
   perturb:
-    n_structures: 50
-    atom_displacement: [0.01, 0.08]
-    strain: [-0.03, 0.03]
+    pert_num: 20
 
 sampling:
-  engine: gpumd
-  model: nep89
-  temperatures: [300, 600, 1000]
-  steps: 10000
-  sample_every: 100
+  engine: none
 
 labeling:
   engine: vasp
-  template: templates/vasp_singlepoint
-  scheduler: slurm
 
 dataset:
   format: extxyz
-  split: [0.9, 0.05, 0.05]
+  split: [0.8, 0.1, 0.1]
 
 training:
   model: nep

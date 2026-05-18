@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ting Liang. All rights reserved.
+"""Structure generation workflow for supercells and perturbations."""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +19,8 @@ from pesmaker.structures import (
 
 @dataclass(frozen=True)
 class GeneratedStructure:
+    """Metadata for one generated structure file."""
+
     source: Path
     path: Path
     index: int
@@ -24,11 +29,14 @@ class GeneratedStructure:
 
 @dataclass(frozen=True)
 class GenerateResult:
+    """Summary returned after structure generation completes."""
+
     output_dir: Path
     structures: tuple[GeneratedStructure, ...]
 
 
 def generate_structures(config: PESMakerConfig) -> GenerateResult:
+    """Generate perturbed structures from every configured input structure."""
     output_dir = (
         config.generation.output_dir or Path("runs") / config.project / "generated"
     )
@@ -68,6 +76,7 @@ def _structure_output_dirs(
     config: PESMakerConfig,
     output_dir: Path,
 ) -> tuple[Path, ...]:
+    """Build one unique output directory for each input structure."""
     seen: dict[str, int] = {}
     paths: list[Path] = []
     for structure in config.structures:
@@ -79,6 +88,7 @@ def _structure_output_dirs(
 
 
 def _resolve_output_format(name: str) -> tuple[str, str]:
+    """Map a user-facing output format to ASE format and file suffix."""
     if name in {"vasp", "poscar"}:
         return "vasp", "vasp"
     if name in {"extxyz", "xyz"}:
@@ -87,6 +97,7 @@ def _resolve_output_format(name: str) -> tuple[str, str]:
 
 
 def _manifest_record(item: GeneratedStructure) -> dict[str, str | int]:
+    """Serialize generated-structure metadata for manifest.jsonl."""
     return {
         "index": item.index,
         "source": str(item.source),

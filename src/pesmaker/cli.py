@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ting Liang. All rights reserved.
+"""Command-line interface for PESMaker."""
+
 from __future__ import annotations
 
 import argparse
@@ -10,6 +13,7 @@ from pesmaker.workflow.plan import build_plan
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the PESMaker command-line interface."""
     parser = argparse.ArgumentParser(
         prog="pesmaker",
         description="Build application-oriented MLIP datasets and potentials.",
@@ -58,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _write_starter_config(path: Path) -> int:
+    """Write a minimal starter YAML configuration file."""
     if path.exists():
         print(f"Refusing to overwrite existing file: {path}", file=sys.stderr)
         return 1
@@ -65,12 +70,10 @@ def _write_starter_config(path: Path) -> int:
     template = """project: example_project
 
 structures:
-  - path: POSCAR
-    role: initial
+  - POSCAR
 
 generation:
   supercell: [1, 1, 1]
-  output_dir: runs/example_project/generated
   perturb:
     pert_num: 10
     cell_pert_fraction: 0.03
