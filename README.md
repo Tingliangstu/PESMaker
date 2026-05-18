@@ -51,18 +51,55 @@ src/pesmaker/
   cli.py         # command line interface
 ```
 
-## Try the scaffold
+## Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/Tingliangstu/PESMaker.git
+cd PESMaker
+```
+
+Install PESMaker in editable mode:
+
+```bash
+python -m pip install -e .
+```
+
+For development, install the test and lint tools too:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+After installation, the command-line interface should be available as:
+
+```bash
+pesmaker --help
+```
+
+On Windows, `pip` may install `pesmaker.exe` into a user script directory that
+is not on `PATH`, for example:
+
+```text
+C:\Users\<user>\AppData\Roaming\Python\Python313\Scripts
+```
+
+If `pesmaker --help` is not recognized, either add that directory to your user
+`PATH`, or run the executable by its full path:
+
+```powershell
+& 'C:\Users\<user>\AppData\Roaming\Python\Python313\Scripts\pesmaker.exe' --help
+```
+
+Current runtime dependencies are PyYAML, NumPy, and ASE. Pymatgen is optional
+for later atomistic utilities.
+
+## Try the Scaffold
 
 ```bash
 python -m pesmaker validate examples/pesmaker.yaml
 python -m pesmaker plan examples/pesmaker.yaml
-```
-
-For editable development:
-
-```bash
-pip install -e ".[dev]"
-pesmaker plan examples/pesmaker.yaml
 ```
 
 ## Generate perturbed structures
@@ -71,7 +108,6 @@ PESMaker can generate supercells and perturbed structures from CIF, POSCAR, and
 other ASE-readable structure files:
 
 ```bash
-pip install -e ".[dev]"
 pesmaker generate examples/perturb.yaml
 ```
 
@@ -90,7 +126,4 @@ generation:
     seed: 42
     format: vasp
 ```
-
-Current runtime dependencies are PyYAML, NumPy, and ASE. Pymatgen is optional
-for later atomistic utilities.
 
