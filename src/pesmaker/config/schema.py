@@ -46,10 +46,17 @@ class EngineConfig:
         data: dict[str, Any] | None,
         *,
         default_engine: str,
+        alias_engine_key: str | None = None,
     ) -> "EngineConfig":
         data = data or {}
-        engine = str(data.get("engine", default_engine))
-        options = {key: value for key, value in data.items() if key != "engine"}
+        engine_value = data.get("engine", default_engine)
+        if alias_engine_key and "engine" not in data:
+            engine_value = data.get(alias_engine_key, engine_value)
+        engine = str(engine_value)
+        excluded_keys = {"engine"}
+        if alias_engine_key:
+            excluded_keys.add(alias_engine_key)
+        options = {key: value for key, value in data.items() if key not in excluded_keys}
         return cls(engine=engine, options=options)
 
 
@@ -121,6 +128,7 @@ class PESMakerConfig:
             training=EngineConfig.from_mapping(
                 _optional_mapping(data.get("training"), "training"),
                 default_engine="nep",
+                alias_engine_key="model",
             ),
         )
 

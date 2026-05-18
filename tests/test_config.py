@@ -29,3 +29,16 @@ def test_dataset_split_must_sum_to_one():
     else:
         raise AssertionError("invalid split should fail")
 
+
+def test_training_model_alias_selects_engine():
+    config = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "structures": [{"path": "POSCAR"}],
+            "training": {"model": "mace", "device": "cuda"},
+        }
+    )
+
+    assert config.training.engine == "mace"
+    assert config.training.options == {"device": "cuda"}
+
