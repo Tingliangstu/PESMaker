@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Ting Liang. All rights reserved.
+# Copyright (c) 2026 Ting Liang.
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Command-line interface for PESMaker."""
 
 from __future__ import annotations
@@ -33,7 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     generate_parser.add_argument("config", type=Path)
 
     init_parser = subparsers.add_parser("init", help="Write a starter config file.")
-    init_parser.add_argument("path", type=Path, nargs="?", default=Path("pesmaker.yaml"))
+    init_parser.add_argument(
+        "path", type=Path, nargs="?", default=Path("pesmaker.yaml")
+    )
 
     args = parser.parse_args(argv)
 
@@ -52,9 +55,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "generate":
         result = generate_structures(config)
-        print(
-            f"Generated {len(result.structures)} structure(s) in {result.output_dir}"
-        )
+        print(f"Generated {len(result.structures)} structure(s) in {result.output_dir}")
         return 0
 
     parser.error(f"unknown command: {args.command}")
@@ -99,4 +100,3 @@ training:
     path.write_text(template, encoding="utf-8")
     print(f"Wrote starter config: {path}")
     return 0
-

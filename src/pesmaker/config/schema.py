@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Ting Liang. All rights reserved.
+# Copyright (c) 2026 Ting Liang.
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Configuration schema and validation for PESMaker input files."""
 
 from __future__ import annotations
@@ -48,7 +49,9 @@ class GenerationConfig:
             raise ValueError("generation.supercell must contain three integers")
         return cls(
             supercell=tuple(int(value) for value in supercell),
-            output_dir=Path(str(data["output_dir"])) if data.get("output_dir") else None,
+            output_dir=Path(str(data["output_dir"]))
+            if data.get("output_dir")
+            else None,
             perturb=dict(data.get("perturb", {})),
         )
 
@@ -77,7 +80,9 @@ class EngineConfig:
         excluded_keys = {"engine"}
         if alias_engine_key:
             excluded_keys.add(alias_engine_key)
-        options = {key: value for key, value in data.items() if key not in excluded_keys}
+        options = {
+            key: value for key, value in data.items() if key not in excluded_keys
+        }
         return cls(engine=engine, options=options)
 
 
@@ -94,7 +99,9 @@ class DatasetConfig:
         data = data or {}
         split = data.get("split", [0.8, 0.1, 0.1])
         if len(split) != 3:
-            raise ValueError("dataset.split must contain train, validation, test ratios")
+            raise ValueError(
+                "dataset.split must contain train, validation, test ratios"
+            )
         split_tuple = tuple(float(value) for value in split)
         if abs(sum(split_tuple) - 1.0) > 1e-8:
             raise ValueError("dataset.split ratios must sum to 1.0")
@@ -182,9 +189,10 @@ def _parse_structures(value: Any) -> tuple[StructureInput, ...]:
         for pattern in include:
             matches = [Path(match) for match in sorted(glob(str(pattern)))]
             if not matches:
-                raise ValueError(f"structures include pattern matched no files: {pattern}")
+                raise ValueError(
+                    f"structures include pattern matched no files: {pattern}"
+                )
             paths.extend(matches)
         return tuple(StructureInput(path=path) for path in paths)
 
     raise ValueError("config requires 'structures' as a non-empty list or include map")
-

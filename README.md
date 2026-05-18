@@ -6,6 +6,15 @@ structures.
 
 The working full name is **Potential Energy Surface Maker**.
 
+## License
+
+PESMaker is licensed under the **PolyForm Noncommercial License 1.0.0**.
+Noncommercial research and educational use is permitted under the license.
+Commercial use is not permitted without a separate written license from
+Ting Liang.
+
+See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
+
 ## Scope
 
 PESMaker focuses on this path:

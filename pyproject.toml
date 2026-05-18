@@ -11,6 +11,10 @@ requires-python = ">=3.10"
 authors = [
   { name = "PESMaker developers" }
 ]
+license = { file = "LICENSE" }
+classifiers = [
+  "License :: Other/Proprietary License"
+]
 dependencies = [
   "ase>=3.23",
   "numpy>=1.24",

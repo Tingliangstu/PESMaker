@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Ting Liang. All rights reserved.
+# Copyright (c) 2026 Ting Liang.
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Load PESMaker YAML and TOML configuration files."""
 
 from __future__ import annotations
@@ -40,4 +41,3 @@ def _load_mapping(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"config must contain a mapping at top level: {path}")
     return data
-

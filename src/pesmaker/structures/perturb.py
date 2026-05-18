@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Ting Liang. All rights reserved.
+# Copyright (c) 2026 Ting Liang.
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Supercell construction and dpdata-style structure perturbation."""
 
 from __future__ import annotations

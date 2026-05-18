@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Ting Liang. All rights reserved.
+# Copyright (c) 2026 Ting Liang.
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Tests for PESMaker configuration parsing."""
 
 from pesmaker.config.schema import PESMakerConfig
@@ -83,4 +84,3 @@ def test_structures_accept_include_patterns(tmp_path, monkeypatch):
         "initial_structures/a.cif",
         "initial_structures/b.cif",
     ]
-

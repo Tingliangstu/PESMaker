@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Ting Liang. All rights reserved.
+# Copyright (c) 2026 Ting Liang.
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Structure generation workflow for supercells and perturbations."""
 
 from __future__ import annotations
@@ -58,7 +59,9 @@ def generate_structures(config: PESMakerConfig) -> GenerateResult:
             for structure_index, perturbed in enumerate(
                 perturb_structures(supercell_atoms, settings)
             ):
-                output_path = structure_dir / f"structure_{structure_index:06d}.{suffix}"
+                output_path = (
+                    structure_dir / f"structure_{structure_index:06d}.{suffix}"
+                )
                 write_structure(perturbed, output_path, fmt=ase_format)
                 item = GeneratedStructure(
                     source=structure.path,
