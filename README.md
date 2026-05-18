@@ -8,10 +8,8 @@ The working full name is **Potential Energy Surface Maker**.
 
 ## License
 
-PESMaker is licensed under the **PolyForm Noncommercial License 1.0.0**.
-Noncommercial research and educational use is permitted under the license.
-Commercial use is not permitted without a separate written license from
-Ting Liang.
+PESMaker is free software distributed under the **GNU General Public License**,
+version 3 of the License, or (at your option) any later version.
 
 See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
 
