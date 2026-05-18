@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from glob import glob
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,12 @@ from typing import Any
 class StructureInput:
     path: Path
     role: str = "initial"
+
+    @classmethod
+    def from_value(cls, data: Any) -> "StructureInput":
+        if isinstance(data, (str, Path)):
+            return cls(path=Path(data))
+        return cls.from_mapping(_require_mapping(data, "structures entry"))
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "StructureInput":
@@ -101,14 +108,7 @@ class PESMakerConfig:
         if not project:
             raise ValueError("config requires 'project'")
 
-        structure_data = data.get("structures")
-        if not isinstance(structure_data, list) or not structure_data:
-            raise ValueError("config requires a non-empty 'structures' list")
-
-        structures = tuple(
-            StructureInput.from_mapping(_require_mapping(entry, "structures entry"))
-            for entry in structure_data
-        )
+        structures = _parse_structures(data.get("structures"))
 
         return cls(
             project=str(project),
@@ -145,4 +145,25 @@ def _require_mapping(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be a mapping")
     return value
+
+
+def _parse_structures(value: Any) -> tuple[StructureInput, ...]:
+    if isinstance(value, list):
+        if not value:
+            raise ValueError("config requires at least one structure")
+        return tuple(StructureInput.from_value(entry) for entry in value)
+
+    if isinstance(value, dict):
+        include = value.get("include")
+        if not isinstance(include, list) or not include:
+            raise ValueError("structures.include must be a non-empty list")
+        paths: list[Path] = []
+        for pattern in include:
+            matches = [Path(match) for match in sorted(glob(str(pattern)))]
+            if not matches:
+                raise ValueError(f"structures include pattern matched no files: {pattern}")
+            paths.extend(matches)
+        return tuple(StructureInput(path=path) for path in paths)
+
+    raise ValueError("config requires 'structures' as a non-empty list or include map")
 

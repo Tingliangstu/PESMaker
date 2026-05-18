@@ -133,7 +133,6 @@ parameters:
 ```yaml
 generation:
   supercell: [4, 4, 4]
-  output_dir: runs/example_project/generated
   perturb:
     pert_num: 49
     cell_pert_fraction: 0.03
@@ -141,5 +140,32 @@ generation:
     atom_pert_style: normal
     seed: 42
     format: vasp
+```
+
+For multiple structures, list each file directly:
+
+```yaml
+project: Te_batch
+
+structures:
+  - Te-mp-19.cif
+  - Te-mp-23.cif
+  - Te-mp-1009490.cif
+
+generation:
+  supercell: [4, 4, 4]
+  perturb:
+    pert_num: 20
+```
+
+Each input file gets its own output folder under
+`runs/<project>/generated/<input-file-name>/`.
+
+For many structures in one directory, use `include`:
+
+```yaml
+structures:
+  include:
+    - initial_structures/*.cif
 ```
 

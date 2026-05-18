@@ -42,3 +42,37 @@ def test_training_model_alias_selects_engine():
     assert config.training.engine == "mace"
     assert config.training.options == {"device": "cuda"}
 
+
+def test_structures_accept_simple_path_list():
+    config = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "structures": ["Te-mp-19.cif", "Te-mp-23.cif"],
+        }
+    )
+
+    assert [item.path.name for item in config.structures] == [
+        "Te-mp-19.cif",
+        "Te-mp-23.cif",
+    ]
+
+
+def test_structures_accept_include_patterns(tmp_path, monkeypatch):
+    structure_dir = tmp_path / "initial_structures"
+    structure_dir.mkdir()
+    (structure_dir / "a.cif").write_text("", encoding="utf-8")
+    (structure_dir / "b.cif").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    config = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "structures": {"include": ["initial_structures/*.cif"]},
+        }
+    )
+
+    assert [item.path.as_posix() for item in config.structures] == [
+        "initial_structures/a.cif",
+        "initial_structures/b.cif",
+    ]
+

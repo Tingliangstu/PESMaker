@@ -1,8 +1,9 @@
 project: Te_mp_19_test
 
 structures:
-  - path: path/to/input.cif
-    role: initial
+  - Te-mp-19.cif
+  - Te-mp-23.cif
+  - Te-mp-1009490.cif
 
 generation:
   supercell: [4, 4, 4]
