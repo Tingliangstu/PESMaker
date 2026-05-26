@@ -152,6 +152,7 @@ def _print_generate_summary(result: GenerateResult) -> None:
     print("Structure folders:")
     for (source, folder), count in folder_counts.items():
         print(f"  - {source} -> {folder} ({count} structure(s))")
+    print()
 
 
 def _print_banner() -> None:
@@ -175,3 +176,4 @@ def _print_banner() -> None:
     print("***** Automated dataset generation for machine-learned potentials *****")
     print(f"**************** Author: {__contact__} ****************")
     print("****************************************************************")
+    print()

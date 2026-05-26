@@ -74,10 +74,12 @@ generation:
     assert (output_dir / "manifest.jsonl").exists()
     assert len(list(output_dir.glob("te/structure_*.vasp"))) == 2
     assert "Perturbation generation complete." in output
+    assert "\n\nPerturbation generation complete." in output
     assert "Generated structures : 2" in output
     assert f"Output directory     : {output_dir}" in output
     assert f"Manifest             : {output_dir / 'manifest.jsonl'}" in output
     assert f"- {cif_path} -> {output_dir / 'te'} (2 structure(s))" in output
+    assert output.endswith("\n\n")
 
 
 def test_cli_generate_uses_unique_folders_for_duplicate_stems(tmp_path):
