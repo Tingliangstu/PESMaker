@@ -18,11 +18,12 @@
 from pesmaker.cli import main
 
 
-def test_cli_generate_writes_structures(tmp_path):
+def test_cli_generate_writes_structures(tmp_path, capsys):
     """The generate command should write perturbed structures and a manifest.
 
     Args:
         tmp_path: Pytest temporary directory used for config and outputs.
+        capsys: Pytest fixture used to capture command output.
     """
     cif_path = tmp_path / "te.cif"
     cif_path.write_text(
@@ -65,12 +66,18 @@ generation:
     )
 
     exit_code = main(["generate", str(config_path)])
+    output = capsys.readouterr().out
 
     assert exit_code == 0
     assert (output_dir / "te" / "structure_000000.vasp").exists()
     assert (output_dir / "te" / "structure_000001.vasp").exists()
     assert (output_dir / "manifest.jsonl").exists()
     assert len(list(output_dir.glob("te/structure_*.vasp"))) == 2
+    assert "Perturbation generation complete." in output
+    assert "Generated structures : 2" in output
+    assert f"Output directory     : {output_dir}" in output
+    assert f"Manifest             : {output_dir / 'manifest.jsonl'}" in output
+    assert f"- {cif_path} -> {output_dir / 'te'} (2 structure(s))" in output
 
 
 def test_cli_generate_uses_unique_folders_for_duplicate_stems(tmp_path):

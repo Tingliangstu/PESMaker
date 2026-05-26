@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 from pesmaker import __contact__, __version__
 from pesmaker.config.io import load_config
-from pesmaker.workflow.generate import generate_structures
+from pesmaker.workflow.generate import GenerateResult, generate_structures
 from pesmaker.workflow.plan import build_plan
 
 
@@ -79,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "generate":
         result = generate_structures(config)
-        print(f"Generated {len(result.structures)} structure(s) in {result.output_dir}")
+        _print_generate_summary(result)
         return 0
 
     parser.error(f"unknown command: {args.command}")
@@ -132,6 +133,25 @@ training:
     path.write_text(template, encoding="utf-8")
     print(f"Wrote starter config: {path}")
     return 0
+
+
+def _print_generate_summary(result: GenerateResult) -> None:
+    """Print a concise summary of generated perturbation outputs.
+
+    Args:
+        result: Completed generation result returned by the workflow layer.
+    """
+    folder_counts: dict[tuple[Path, Path], int] = defaultdict(int)
+    for structure in result.structures:
+        folder_counts[(structure.source, structure.path.parent)] += 1
+
+    print("Perturbation generation complete.")
+    print(f"Generated structures : {len(result.structures)}")
+    print(f"Output directory     : {result.output_dir}")
+    print(f"Manifest             : {result.output_dir / 'manifest.jsonl'}")
+    print("Structure folders:")
+    for (source, folder), count in folder_counts.items():
+        print(f"  - {source} -> {folder} ({count} structure(s))")
 
 
 def _print_banner() -> None:
