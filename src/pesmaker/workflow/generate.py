@@ -18,10 +18,11 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from pesmaker.config.schema import PESMakerConfig
+from pesmaker.config.schema import GenerationTask, PESMakerConfig
 from pesmaker.structures import (
     PerturbationSettings,
     apply_surface_settings,
@@ -40,6 +41,8 @@ class GeneratedStructure:
     Attributes:
         source: Original input structure path.
         path: Generated structure file path.
+        task: Generation task name.
+        supercell: Three integer expansion factors used for this structure.
         variant: Structural variant name, such as `pristine` or a defect name.
         variant_description: Human-readable variant description.
         index: Zero-based index within the source structure's output folder.
@@ -50,6 +53,8 @@ class GeneratedStructure:
     path: Path
     index: int
     atom_count: int
+    task: str = "default"
+    supercell: tuple[int, int, int] = (1, 1, 1)
     variant: str = "pristine"
     variant_description: str = "pristine"
 
@@ -61,10 +66,12 @@ class GenerateResult:
     Attributes:
         output_dir: Root directory containing generated structures.
         structures: Metadata for every generated structure.
+        summary_path: Human-readable generation summary path.
     """
 
     output_dir: Path
     structures: tuple[GeneratedStructure, ...]
+    summary_path: Path
 
 
 def generate_structures(config: PESMakerConfig) -> GenerateResult:
@@ -87,48 +94,75 @@ def generate_structures(config: PESMakerConfig) -> GenerateResult:
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    settings = PerturbationSettings.from_mapping(config.generation.perturb)
-    output_format = str(config.generation.perturb.get("format", "vasp")).lower()
+    generated: list[GeneratedStructure] = []
+    manifest_path = output_dir / "manifest.jsonl"
+    with manifest_path.open("w", encoding="utf-8") as manifest:
+        for task in config.generation.tasks:
+            generated.extend(
+                _generate_task_structures(
+                    config,
+                    task,
+                    output_dir,
+                    manifest,
+                    use_task_dir=len(config.generation.tasks) > 1,
+                )
+            )
+
+    result = GenerateResult(
+        output_dir=output_dir,
+        structures=tuple(generated),
+        summary_path=output_dir / "generation_summary.txt",
+    )
+    result.summary_path.write_text(format_generate_summary(result), encoding="utf-8")
+    return result
+
+
+def _generate_task_structures(
+    config: PESMakerConfig,
+    task: GenerationTask,
+    output_dir: Path,
+    manifest,
+    *,
+    use_task_dir: bool,
+) -> list[GeneratedStructure]:
+    settings = PerturbationSettings.from_mapping(task.perturb)
+    output_format = str(task.perturb.get("format", "vasp")).lower()
     ase_format, suffix = _resolve_output_format(output_format)
 
     generated: list[GeneratedStructure] = []
-    structure_dirs = _structure_output_dirs(config, output_dir)
-    manifest_path = output_dir / "manifest.jsonl"
-    with manifest_path.open("w", encoding="utf-8") as manifest:
-        for input_index, structure in enumerate(config.structures):
-            atoms = load_structure(structure.path)
-            supercell_atoms = make_supercell(atoms, config.generation.supercell)
-            base_atoms = apply_surface_settings(
-                supercell_atoms, config.generation.surface
+    task_output_dir = output_dir / task.name if use_task_dir else output_dir
+    structure_dirs = _structure_output_dirs(config, task_output_dir)
+    for input_index, structure in enumerate(config.structures):
+        atoms = load_structure(structure.path)
+        supercell_atoms = make_supercell(atoms, task.supercell)
+        base_atoms = apply_surface_settings(supercell_atoms, task.surface)
+        variants = generate_defect_variants(base_atoms, task.defects)
+        structure_dir = structure_dirs[input_index]
+        structure_dir.mkdir(parents=True, exist_ok=True)
+        use_variant_dirs = bool(task.defects) or use_task_dir
+        for variant in variants:
+            variant_dir = (
+                structure_dir / variant.name if use_variant_dirs else structure_dir
             )
-            variants = generate_defect_variants(base_atoms, config.generation.defects)
-            structure_dir = structure_dirs[input_index]
-            structure_dir.mkdir(parents=True, exist_ok=True)
-            use_variant_dirs = bool(config.generation.defects)
-            for variant in variants:
-                variant_dir = (
-                    structure_dir / variant.name if use_variant_dirs else structure_dir
+            variant_dir.mkdir(parents=True, exist_ok=True)
+            for structure_index, perturbed in enumerate(
+                perturb_structures(variant.atoms, settings)
+            ):
+                output_path = variant_dir / f"structure_{structure_index:06d}.{suffix}"
+                write_structure(perturbed, output_path, fmt=ase_format)
+                item = GeneratedStructure(
+                    source=structure.path,
+                    path=output_path,
+                    task=task.name,
+                    supercell=task.supercell,
+                    variant=variant.name,
+                    variant_description=variant.description,
+                    index=structure_index,
+                    atom_count=len(perturbed),
                 )
-                variant_dir.mkdir(parents=True, exist_ok=True)
-                for structure_index, perturbed in enumerate(
-                    perturb_structures(variant.atoms, settings)
-                ):
-                    output_path = (
-                        variant_dir / f"structure_{structure_index:06d}.{suffix}"
-                    )
-                    write_structure(perturbed, output_path, fmt=ase_format)
-                    item = GeneratedStructure(
-                        source=structure.path,
-                        path=output_path,
-                        variant=variant.name,
-                        variant_description=variant.description,
-                        index=structure_index,
-                        atom_count=len(perturbed),
-                    )
-                    generated.append(item)
-                    manifest.write(json.dumps(_manifest_record(item)) + "\n")
-
-    return GenerateResult(output_dir=output_dir, structures=tuple(generated))
+                generated.append(item)
+                manifest.write(json.dumps(_manifest_record(item)) + "\n")
+    return generated
 
 
 def _structure_output_dirs(
@@ -174,7 +208,7 @@ def _resolve_output_format(name: str) -> tuple[str, str]:
     raise ValueError(f"unsupported generation output format: {name}")
 
 
-def _manifest_record(item: GeneratedStructure) -> dict[str, str | int]:
+def _manifest_record(item: GeneratedStructure) -> dict[str, str | int | list[int]]:
     """Serialize generated-structure metadata for manifest.jsonl.
 
     Args:
@@ -185,9 +219,58 @@ def _manifest_record(item: GeneratedStructure) -> dict[str, str | int]:
     """
     return {
         "index": item.index,
+        "task": item.task,
         "source": str(item.source),
         "path": str(item.path),
+        "supercell": list(item.supercell),
         "variant": item.variant,
         "variant_description": item.variant_description,
         "atom_count": item.atom_count,
     }
+
+
+def format_generate_summary(result: GenerateResult) -> str:
+    """Render a grouped, human-readable generation summary."""
+    task_counts: dict[str, int] = defaultdict(int)
+    task_supercells: dict[str, tuple[int, int, int]] = {}
+    source_counts: dict[tuple[str, Path], int] = defaultdict(int)
+    variant_counts: dict[tuple[str, Path, str, Path], int] = defaultdict(int)
+    for structure in result.structures:
+        task_counts[structure.task] += 1
+        task_supercells[structure.task] = structure.supercell
+        source_counts[(structure.task, structure.source)] += 1
+        variant_counts[
+            (structure.task, structure.source, structure.variant, structure.path.parent)
+        ] += 1
+
+    lines = [
+        "Perturbation generation complete.",
+        f"Generated structures : {len(result.structures)}",
+        f"Output directory     : {result.output_dir}",
+        f"Manifest             : {result.output_dir / 'manifest.jsonl'}",
+        f"Summary              : {result.summary_path}",
+        "Generation tasks:",
+    ]
+    for task, task_count in task_counts.items():
+        supercell = task_supercells[task]
+        lines.append(f"  - {task}: {task_count} structure(s), supercell={supercell}")
+        task_sources = [
+            (source, count)
+            for (source_task, source), count in source_counts.items()
+            if source_task == task
+        ]
+        for source, source_count in task_sources:
+            lines.append(f"      {source}: {source_count} structure(s)")
+            task_variants = [
+                (variant, folder, count)
+                for (variant_task, variant_source, variant, folder), count in (
+                    variant_counts.items()
+                )
+                if variant_task == task and variant_source == source
+            ]
+            for variant, folder, variant_count in task_variants[:8]:
+                lines.append(f"        - {variant} -> {folder} ({variant_count})")
+            omitted = len(task_variants) - 8
+            if omitted > 0:
+                lines.append(f"        - ... {omitted} more variant folder(s)")
+    return "\n".join(lines) + "\n"

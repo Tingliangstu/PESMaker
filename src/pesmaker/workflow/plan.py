@@ -75,10 +75,11 @@ def build_plan(config: PESMakerConfig) -> WorkflowPlan:
         ),
         WorkflowStep(
             "generate candidates",
-            f"supercell={config.generation.supercell}, "
-            f"surface={bool(config.generation.surface)}, "
-            f"defects={bool(config.generation.defects)}, "
-            f"perturb={bool(config.generation.perturb)}",
+            f"{len(config.generation.tasks)} task(s): "
+            + ", ".join(
+                f"{task.name} supercell={task.supercell}"
+                for task in config.generation.tasks
+            ),
         ),
         WorkflowStep(
             "prepare MD sampling",

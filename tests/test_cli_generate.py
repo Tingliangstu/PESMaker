@@ -15,6 +15,8 @@
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
 """CLI integration tests for structure generation."""
 
+import json
+
 from pesmaker.cli import main
 
 
@@ -78,7 +80,8 @@ generation:
     assert "Generated structures : 2" in output
     assert f"Output directory     : {output_dir}" in output
     assert f"Manifest             : {output_dir / 'manifest.jsonl'}" in output
-    assert f"- {cif_path} -> {output_dir / 'te'} (2 structure(s))" in output
+    assert f"{cif_path}: 2 structure(s)" in output
+    assert f"pristine -> {output_dir / 'te'} (2)" in output
     assert output.endswith("\n\n")
 
 
@@ -187,6 +190,74 @@ generation:
         output_dir / "te2d" / "single_vacancy_Te_000000" / "structure_000000.vasp"
     ).exists()
     assert len(list(output_dir.glob("te2d/*/structure_000000.vasp"))) == 4
+
+
+def test_cli_generate_writes_multiple_task_folders(tmp_path):
+    """Multiple generation tasks should be grouped by task name."""
+    from ase import Atoms
+    from ase.io import write
+
+    atoms = Atoms(
+        "Te2",
+        positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        cell=[2.0, 2.0, 6.0],
+        pbc=[True, True, False],
+    )
+    structure_path = tmp_path / "te.xyz"
+    write(structure_path, atoms, format="extxyz")
+    output_dir = tmp_path / "generated"
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: multi_task
+structures:
+  - {structure_path.as_posix()}
+generation:
+  output_dir: {output_dir.as_posix()}
+  tasks:
+    - name: surface_111
+      supercell: [1, 1, 1]
+      surface:
+        vacuum: 20.0
+        defects:
+          single_vacancies:
+            elements: [Te]
+            max_count: 1
+          perturb:
+            pert_num: 2
+            seed: 1
+    - name: bulk_221
+      supercell: [2, 2, 1]
+      perturb:
+        pert_num: 1
+        seed: 2
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["generate", str(config_path)]) == 0
+
+    assert (
+        output_dir
+        / "surface_111"
+        / "te"
+        / "single_vacancy_Te_000000"
+        / "structure_000001.vasp"
+    ).exists()
+    assert (
+        output_dir / "bulk_221" / "te" / "pristine" / "structure_000000.vasp"
+    ).exists()
+    records = [
+        json.loads(line)
+        for line in (output_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert {record["task"] for record in records} == {"surface_111", "bulk_221"}
+    assert {tuple(record["supercell"]) for record in records} == {
+        (1, 1, 1),
+        (2, 2, 1),
+    }
+    assert (output_dir / "generation_summary.txt").exists()
 
 
 def test_cli_prints_banner_for_commands(tmp_path, capsys):

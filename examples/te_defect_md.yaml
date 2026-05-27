@@ -5,31 +5,42 @@ structures:
     - initial_structures/*.cif
 
 generation:
-  supercell: [3, 3, 1]
   output_dir: generated
-  surface:
-    vacuum: 30.0
-    axis: 2
-    center: true
-    defects:
-      mode: random
-      seed: 42
-      single_vacancies:
-        elements: [Te]
-        max_count: 8
-      double_vacancies:
-        elements: [Te]
-        max_count: 8
-      line_defects:
-        elements: [Te]
-        max_count: 4
-    perturb:
-      pert_num: 20
-      cell_pert_fraction: 0.03
-      atom_pert_distance: 0.1
-      atom_pert_style: normal
-      seed: 42
-      format: vasp
+  tasks:
+    - name: surface_331
+      supercell: [3, 3, 1]
+      surface:
+        vacuum: 30.0
+        axis: 2
+        center: true
+        defects:
+          mode: random
+          seed: 42
+          single_vacancies:
+            elements: [Te]
+            max_count: 8
+          double_vacancies:
+            elements: [Te]
+            max_count: 8
+          line_defects:
+            elements: [Te]
+            max_count: 4
+        perturb:
+          pert_num: 20
+          cell_pert_fraction: 0.03
+          atom_pert_distance: 0.1
+          atom_pert_style: normal
+          seed: 42
+          format: vasp
+    - name: bulk_333
+      supercell: [3, 3, 3]
+      perturb:
+        pert_num: 20
+        cell_pert_fraction: 0.03
+        atom_pert_distance: 0.1
+        atom_pert_style: normal
+        seed: 42
+        format: vasp
 
 sampling:
   engine: gpumd

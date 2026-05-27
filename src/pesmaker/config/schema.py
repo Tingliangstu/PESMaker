@@ -72,6 +72,25 @@ class StructureInput:
 
 
 @dataclass(frozen=True)
+class GenerationTask:
+    """One independent structure generation recipe.
+
+    Attributes:
+        name: Filesystem-safe task name used for output grouping.
+        supercell: Three positive integer expansion factors.
+        surface: Optional surface/vacuum settings.
+        defects: Optional defect settings applied after surface generation.
+        perturb: Optional perturbation settings applied to final variants.
+    """
+
+    name: str
+    supercell: tuple[int, int, int] = (1, 1, 1)
+    surface: dict[str, Any] = field(default_factory=dict)
+    defects: dict[str, Any] = field(default_factory=dict)
+    perturb: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class GenerationConfig:
     """Options for supercell construction and structure perturbation.
 
@@ -86,6 +105,8 @@ class GenerationConfig:
         perturb: Free-form perturbation options consumed by
             `PerturbationSettings`. These can be written directly under
             `generation.perturb` or nested under `generation.surface.perturb`.
+        tasks: Independent generation tasks. New configs should use this when
+            multiple supercells or nested operation chains are needed.
     """
 
     supercell: tuple[int, int, int] = (1, 1, 1)
@@ -93,6 +114,9 @@ class GenerationConfig:
     surface: dict[str, Any] = field(default_factory=dict)
     defects: dict[str, Any] = field(default_factory=dict)
     perturb: dict[str, Any] = field(default_factory=dict)
+    tasks: tuple[GenerationTask, ...] = field(
+        default_factory=lambda: (GenerationTask(name="default"),)
+    )
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> "GenerationConfig":
@@ -108,43 +132,17 @@ class GenerationConfig:
             ValueError: If `supercell` does not contain exactly three values.
         """
         data = data or {}
-        supercell = data.get("supercell", [1, 1, 1])
-        if len(supercell) != 3:
-            raise ValueError("generation.supercell must contain three integers")
-        surface = dict(data.get("surface", {}))
-        defects = _nested_generation_options(
-            data,
-            surface,
-            "defects",
-            {
-                "include_pristine",
-                "single_vacancies",
-                "double_vacancies",
-                "line_defects",
-            },
-        )
-        perturb = _nested_generation_options(
-            data,
-            surface,
-            "perturb",
-            {
-                "pert_num",
-                "cell_pert_fraction",
-                "atom_pert_distance",
-                "atom_pert_style",
-                "atom_pert_prob",
-                "seed",
-                "format",
-            },
-        )
+        tasks = _parse_generation_tasks(data)
+        first_task = tasks[0]
         return cls(
-            supercell=tuple(int(value) for value in supercell),
+            supercell=first_task.supercell,
             output_dir=Path(str(data["output_dir"]))
             if data.get("output_dir")
             else None,
-            surface=surface,
-            defects=defects,
-            perturb=perturb,
+            surface=first_task.surface,
+            defects=first_task.defects,
+            perturb=first_task.perturb,
+            tasks=tasks,
         )
 
 
@@ -347,6 +345,85 @@ def _nested_generation_options(
     if inline:
         options.update(inline)
     return options
+
+
+def _parse_generation_tasks(data: dict[str, Any]) -> tuple[GenerationTask, ...]:
+    """Parse generation recipes from the legacy single form or `tasks` list."""
+    raw_tasks = data.get("tasks")
+    if raw_tasks is None:
+        return (_parse_generation_task(data, default_name="default"),)
+    if not isinstance(raw_tasks, list) or not raw_tasks:
+        raise ValueError("generation.tasks must be a non-empty list")
+
+    tasks = []
+    for index, task_data in enumerate(raw_tasks):
+        task = _require_mapping(task_data, "generation.tasks entry")
+        inherited = {key: value for key, value in data.items() if key != "tasks"}
+        inherited.update(task)
+        tasks.append(
+            _parse_generation_task(
+                inherited,
+                default_name=f"task_{index + 1:02d}",
+            )
+        )
+    return tuple(tasks)
+
+
+def _parse_generation_task(
+    data: dict[str, Any],
+    *,
+    default_name: str,
+) -> GenerationTask:
+    supercell = data.get("supercell", [1, 1, 1])
+    if len(supercell) != 3:
+        raise ValueError("generation.supercell must contain three integers")
+    surface = dict(data.get("surface", {}))
+    defects = _nested_generation_options(
+        data,
+        surface,
+        "defects",
+        {
+            "include_pristine",
+            "mode",
+            "seed",
+            "single_vacancies",
+            "double_vacancies",
+            "line_defects",
+        },
+    )
+    defects_perturb = defects.pop("perturb", None)
+    perturb = _nested_generation_options(
+        data,
+        surface,
+        "perturb",
+        {
+            "pert_num",
+            "cell_pert_fraction",
+            "atom_pert_distance",
+            "atom_pert_style",
+            "atom_pert_prob",
+            "seed",
+            "format",
+        },
+    )
+    if defects_perturb:
+        perturb.update(_require_mapping(defects_perturb, "generation.defects.perturb"))
+    name = str(data.get("name", default_name))
+    return GenerationTask(
+        name=_safe_generation_task_name(name),
+        supercell=tuple(int(value) for value in supercell),
+        surface=surface,
+        defects=defects,
+        perturb=perturb,
+    )
+
+
+def _safe_generation_task_name(name: str) -> str:
+    safe = "".join(
+        char if char.isalnum() or char in {"-", "_"} else "_" for char in name
+    )
+    safe = safe.strip("_")
+    return safe or "task"
 
 
 def _require_mapping(value: Any, name: str) -> dict[str, Any]:

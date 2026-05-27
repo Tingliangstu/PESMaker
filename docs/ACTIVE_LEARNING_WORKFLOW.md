@@ -33,9 +33,10 @@ training/      # potential training input files and submit script
 Start from `examples/te_defect_md.yaml` and adapt paths for the machine you are
 using. A typical 2D Te/Pd-rich workflow looks like this:
 
-Do not repeat the same YAML key in one mapping. For example, do not write two
-`generation.supercell` entries. PESMaker rejects duplicate keys because YAML
-would otherwise silently keep only one value.
+Use `generation.tasks` when one run should prepare several independent
+structure families. Do not repeat the same YAML key in one mapping. For
+example, do not write two `generation.supercell` entries; use two task entries
+instead.
 
 ```yaml
 project: Te_Pd_rich_defect_md
@@ -45,31 +46,42 @@ structures:
     - initial_structures/*.cif
 
 generation:
-  supercell: [3, 3, 1]
   output_dir: generated
-  surface:
-    vacuum: 30.0
-    axis: 2
-    center: true
-    defects:
-      mode: random
-      seed: 42
-      single_vacancies:
-        elements: [Te]
-        max_count: 8
-      double_vacancies:
-        elements: [Te]
-        max_count: 8
-      line_defects:
-        elements: [Te]
-        max_count: 4
-    perturb:
-      pert_num: 20
-      cell_pert_fraction: 0.03
-      atom_pert_distance: 0.1
-      atom_pert_style: normal
-      seed: 42
-      format: vasp
+  tasks:
+    - name: surface_331
+      supercell: [3, 3, 1]
+      surface:
+        vacuum: 30.0
+        axis: 2
+        center: true
+        defects:
+          mode: random
+          seed: 42
+          single_vacancies:
+            elements: [Te]
+            max_count: 8
+          double_vacancies:
+            elements: [Te]
+            max_count: 8
+          line_defects:
+            elements: [Te]
+            max_count: 4
+        perturb:
+          pert_num: 20
+          cell_pert_fraction: 0.03
+          atom_pert_distance: 0.1
+          atom_pert_style: normal
+          seed: 42
+          format: vasp
+    - name: bulk_333
+      supercell: [3, 3, 3]
+      perturb:
+        pert_num: 20
+        cell_pert_fraction: 0.03
+        atom_pert_distance: 0.1
+        atom_pert_style: normal
+        seed: 42
+        format: vasp
 
 sampling:
   engine: gpumd
@@ -110,10 +122,46 @@ jobs:
 ## Stage 1: Generate Surface and Defect Structures
 
 The `generation` section prepares the structural candidates that seed MD or
-single-point calculations.
+single-point calculations. Each entry under `generation.tasks` is independent:
+one task can build a 2D surface with random vacancies, while another task can
+build a bulk supercell with only perturbations.
 
 `supercell` controls the repeated cell. For a 2D material, `[3, 3, 1]` expands
 the in-plane lattice while keeping the out-of-plane direction unchanged.
+
+Example task layout:
+
+```yaml
+generation:
+  output_dir: generated
+  tasks:
+    - name: surface_331
+      supercell: [3, 3, 1]
+      surface:
+        vacuum: 30.0
+        defects:
+          mode: random
+          seed: 42
+          single_vacancies:
+            elements: [Te]
+            max_count: 8
+          perturb:
+            pert_num: 20
+    - name: bulk_333
+      supercell: [3, 3, 3]
+      perturb:
+        pert_num: 20
+```
+
+The operation order inside a task follows the nesting:
+
+```text
+input structure -> supercell -> surface -> defects -> perturb
+```
+
+If `perturb` is nested under `surface`, it is applied after the surface is
+made. If `perturb` is nested under `defects`, it is applied after defect
+structures are made.
 
 `surface` controls slab handling:
 
@@ -227,19 +275,28 @@ Expected output:
 ```text
 generated/
   manifest.jsonl
-  Te-mp-19/
-    pristine/
-      structure_000000.vasp
-    single_vacancy_Te_000000/
-      structure_000000.vasp
-    double_vacancy_Te000000_Te000001/
-      structure_000000.vasp
-    line_defect_axis1_000/
-      structure_000000.vasp
+  generation_summary.txt
+  surface_331/
+    Te-mp-19/
+      pristine/
+        structure_000000.vasp
+      single_vacancy_Te_000000/
+        structure_000000.vasp
+      double_vacancy_Te000000_Te000001/
+        structure_000000.vasp
+      line_defect_axis1_000/
+        structure_000000.vasp
+  bulk_333/
+    Te-mp-19/
+      pristine/
+        structure_000000.vasp
 ```
 
-The manifest records the source structure, written path, variant name, variant
-description, perturbation index, and atom count.
+The JSONL manifest records task name, source structure, output path, supercell,
+variant name, variant description, perturbation index, and atom count. It is
+machine-readable and can be dense. For humans, inspect
+`generated/generation_summary.txt`, which groups the same information by task,
+source structure, and variant folder.
 
 ## Stage 2: Prepare Large Model MD Sampling
 
@@ -505,6 +562,7 @@ behind one monolithic command.
 Current capabilities:
 
 - 2D surface vacuum setup.
+- Multiple independent generation tasks under one `generation` section.
 - Pristine, single-vacancy, double-vacancy, and line-defect variants.
 - Random perturbations for every variant.
 - GPUMD sampling setup.

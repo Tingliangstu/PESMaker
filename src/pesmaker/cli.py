@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 from pesmaker import __contact__, __version__
 from pesmaker.config.io import load_config
-from pesmaker.workflow.generate import GenerateResult, generate_structures
+from pesmaker.workflow.generate import (
+    GenerateResult,
+    format_generate_summary,
+    generate_structures,
+)
 from pesmaker.workflow.plan import build_plan
 from pesmaker.workflow.stages import (
     StageResult,
@@ -165,30 +168,40 @@ structures:
   - POSCAR
 
 generation:
-  supercell: [3, 3, 1]
   output_dir: generated
-  surface:
-    vacuum: 30.0
-    axis: 2
-    center: true
-    defects:
-      mode: random
-      seed: 42
-      single_vacancies:
-        elements: [Te]
-        max_count: 4
-      double_vacancies:
-        elements: [Te]
-        max_count: 4
-      line_defects:
-        elements: [Te]
-        max_count: 2
-    perturb:
-      pert_num: 10
-      cell_pert_fraction: 0.03
-      atom_pert_distance: 0.1
-      atom_pert_style: normal
-      format: vasp
+  tasks:
+    - name: surface_331
+      supercell: [3, 3, 1]
+      surface:
+        vacuum: 30.0
+        axis: 2
+        center: true
+        defects:
+          mode: random
+          seed: 42
+          single_vacancies:
+            elements: [Te]
+            max_count: 4
+          double_vacancies:
+            elements: [Te]
+            max_count: 4
+          line_defects:
+            elements: [Te]
+            max_count: 2
+        perturb:
+          pert_num: 10
+          cell_pert_fraction: 0.03
+          atom_pert_distance: 0.1
+          atom_pert_style: normal
+          format: vasp
+    - name: bulk_333
+      supercell: [3, 3, 3]
+      perturb:
+        pert_num: 10
+        cell_pert_fraction: 0.03
+        atom_pert_distance: 0.1
+        atom_pert_style: normal
+        format: vasp
 
 sampling:
   engine: gpumd
@@ -232,17 +245,7 @@ def _print_generate_summary(result: GenerateResult) -> None:
     Args:
         result: Completed generation result returned by the workflow layer.
     """
-    folder_counts: dict[tuple[Path, Path], int] = defaultdict(int)
-    for structure in result.structures:
-        folder_counts[(structure.source, structure.path.parent)] += 1
-
-    print("Perturbation generation complete.")
-    print(f"Generated structures : {len(result.structures)}")
-    print(f"Output directory     : {result.output_dir}")
-    print(f"Manifest             : {result.output_dir / 'manifest.jsonl'}")
-    print("Structure folders:")
-    for (source, folder), count in folder_counts.items():
-        print(f"  - {source} -> {folder} ({count} structure(s))")
+    print(format_generate_summary(result), end="")
     print()
 
 

@@ -115,6 +115,49 @@ def test_generation_accepts_surface_nested_defects_and_perturb():
     assert config.generation.perturb["pert_num"] == 5
 
 
+def test_generation_accepts_multiple_tasks_and_defect_perturb():
+    """Multiple generation tasks should preserve independent operation chains."""
+    config = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "structures": ["POSCAR"],
+            "generation": {
+                "output_dir": "generated",
+                "tasks": [
+                    {
+                        "name": "surface 331",
+                        "supercell": [3, 3, 1],
+                        "surface": {
+                            "vacuum": 30,
+                            "defects": {
+                                "single_vacancies": {"elements": ["Te"]},
+                                "perturb": {"pert_num": 3},
+                            },
+                        },
+                    },
+                    {
+                        "name": "bulk_333",
+                        "supercell": [3, 3, 3],
+                        "perturb": {"pert_num": 2},
+                    },
+                ],
+            },
+        }
+    )
+
+    assert [task.name for task in config.generation.tasks] == [
+        "surface_331",
+        "bulk_333",
+    ]
+    assert config.generation.tasks[0].supercell == (3, 3, 1)
+    assert config.generation.tasks[0].defects["single_vacancies"] == {
+        "elements": ["Te"]
+    }
+    assert config.generation.tasks[0].perturb["pert_num"] == 3
+    assert config.generation.tasks[1].supercell == (3, 3, 3)
+    assert config.generation.tasks[1].perturb["pert_num"] == 2
+
+
 def test_generation_accepts_inline_surface_defect_keys():
     """A concise surface block can contain defect keys directly."""
     config = PESMakerConfig.from_mapping(

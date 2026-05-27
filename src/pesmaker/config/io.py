@@ -87,6 +87,11 @@ def _construct_unique_mapping(loader, node, deep=False):
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
         if key in mapping:
+            if key == "supercell":
+                raise ValueError(
+                    "duplicate YAML key: supercell. Use generation.tasks for "
+                    "multiple independent supercells."
+                )
             raise ValueError(f"duplicate YAML key: {key}")
         mapping[key] = loader.construct_object(value_node, deep=deep)
     return mapping
