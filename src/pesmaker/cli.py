@@ -68,11 +68,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     generate_parser.add_argument("config", type=Path)
 
-    sample_setup_parser = subparsers.add_parser(
-        "sample-setup",
-        help="Prepare MD sampling folders and submission scripts.",
-    )
-    sample_setup_parser.add_argument("config", type=Path)
+    for sample_command in ("md_sampling", "sample-setup", "sampling", "md-sampling"):
+        sample_setup_parser = subparsers.add_parser(
+            sample_command,
+            help="Prepare MD sampling folders and submission scripts.",
+        )
+        sample_setup_parser.add_argument("config", type=Path)
 
     select_parser = subparsers.add_parser(
         "select",
@@ -124,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_generate_summary(result)
         return 0
 
-    if args.command == "sample-setup":
+    if args.command in {"md_sampling", "sample-setup", "sampling", "md-sampling"}:
         _print_stage_result(setup_sampling(config))
         return 0
 
