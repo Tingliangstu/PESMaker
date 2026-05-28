@@ -39,14 +39,16 @@ pesmaker generate examples/perturb.yaml
 The current implementation writes structure files and a `manifest.jsonl` file in
 the configured `generation.output_dir`.
 
-## `pesmaker sample-setup`
+## `pesmaker md_sampling`
 
 Prepare MD sampling directories, default `run.in` content, and `submit.sh`
 files from generated structures:
 
 ```bash
-pesmaker sample-setup examples/te_defect_md.yaml
+pesmaker md_sampling examples/te_defect_md.yaml
 ```
+
+Aliases: `sample-setup`, `sampling`, and `md-sampling`.
 
 ## `pesmaker select`
 
