@@ -56,12 +56,12 @@ Select representative MD trajectory frames with farthest point sampling:
 pesmaker select examples/te_defect_md.yaml
 ```
 
-## `pesmaker label-setup`
+## `pesmaker scf-setup`
 
-Prepare VASP single-point calculation folders:
+Prepare VASP SCF calculation folders:
 
 ```bash
-pesmaker label-setup examples/te_defect_md.yaml
+pesmaker scf-setup examples/te_defect_md.yaml
 ```
 
 ## `pesmaker submit`

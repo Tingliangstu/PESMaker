@@ -376,7 +376,7 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
 
 
 def setup_labeling(config: PESMakerConfig) -> StageResult:
-    """Prepare VASP single-point calculation folders."""
+    """Prepare VASP SCF calculation folders."""
     output_dir = _section_output_dir(config, config.labeling.options, "labeling")
     output_dir.mkdir(parents=True, exist_ok=True)
     records = _load_input_records(config, config.labeling.options)
@@ -489,7 +489,7 @@ def submit_jobs(
 
 
 def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
-    """Collect completed single-point calculations into `train.xyz`."""
+    """Collect completed VASP SCF calculations into `train.xyz`."""
     output_dir = _section_output_dir(config, config.dataset.__dict__, "dataset")
     output_dir.mkdir(parents=True, exist_ok=True)
     default_pattern = Path("runs") / config.project / "labeling" / "**" / "OUTCAR"

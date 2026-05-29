@@ -81,15 +81,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     select_parser.add_argument("config", type=Path)
 
-    label_setup_parser = subparsers.add_parser(
-        "label-setup",
-        help="Prepare single-point calculation folders and submission scripts.",
+    scf_setup_parser = subparsers.add_parser(
+        "scf-setup",
+        help="Prepare VASP SCF calculation folders and submission scripts.",
     )
-    label_setup_parser.add_argument("config", type=Path)
+    scf_setup_parser.add_argument("config", type=Path)
 
     collect_parser = subparsers.add_parser(
         "collect",
-        help="Collect completed single-point calculations into a training set.",
+        help="Collect completed VASP SCF calculations into a training set.",
     )
     collect_parser.add_argument("config", type=Path)
 
@@ -149,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_stage_result(select_sampling_frames(config))
         return 0
 
-    if args.command == "label-setup":
+    if args.command == "scf-setup":
         _print_stage_result(setup_labeling(config))
         return 0
 

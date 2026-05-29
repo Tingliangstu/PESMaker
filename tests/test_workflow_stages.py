@@ -78,7 +78,7 @@ training:
     )
 
     assert main(["sample-setup", str(config_path)]) == 0
-    assert main(["label-setup", str(config_path)]) == 0
+    assert main(["scf-setup", str(config_path)]) == 0
     assert main(["train-setup", str(config_path)]) == 0
 
     assert (tmp_path / "sampling" / "md_000000_temp_300K" / "run.in").exists()
@@ -91,7 +91,7 @@ training:
 
 
 def test_labeling_setup_can_preserve_generated_vasp_source_tree(tmp_path):
-    """VASP labeling setup can keep generated path identity for batch jobs."""
+    """VASP SCF setup can keep generated path identity for batch jobs."""
     generated_dir = tmp_path / "generated"
     source_dir = generated_dir / "mp-105_Te"
     source_dir.mkdir(parents=True)
@@ -122,7 +122,7 @@ jobs:
         encoding="utf-8",
     )
 
-    assert main(["label-setup", str(config_path)]) == 0
+    assert main(["scf-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
     assert (workdir / "POSCAR").read_text(encoding="utf-8") == source_text
@@ -138,7 +138,7 @@ jobs:
 
 
 def test_labeling_setup_can_generate_potcar_from_library(tmp_path):
-    """VASP labeling setup can concatenate POTCAR files from a local library."""
+    """VASP SCF setup can concatenate POTCAR files from a local library."""
     generated_dir = tmp_path / "generated"
     source_dir = generated_dir / "mp-105_Te"
     source_dir.mkdir(parents=True)
@@ -168,7 +168,7 @@ labeling:
         encoding="utf-8",
     )
 
-    assert main(["label-setup", str(config_path)]) == 0
+    assert main(["scf-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
     assert (workdir / "POTCAR").read_text(encoding="utf-8") == "POTCAR Te\n"
@@ -206,7 +206,7 @@ labeling:
         encoding="utf-8",
     )
 
-    assert main(["label-setup", str(config_path)]) == 0
+    assert main(["scf-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "labeling" / "mp-Na" / "structure_000000"
     assert (workdir / "POTCAR").read_text(encoding="utf-8") == "POTCAR Na pv\n"
@@ -245,7 +245,7 @@ labeling:
         encoding="utf-8",
     )
 
-    assert main(["label-setup", str(config_path)]) == 0
+    assert main(["scf-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
     assert (workdir / "POTCAR").read_text(encoding="utf-8") == "POTCAR Te GW\n"
@@ -287,7 +287,7 @@ labeling:
         encoding="utf-8",
     )
 
-    assert main(["label-setup", str(config_path)]) == 0
+    assert main(["scf-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "labeling" / "mp-Na" / "structure_000000"
     assert (workdir / "POTCAR").read_text(encoding="utf-8") == "POTCAR Na sv GW\n"
