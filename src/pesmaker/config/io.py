@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
-"""Load PESMaker YAML and TOML configuration files."""
+"""Load PESMaker YAML configuration files."""
 
 from __future__ import annotations
 
@@ -22,17 +22,12 @@ from typing import Any
 
 from pesmaker.config.schema import PESMakerConfig
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10
-    tomllib = None
-
 
 def load_config(path: str | Path) -> PESMakerConfig:
     """Load and validate a PESMaker configuration file.
 
     Args:
-        path: YAML or TOML configuration file path.
+        path: YAML configuration file path.
 
     Returns:
         A validated `PESMakerConfig` object ready for workflow execution.
@@ -51,10 +46,10 @@ def load_config(path: str | Path) -> PESMakerConfig:
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:
-    """Read a YAML or TOML file into a raw mapping.
+    """Read a YAML file into a raw mapping.
 
     Args:
-        path: Existing input file with `.yaml`, `.yml`, or `.toml` suffix.
+        path: Existing input file with `.yaml` or `.yml` suffix.
 
     Returns:
         Raw dictionary loaded from the file.
@@ -65,25 +60,15 @@ def _load_mapping(path: Path) -> dict[str, Any]:
         RuntimeError: If PyYAML is required but not installed.
     """
     suffix = path.suffix.lower()
-    if suffix in {".yaml", ".yml"}:
-        try:
-            import yaml
-        except ImportError as exc:
-            message = "YAML config files require PyYAML. Install pesmaker with PyYAML."
-            raise RuntimeError(message) from exc
-        with path.open("r", encoding="utf-8") as handle:
-            data = yaml.load(handle, Loader=_UniqueKeyLoader)
-    elif suffix == ".toml":
-        if tomllib is None:
-            message = (
-                "TOML config files require Python 3.11+ or the optional 'tomli' "
-                "package. Use YAML config files to avoid this extra dependency."
-            )
-            raise RuntimeError(message)
-        with path.open("rb") as handle:
-            data = tomllib.load(handle)
-    else:
-        raise ValueError(f"unsupported config suffix: {path.suffix}")
+    if suffix not in {".yaml", ".yml"}:
+        raise ValueError(f"unsupported config suffix: {path.suffix}; use .yaml")
+    try:
+        import yaml
+    except ImportError as exc:
+        message = "YAML config files require PyYAML. Install pesmaker with PyYAML."
+        raise RuntimeError(message) from exc
+    with path.open("r", encoding="utf-8") as handle:
+        data = yaml.load(handle, Loader=_UniqueKeyLoader)
 
     if not isinstance(data, dict):
         raise ValueError(f"config must contain a mapping at top level: {path}")

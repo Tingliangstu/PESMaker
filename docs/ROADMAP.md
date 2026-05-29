@@ -2,7 +2,7 @@
 
 ## MVP 1: structure generation and VASP task preparation
 
-- Parse a simple YAML/TOML input file.
+- Parse a simple YAML input file.
 - Read user structures from POSCAR, CIF, and extxyz.
 - Generate supercells and small perturbations.
 - Create VASP SCF calculation folders from a template.

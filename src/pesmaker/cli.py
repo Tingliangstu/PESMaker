@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _add_config_argument(parser: argparse.ArgumentParser) -> None:
     """Add the common config-file argument to a subcommand parser."""
-    parser.add_argument("config", type=Path, help="YAML or TOML config file.")
+    parser.add_argument("config", type=Path, help="YAML config file.")
 
 
 def _write_starter_config(path: Path) -> int:

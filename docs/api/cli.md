@@ -14,7 +14,7 @@ The command refuses to overwrite an existing file.
 
 ## `pesmaker validate`
 
-Validate a YAML or TOML configuration file:
+Validate a YAML configuration file:
 
 ```bash
 pesmaker validate examples/perturb.yaml

@@ -45,7 +45,7 @@ PESMaker is designed to be:
 
 ```text
 src/pesmaker/
-  config/        # YAML/TOML input parsing and validation
+  config/        # YAML input parsing and validation
   structures/    # POSCAR/CIF/XYZ IO, supercells, perturbations
   samplers/      # LAMMPS+MACE, GPUMD+NEP sampling interfaces
   generators/    # defects, vacancies, surfaces, transition states
@@ -118,9 +118,8 @@ setuptools >= 68
 wheel
 ```
 
-YAML configuration files are recommended and do not require any TOML parser.
-TOML configuration files require Python 3.11+ for the standard-library
-`tomllib` module, or the optional `tomli` package on Python 3.10.
+PESMaker uses YAML configuration files only. This keeps the command-line
+workflow simple and avoids optional config parser dependencies.
 
 ## Documentation
 

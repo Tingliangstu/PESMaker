@@ -19,9 +19,7 @@ flowchart TD
     G --> H["_load_mapping(path)"]
     H --> I{"file suffix"}
     I -->|".yaml/.yml"| J["yaml.safe_load"]
-    I -->|".toml"| K["tomllib.load"]
     J --> L["PESMakerConfig.from_mapping"]
-    K --> L
 
     L --> M["StructureInput.from_mapping"]
     L --> N["GenerationConfig.from_mapping"]
@@ -53,7 +51,7 @@ flowchart LR
 ## Current responsibilities
 
 - `pesmaker.cli`: command-line parsing and user-facing commands.
-- `pesmaker.config.io`: YAML/TOML file loading.
+- `pesmaker.config.io`: YAML file loading.
 - `pesmaker.config.schema`: typed configuration objects and validation.
 - Empty stage packages: future homes for structures, samplers, generators,
   labelers, jobs, parsers, dataset assembly, and trainers.
