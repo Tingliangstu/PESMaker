@@ -20,6 +20,19 @@ import json
 from pesmaker.cli import main
 
 
+def test_cli_help_hides_sampling_aliases(capsys):
+    """Top-level help should show one sampling setup command, not every alias."""
+    try:
+        main(["-h"])
+    except SystemExit as exc:
+        assert exc.code == 0
+    output = capsys.readouterr().out
+
+    assert "sample-setup" in output
+    assert "md_sampling" not in output
+    assert "md-sampling" not in output
+
+
 def test_cli_generate_writes_structures(tmp_path, capsys):
     """The generate command should write perturbed structures and a manifest.
 
