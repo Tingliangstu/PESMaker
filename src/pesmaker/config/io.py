@@ -17,11 +17,15 @@
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Any
 
 from pesmaker.config.schema import PESMakerConfig
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10
+    tomllib = None
 
 
 def load_config(path: str | Path) -> PESMakerConfig:
@@ -71,6 +75,12 @@ def _load_mapping(path: Path) -> dict[str, Any]:
         with path.open("r", encoding="utf-8") as handle:
             data = yaml.load(handle, Loader=_UniqueKeyLoader)
     elif suffix == ".toml":
+        if tomllib is None:
+            message = (
+                "TOML config files require Python 3.11+ or the optional 'tomli' "
+                "package. Use YAML config files to avoid this extra dependency."
+            )
+            raise RuntimeError(message)
         with path.open("rb") as handle:
             data = tomllib.load(handle)
     else:

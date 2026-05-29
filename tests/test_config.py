@@ -15,6 +15,7 @@
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
 """Tests for PESMaker configuration parsing."""
 
+from pesmaker.config import io as config_io
 from pesmaker.config.schema import PESMakerConfig
 from pesmaker.config.io import load_config
 
@@ -196,6 +197,37 @@ generation:
         assert "duplicate YAML key: supercell" in str(exc)
     else:
         raise AssertionError("duplicate YAML keys should fail")
+
+
+def test_yaml_loading_does_not_require_tomllib(tmp_path, monkeypatch):
+    """Python 3.10 users should be able to load YAML without TOML support."""
+    monkeypatch.setattr(config_io, "tomllib", None)
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(
+        """project: demo
+structures:
+  - POSCAR
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.project == "demo"
+
+
+def test_toml_loading_without_tomllib_has_clear_error(tmp_path, monkeypatch):
+    """TOML configs should explain the optional dependency on Python 3.10."""
+    monkeypatch.setattr(config_io, "tomllib", None)
+    config_path = tmp_path / "run.toml"
+    config_path.write_text('project = "demo"\nstructures = ["POSCAR"]\n', encoding="utf-8")
+
+    try:
+        load_config(config_path)
+    except RuntimeError as exc:
+        assert "TOML config files require Python 3.11+" in str(exc)
+    else:
+        raise AssertionError("TOML without tomllib should fail clearly")
 
 
 def test_structures_accept_simple_path_list():

@@ -102,6 +102,26 @@ If `pesmaker --help` is not recognized, either add that directory to your user
 Current runtime dependencies are PyYAML, NumPy, and ASE. Pymatgen is optional
 for later atomistic utilities.
 
+Minimum runtime dependencies:
+
+```text
+python >= 3.10
+ase >= 3.23
+numpy >= 1.24
+PyYAML >= 6.0
+```
+
+Editable installation also needs the build tools listed in `pyproject.toml`:
+
+```text
+setuptools >= 68
+wheel
+```
+
+YAML configuration files are recommended and do not require any TOML parser.
+TOML configuration files require Python 3.11+ for the standard-library
+`tomllib` module, or the optional `tomli` package on Python 3.10.
+
 ## Documentation
 
 The documentation is built with MkDocs and is intended to be published with
