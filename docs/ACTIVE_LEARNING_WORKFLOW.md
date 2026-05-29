@@ -525,8 +525,10 @@ labeling/
 The original generated structure is backed up by default. Set
 `backup_source: false` under `labeling` only if those backups are not wanted.
 If `potcar_library` is set, PESMaker writes `POTCAR` automatically from
-`<potcar_library>/<element>/POTCAR`. For GW potentials, set `gw_potcar: true`
-and PESMaker will use directories such as `Te_GW`.
+the VASP-recommended PBE potential directory for each element. For example,
+Te uses `Te`, Na uses `Na_pv`, and K uses `K_sv`. For GW potentials, set
+`gw_potcar: true` and PESMaker will use recommended GW directories such as
+`Te_GW` or `Na_sv_GW`.
 
 Submit the prepared jobs with:
 

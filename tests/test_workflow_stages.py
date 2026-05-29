@@ -170,6 +170,44 @@ labeling:
     assert (workdir / "POTCAR.spec").read_text(encoding="utf-8") == "Te\n"
 
 
+def test_labeling_setup_uses_recommended_pbe_potcar(tmp_path):
+    """Default POTCAR generation should use recommended PBE variants."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-Na"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Na\n1.0\n1 0 0\n0 1 0\n0 0 1\nNa\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    library = tmp_path / "potentials"
+    (library / "Na_pv").mkdir(parents=True)
+    (library / "Na_pv" / "POTCAR").write_text("POTCAR Na pv\n", encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: recommended_potcar_test
+structures:
+  - POSCAR
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  potcar_library: {library.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["label-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-Na" / "structure_000000"
+    assert (workdir / "POTCAR").read_text(encoding="utf-8") == "POTCAR Na pv\n"
+    assert (workdir / "POTCAR.spec").read_text(encoding="utf-8") == "Na_pv\n"
+
+
 def test_labeling_setup_can_generate_gw_potcar_from_library(tmp_path):
     """GW POTCAR selection should use the element_GW directory by default."""
     generated_dir = tmp_path / "generated"
@@ -207,6 +245,48 @@ labeling:
     workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
     assert (workdir / "POTCAR").read_text(encoding="utf-8") == "POTCAR Te GW\n"
     assert (workdir / "POTCAR.spec").read_text(encoding="utf-8") == "Te_GW\n"
+
+
+def test_labeling_setup_uses_recommended_gw_potcar(tmp_path):
+    """GW POTCAR generation should use recommended GW variants."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-Na"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Na\n1.0\n1 0 0\n0 1 0\n0 0 1\nNa\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    library = tmp_path / "potentials"
+    (library / "Na_sv_GW").mkdir(parents=True)
+    (library / "Na_sv_GW" / "POTCAR").write_text(
+        "POTCAR Na sv GW\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: recommended_gw_potcar_test
+structures:
+  - POSCAR
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  potcar_library: {library.as_posix()}
+  gw_potcar: true
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["label-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-Na" / "structure_000000"
+    assert (workdir / "POTCAR").read_text(encoding="utf-8") == "POTCAR Na sv GW\n"
+    assert (workdir / "POTCAR.spec").read_text(encoding="utf-8") == "Na_sv_GW\n"
 
 
 def test_submit_jobs_dry_run_uses_labeling_manifest(tmp_path):
