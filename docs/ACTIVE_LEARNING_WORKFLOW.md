@@ -501,7 +501,6 @@ labeling:
   input_manifest: generated/manifest.jsonl
   incar: templates/vasp/INCAR
   workdir_naming: source_tree
-  backup_source: true
   command: /home/a4s5d/software/VASP/CPU_vasp.6.6.0/bin/vasp_std
 
 jobs:
@@ -521,6 +520,9 @@ labeling/
       INCAR
       submit.sh
 ```
+
+The original generated structure is backed up by default. Set
+`backup_source: false` under `labeling` only if those backups are not wanted.
 
 Submit the prepared jobs with:
 

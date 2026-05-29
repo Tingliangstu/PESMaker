@@ -461,7 +461,7 @@ def _copy_labeling_source_backup(
     source_path: Path,
     calc_dir: Path,
 ) -> Path | None:
-    if not bool(options.get("backup_source", False)):
+    if not bool(options.get("backup_source", True)):
         return None
     suffix = str(options.get("backup_suffix", f"{source_path.suffix}-bak"))
     backup_name = f"{source_path.stem}{suffix}"

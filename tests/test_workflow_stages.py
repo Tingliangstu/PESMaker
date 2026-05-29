@@ -106,7 +106,6 @@ generation:
 labeling:
   output_dir: {(tmp_path / 'labeling').as_posix()}
   workdir_naming: source_tree
-  backup_source: true
 jobs:
   sbatch_templates:
     labeling: {(tmp_path / 'vasp.sh').as_posix()}
