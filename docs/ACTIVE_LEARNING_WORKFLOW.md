@@ -115,7 +115,7 @@ training:
 
 jobs:
   machine: local
-  sbatch_templates:
+  sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp.sh
     training: templates/sbatch/nep.sh
@@ -496,15 +496,24 @@ default while dropping the `.vasp` suffix from each calculation folder:
 labeling:
   engine: vasp
   output_dir: labeling
+  input_dir: generated
   incar: templates/vasp/INCAR
   potcar_library: /home/a4s5d/software/VASP/potentials
   command: /home/a4s5d/software/VASP/CPU_vasp.6.6.0/bin/vasp_std
 
 jobs:
   submit_command: sbatch
-  sbatch_templates:
-    labeling: templates/sbatch/vasp_cpu_36.sh
+  sub_file: templates/sbatch/vasp_cpu_36.sh
 ```
+
+This SCF-only config does not need a `structures` section. `labeling.input_dir`
+can point at a previous `generated` folder. PESMaker reads
+`input_dir/manifest.jsonl` when it exists; otherwise it recursively scans the
+folder for structure files such as `structure_*.vasp`, `structure_*.xyz`,
+`*.cif`, `*.extxyz`, and `POSCAR`.
+
+Each prepared calculation is recorded in `labeling_manifest.jsonl` with the
+source file, workdir, input directory, input mode, and relative path.
 
 This writes folders such as:
 
@@ -605,10 +614,18 @@ Cluster submission settings belong in the `jobs` section:
 ```yaml
 jobs:
   machine: cluster-a
-  sbatch_templates:
+  sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp.sh
     training: templates/sbatch/nep.sh
+```
+
+For a single-stage config, `sub_file` can be a direct path instead:
+
+```yaml
+jobs:
+  submit_command: sbatch
+  sub_file: templates/sbatch/vasp_cpu_36.sh
 ```
 
 Templates can use these placeholders:

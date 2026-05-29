@@ -75,7 +75,7 @@ training:
 jobs:
   machine: local
   submit_command: sbatch
-  sbatch_templates:
+  sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp_cpu_36.sh
     training: templates/sbatch/nep.sh

@@ -56,6 +56,31 @@ Prepare SCF calculation folders:
 pesmaker scf-setup examples/te_defect_md.yaml
 ```
 
+For a follow-up run that only labels structures already written by
+`pesmaker generate`, the config can omit `structures`. Without
+`labeling.input_manifest` or `generation.output_dir`, `scf-setup` reads
+`generated/manifest.jsonl` from the current working directory when it exists.
+
+```yaml
+project: Te_bulk_mp
+
+labeling:
+  engine: vasp
+  output_dir: labeling
+  input_dir: generated
+  incar: templates/vasp/INCAR
+  potcar_library: /home/a4s5d/software/VASP/potentials
+  command: /home/a4s5d/software/VASP/CPU_vasp.6.6.0/bin/vasp_std
+
+jobs:
+  submit_command: sbatch
+  sub_file: templates/sbatch/vasp_cpu_36.sh
+```
+
+`labeling.input_dir` may contain a `manifest.jsonl`. If it does not, PESMaker
+recursively scans that folder for structure files and marks each prepared job
+in `labeling/labeling_manifest.jsonl`.
+
 ## `pesmaker submit`
 
 Submit prepared `submit.sh` files. By default this submits SCF jobs:

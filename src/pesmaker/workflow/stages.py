@@ -59,6 +59,9 @@ PREC = Accurate
 NELM = 150
 """
 
+STRUCTURE_INPUT_SUFFIXES = {".cif", ".extxyz", ".poscar", ".vasp", ".xyz"}
+STRUCTURE_INPUT_NAMES = {"CONTCAR", "POSCAR"}
+
 RECOMMENDED_PBE_POTCARS = {
     "H": "H",
     "He": "He",
@@ -429,17 +432,21 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
                 )
                 if path is not None
             )
-            manifest.write(
-                json.dumps(
-                    {
-                        "index": index,
-                        "engine": config.labeling.engine,
-                        "source": str(source_path),
-                        "workdir": str(calc_dir),
-                    }
-                )
-                + "\n"
-            )
+            record_data = {
+                "index": index,
+                "engine": config.labeling.engine,
+                "source": str(source_path),
+                "workdir": str(calc_dir),
+            }
+            for key in (
+                "input_dir",
+                "input_mode",
+                "input_relative_path",
+                "source_record_index",
+            ):
+                if key in record:
+                    record_data[key] = record[key]
+            manifest.write(json.dumps(record_data) + "\n")
     files.append(manifest_path)
     return StageResult(
         output_dir,
@@ -560,20 +567,95 @@ def _section_output_dir(
 def _load_input_records(
     config: PESMakerConfig,
     options: dict[str, Any],
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     manifest = options.get("input_manifest")
     if manifest:
-        return _read_manifest(Path(str(manifest)))
-    generation_dir = (
-        config.generation.output_dir or Path("runs") / config.project / "generated"
-    )
-    manifest_path = generation_dir / "manifest.jsonl"
+        manifest_path = Path(str(manifest))
+        return _mark_input_records(
+            _read_manifest(manifest_path),
+            input_dir=manifest_path.parent,
+            input_mode="input_manifest",
+        )
+    input_dir = options.get("input_dir")
+    if input_dir:
+        return _load_input_dir_records(Path(str(input_dir)), input_mode="input_dir")
+    generation_dir = _generated_structures_dir(config)
+    return _load_input_dir_records(generation_dir, input_mode="generated_dir")
+
+
+def _load_input_dir_records(input_dir: Path, *, input_mode: str) -> list[dict[str, Any]]:
+    if not input_dir.exists():
+        raise ValueError(f"input structure directory does not exist: {input_dir}")
+    if not input_dir.is_dir():
+        raise ValueError(f"input structure path must be a directory: {input_dir}")
+
+    manifest_path = input_dir / "manifest.jsonl"
     if manifest_path.exists():
-        return _read_manifest(manifest_path)
-    paths = sorted(generation_dir.rglob("structure_*.*"))
+        return _mark_input_records(
+            _read_manifest(manifest_path),
+            input_dir=input_dir,
+            input_mode=f"{input_mode}_manifest",
+        )
+
+    paths = _discover_input_structure_files(input_dir)
     if not paths:
-        raise ValueError(f"no generated structures found in {generation_dir}")
-    return [{"path": str(path)} for path in paths]
+        raise ValueError(f"no structure files found in {input_dir}")
+    return [
+        {
+            "path": str(path),
+            "input_dir": str(input_dir),
+            "input_mode": f"{input_mode}_scan",
+            "input_relative_path": path.relative_to(input_dir).as_posix(),
+        }
+        for path in paths
+    ]
+
+
+def _mark_input_records(
+    records: list[dict[str, Any]],
+    *,
+    input_dir: Path,
+    input_mode: str,
+) -> list[dict[str, Any]]:
+    marked = []
+    for source_index, record in enumerate(records):
+        path = Path(str(record["path"]))
+        if not path.is_absolute() and not path.exists():
+            candidate = input_dir / path
+            if candidate.exists():
+                path = candidate
+        marked_record = {
+            **record,
+            "path": str(path),
+            "input_dir": str(input_dir),
+            "input_mode": input_mode,
+            "source_record_index": record.get("index", source_index),
+        }
+        try:
+            marked_record["input_relative_path"] = path.relative_to(
+                input_dir
+            ).as_posix()
+        except ValueError:
+            pass
+        marked.append(marked_record)
+    return marked
+
+
+def _discover_input_structure_files(input_dir: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in input_dir.rglob("*")
+        if path.is_file() and _is_input_structure_file(path)
+    )
+
+
+def _is_input_structure_file(path: Path) -> bool:
+    if path.name.upper() in STRUCTURE_INPUT_NAMES:
+        return True
+    suffix = path.suffix.lower()
+    if suffix not in STRUCTURE_INPUT_SUFFIXES:
+        return False
+    return path.stem.startswith("structure_") or suffix != ".xyz"
 
 
 def _labeling_source_root(config: PESMakerConfig, options: dict[str, Any]) -> Path:
@@ -583,7 +665,19 @@ def _labeling_source_root(config: PESMakerConfig, options: dict[str, Any]) -> Pa
     manifest = options.get("input_manifest")
     if manifest:
         return Path(str(manifest)).parent
-    return config.generation.output_dir or Path("runs") / config.project / "generated"
+    input_dir = options.get("input_dir")
+    if input_dir:
+        return Path(str(input_dir))
+    return _generated_structures_dir(config)
+
+
+def _generated_structures_dir(config: PESMakerConfig) -> Path:
+    if config.generation.output_dir:
+        return config.generation.output_dir
+    local_generated = Path("generated")
+    if local_generated.exists():
+        return local_generated
+    return Path("runs") / config.project / "generated"
 
 
 def _labeling_workdir(
@@ -969,11 +1063,29 @@ def _write_submit_script(
 
 
 def _job_template_path(config: PESMakerConfig, stage: str) -> Path | None:
+    sub_file = config.jobs.options.get("sub_file")
+    if isinstance(sub_file, dict):
+        stage_template = _stage_template_value(sub_file, stage)
+        if stage_template:
+            return Path(str(stage_template))
+    if sub_file and not isinstance(sub_file, dict):
+        return Path(str(sub_file))
+
     templates = config.jobs.options.get("sbatch_templates", {})
-    if isinstance(templates, dict) and templates.get(stage):
-        return Path(str(templates[stage]))
+    if isinstance(templates, dict):
+        stage_template = _stage_template_value(templates, stage)
+        if stage_template:
+            return Path(str(stage_template))
     template = config.jobs.options.get("sbatch_template")
     return Path(str(template)) if template else None
+
+
+def _stage_template_value(templates: dict[str, Any], stage: str) -> Any:
+    if templates.get(stage):
+        return templates[stage]
+    if stage == "labeling" and templates.get("scf"):
+        return templates["scf"]
+    return None
 
 
 def _default_submit_script(*, command: str, job_name: str) -> str:

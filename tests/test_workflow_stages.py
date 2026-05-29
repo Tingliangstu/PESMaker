@@ -137,6 +137,91 @@ jobs:
     assert manifest_record["workdir"] == str(workdir)
 
 
+def test_labeling_setup_uses_local_generated_without_structures(tmp_path, monkeypatch):
+    """SCF setup can submit structures from a prior generate-only run."""
+    monkeypatch.chdir(tmp_path)
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_text = "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n"
+    source_path.write_text(source_text, encoding="utf-8")
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": source_path.relative_to(tmp_path).as_posix()}) + "\n",
+        encoding="utf-8",
+    )
+    sub_file = tmp_path / "templates" / "sbatch" / "vasp_cpu_36.sh"
+    sub_file.parent.mkdir(parents=True)
+    sub_file.write_text(
+        "#!/bin/bash\n#SBATCH --job-name={job_name}\ncd \"{workdir}\"\n{command}\n",
+        encoding="utf-8",
+    )
+    incar = tmp_path / "templates" / "vasp" / "INCAR"
+    incar.parent.mkdir(parents=True)
+    incar.write_text("NSW = 0\n", encoding="utf-8")
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        """project: Te_bulk_mp
+labeling:
+  engine: vasp
+  output_dir: labeling
+  incar: templates/vasp/INCAR
+  command: /opt/vasp/vasp_std
+
+jobs:
+  submit_command: sbatch
+  sub_file: templates/sbatch/vasp_cpu_36.sh
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    assert (workdir / "POSCAR").read_text(encoding="utf-8") == source_text
+    assert (workdir / "INCAR").read_text(encoding="utf-8") == "NSW = 0\n"
+    assert "/opt/vasp/vasp_std" in (workdir / "submit.sh").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_labeling_setup_scans_explicit_input_dir_without_manifest(tmp_path):
+    """Users can point SCF setup at a folder of generated structure files."""
+    input_dir = tmp_path / "generated"
+    source_dir = input_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_text = "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n"
+    source_path.write_text(source_text, encoding="utf-8")
+    (source_dir / "movie.xyz").write_text("ignored trajectory\n", encoding="utf-8")
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        f"""project: Te_bulk_mp
+labeling:
+  engine: vasp
+  input_dir: {input_dir.as_posix()}
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    manifest_records = [
+        json.loads(line)
+        for line in (tmp_path / "labeling" / "labeling_manifest.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(manifest_records) == 1
+    assert manifest_records[0]["source"] == str(source_path)
+    assert manifest_records[0]["input_dir"] == str(input_dir)
+    assert manifest_records[0]["input_mode"] == "input_dir_scan"
+    assert manifest_records[0]["input_relative_path"] == (
+        "mp-105_Te/structure_000000.vasp"
+    )
+
+
 def test_labeling_setup_can_generate_potcar_from_library(tmp_path):
     """VASP SCF setup can concatenate POTCAR files from a local library."""
     generated_dir = tmp_path / "generated"

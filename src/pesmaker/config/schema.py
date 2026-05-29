@@ -237,7 +237,8 @@ class PESMakerConfig:
 
     Attributes:
         project: Project name used in reports and default output paths.
-        structures: Structure files to process.
+        structures: Structure files used by `generate`. Later stages can omit
+            this and read existing manifests or generated structure folders.
         generation: Supercell and perturbation settings.
         sampling: Optional sampling engine configuration.
         labeling: DFT labeling engine configuration.
@@ -247,7 +248,7 @@ class PESMakerConfig:
     """
 
     project: str
-    structures: tuple[StructureInput, ...]
+    structures: tuple[StructureInput, ...] = ()
     generation: GenerationConfig = field(default_factory=GenerationConfig)
     sampling: EngineConfig = field(
         default_factory=lambda: EngineConfig(engine="none", options={})
@@ -280,7 +281,7 @@ class PESMakerConfig:
         if not project:
             raise ValueError("config requires 'project'")
 
-        structures = _parse_structures(data.get("structures"))
+        structures = _parse_structures(data.get("structures"), required=False)
 
         return cls(
             project=str(project),
@@ -444,7 +445,11 @@ def _require_mapping(value: Any, name: str) -> dict[str, Any]:
     return value
 
 
-def _parse_structures(value: Any) -> tuple[StructureInput, ...]:
+def _parse_structures(
+    value: Any,
+    *,
+    required: bool = True,
+) -> tuple[StructureInput, ...]:
     """Parse structure inputs from a simple list or an `include` glob map.
 
     Args:
@@ -456,9 +461,16 @@ def _parse_structures(value: Any) -> tuple[StructureInput, ...]:
         `include` patterns.
 
     Raises:
-        ValueError: If no structures are provided, an include pattern is empty,
-            or an include pattern matches no files.
+        ValueError: If required structures are not provided, an include pattern
+            is empty, or an include pattern matches no files.
     """
+    if value is None:
+        if required:
+            raise ValueError(
+                "config requires 'structures' as a non-empty list or include map"
+            )
+        return ()
+
     if isinstance(value, list):
         if not value:
             raise ValueError("config requires at least one structure")

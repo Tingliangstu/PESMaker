@@ -89,6 +89,11 @@ def generate_structures(config: PESMakerConfig) -> GenerateResult:
         ValueError: If output format or perturbation settings are invalid.
         OSError: If output folders or files cannot be written.
     """
+    if not config.structures:
+        raise ValueError(
+            "generate requires 'structures' as a non-empty list or include map"
+        )
+
     output_dir = (
         config.generation.output_dir or Path("runs") / config.project / "generated"
     )

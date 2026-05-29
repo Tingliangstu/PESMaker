@@ -34,6 +34,23 @@ def test_config_from_mapping_minimal():
     assert config.training.engine == "nep"
 
 
+def test_config_from_mapping_allows_stage_only_config():
+    """Later workflow stages can reuse generated manifests without structures."""
+    config = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "labeling": {"output_dir": "labeling"},
+            "jobs": {
+                "submit_command": "sbatch",
+                "sub_file": "templates/sbatch/vasp_cpu_36.sh",
+            },
+        }
+    )
+
+    assert config.structures == ()
+    assert config.jobs.options["sub_file"] == "templates/sbatch/vasp_cpu_36.sh"
+
+
 def test_dataset_split_must_sum_to_one():
     """Dataset split ratios must be normalized."""
     try:
