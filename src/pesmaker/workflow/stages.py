@@ -18,7 +18,9 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
+import subprocess
 from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
@@ -41,13 +43,19 @@ run            3000000
 """
 
 DEFAULT_INCAR = """SYSTEM = PESMaker single point
-ENCUT = 520
-EDIFF = 1E-6
-IBRION = -1
-NSW = 0
-ISMEAR = 0
-SIGMA = 0.05
+GGA = PE
 LREAL = Auto
+ENCUT = 650
+KSPACING = 0.2
+KGAMMA = .TRUE.
+NSW = 1
+IBRION = -1
+ALGO = Normal
+EDIFF = 1E-06
+SIGMA = 0.02
+ISMEAR = 0
+PREC = Accurate
+NELM = 150
 """
 
 DEFAULT_NEP_IN = """type 1 Te
@@ -199,13 +207,27 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
     incar = _read_optional_file(config.labeling.options.get("incar"), default=DEFAULT_INCAR)
     files: list[Path] = []
     manifest_path = output_dir / "labeling_manifest.jsonl"
+    source_root = _labeling_source_root(config, config.labeling.options)
+    used_workdirs: set[Path] = set()
     with manifest_path.open("w", encoding="utf-8") as manifest:
         for index, record in enumerate(records):
-            calc_dir = output_dir / f"calc_{index:06d}"
+            source_path = Path(record["path"])
+            calc_dir = _labeling_workdir(
+                output_dir,
+                source_path,
+                index=index,
+                naming=str(config.labeling.options.get("workdir_naming", "indexed")),
+                source_root=source_root,
+                used_workdirs=used_workdirs,
+            )
             calc_dir.mkdir(parents=True, exist_ok=True)
             poscar_path = calc_dir / "POSCAR"
-            atoms = load_structure(record["path"])
-            write_structure(atoms, poscar_path, fmt="vasp")
+            _write_labeling_poscar(source_path, poscar_path)
+            backup_path = _copy_labeling_source_backup(
+                config.labeling.options,
+                source_path,
+                calc_dir,
+            )
             incar_path = calc_dir / "INCAR"
             incar_path.write_text(incar, encoding="utf-8")
             _copy_optional_templates(config.labeling.options, calc_dir)
@@ -215,13 +237,17 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
                 stage="labeling",
                 command=str(config.labeling.options.get("command", "vasp_std")),
             )
-            files.extend([poscar_path, incar_path, submit_path])
+            files.extend(
+                path
+                for path in (poscar_path, backup_path, incar_path, submit_path)
+                if path is not None
+            )
             manifest.write(
                 json.dumps(
                     {
                         "index": index,
                         "engine": config.labeling.engine,
-                        "source": record["path"],
+                        "source": str(source_path),
                         "workdir": str(calc_dir),
                     }
                 )
@@ -232,6 +258,46 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
         output_dir,
         tuple(files),
         f"Prepared {len(records)} single-point job(s)",
+    )
+
+
+def submit_jobs(
+    config: PESMakerConfig,
+    *,
+    stage: str = "labeling",
+    dry_run: bool = False,
+) -> StageResult:
+    """Submit prepared stage jobs with the configured scheduler command."""
+    submit_scripts = _stage_submit_scripts(config, stage)
+    if not submit_scripts:
+        raise ValueError(f"no submit.sh scripts found for stage: {stage}")
+
+    submit_command = str(config.jobs.options.get("submit_command", "sbatch"))
+    output_dir = _stage_output_dir(config, stage)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    submitted_log = output_dir / f"{stage}_submitted_jobs.txt"
+    lines: list[str] = []
+    for script in submit_scripts:
+        command = [*shlex.split(submit_command), script.name]
+        display = f"(cd {script.parent} && {' '.join(command)})"
+        if dry_run:
+            lines.append(f"DRY-RUN {display}")
+            continue
+        result = subprocess.run(
+            command,
+            cwd=script.parent,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        message = result.stdout.strip() or result.stderr.strip()
+        lines.append(f"{script.parent}: {message}")
+    submitted_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    action = "Would submit" if dry_run else "Submitted"
+    return StageResult(
+        output_dir,
+        (submitted_log,),
+        f"{action} {len(submit_scripts)} {stage} job(s)",
     )
 
 
@@ -323,12 +389,122 @@ def _load_input_records(
     return [{"path": str(path)} for path in paths]
 
 
-def _read_manifest(path: Path) -> list[dict[str, str]]:
+def _labeling_source_root(config: PESMakerConfig, options: dict[str, Any]) -> Path:
+    source_root = options.get("input_root")
+    if source_root:
+        return Path(str(source_root))
+    manifest = options.get("input_manifest")
+    if manifest:
+        return Path(str(manifest)).parent
+    return config.generation.output_dir or Path("runs") / config.project / "generated"
+
+
+def _labeling_workdir(
+    output_dir: Path,
+    source_path: Path,
+    *,
+    index: int,
+    naming: str,
+    source_root: Path,
+    used_workdirs: set[Path],
+) -> Path:
+    if naming == "indexed":
+        candidate = output_dir / f"calc_{index:06d}"
+    elif naming == "source_stem":
+        candidate = output_dir / _safe_path_part(source_path.stem)
+    elif naming == "source_tree":
+        relative = _relative_source_path(source_path, source_root)
+        candidate = output_dir / relative.with_suffix("")
+    else:
+        raise ValueError(
+            "labeling.workdir_naming must be one of: indexed, source_stem, source_tree"
+        )
+    return _unique_workdir(candidate, used_workdirs)
+
+
+def _relative_source_path(path: Path, root: Path) -> Path:
+    for candidate, candidate_root in ((path, root), (path.resolve(), root.resolve())):
+        try:
+            return candidate.relative_to(candidate_root)
+        except ValueError:
+            continue
+    return Path(_safe_path_part(path.with_suffix("").as_posix()))
+
+
+def _unique_workdir(candidate: Path, used_workdirs: set[Path]) -> Path:
+    base = candidate
+    counter = 2
+    while candidate in used_workdirs:
+        candidate = base.with_name(f"{base.name}_{counter}")
+        counter += 1
+    used_workdirs.add(candidate)
+    return candidate
+
+
+def _safe_path_part(value: str) -> str:
+    safe = "".join(
+        char if char.isalnum() or char in {"-", "_"} else "_" for char in value
+    )
+    return safe.strip("_") or "structure"
+
+
+def _write_labeling_poscar(source_path: Path, poscar_path: Path) -> None:
+    if source_path.suffix.lower() in {".vasp", ".poscar"}:
+        shutil.copy2(source_path, poscar_path)
+        return
+    atoms = load_structure(source_path)
+    write_structure(atoms, poscar_path, fmt="vasp")
+
+
+def _copy_labeling_source_backup(
+    options: dict[str, Any],
+    source_path: Path,
+    calc_dir: Path,
+) -> Path | None:
+    if not bool(options.get("backup_source", False)):
+        return None
+    suffix = str(options.get("backup_suffix", f"{source_path.suffix}-bak"))
+    backup_name = f"{source_path.stem}{suffix}"
+    backup_path = calc_dir / backup_name
+    shutil.copy2(source_path, backup_path)
+    return backup_path
+
+
+def _stage_submit_scripts(config: PESMakerConfig, stage: str) -> list[Path]:
+    manifest_name = f"{stage}_manifest.jsonl"
+    output_dir = _stage_output_dir(config, stage)
+    manifest_path = output_dir / manifest_name
+    if manifest_path.exists():
+        scripts = []
+        for record in _read_manifest(manifest_path):
+            workdir = record.get("workdir")
+            if workdir:
+                script = Path(str(workdir)) / "submit.sh"
+                if script.exists():
+                    scripts.append(script)
+        if scripts:
+            return scripts
+    return sorted(output_dir.rglob("submit.sh"))
+
+
+def _stage_output_dir(config: PESMakerConfig, stage: str) -> Path:
+    if stage == "sampling":
+        return _section_output_dir(config, config.sampling.options, "sampling")
+    if stage == "labeling":
+        return _section_output_dir(config, config.labeling.options, "labeling")
+    if stage == "training":
+        return _section_output_dir(config, config.training.options, "training")
+    raise ValueError("stage must be one of: sampling, labeling, training")
+
+
+def _read_manifest(path: Path) -> list[dict[str, Any]]:
     records = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             record = json.loads(line)
-            records.append({"path": str(record["path"]), **record})
+            if "path" in record:
+                record = {"path": str(record["path"]), **record}
+            records.append(record)
     return records
 
 

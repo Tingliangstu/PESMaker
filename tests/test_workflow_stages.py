@@ -20,6 +20,8 @@ from __future__ import annotations
 import json
 
 from pesmaker.cli import main
+from pesmaker.config.io import load_config
+from pesmaker.workflow.stages import submit_jobs
 
 
 def test_sampling_labeling_and_training_setup_write_stage_files(tmp_path):
@@ -80,6 +82,84 @@ training:
         encoding="utf-8"
     ) == "NSW = 0\n"
     assert (tmp_path / "training" / "nep.in").exists()
+
+
+def test_labeling_setup_can_preserve_generated_vasp_source_tree(tmp_path):
+    """VASP labeling setup can keep generated path identity for batch jobs."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_text = "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n"
+    source_path.write_text(source_text, encoding="utf-8")
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: source_tree_test
+structures:
+  - POSCAR
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  workdir_naming: source_tree
+  backup_source: true
+jobs:
+  sbatch_templates:
+    labeling: {(tmp_path / 'vasp.sh').as_posix()}
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "vasp.sh").write_text(
+        "#!/bin/bash\ncd \"{workdir}\"\n{command}\n",
+        encoding="utf-8",
+    )
+
+    assert main(["label-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    assert (workdir / "POSCAR").read_text(encoding="utf-8") == source_text
+    assert (workdir / "structure_000000.vasp-bak").read_text(
+        encoding="utf-8"
+    ) == source_text
+    manifest_record = json.loads(
+        (tmp_path / "labeling" / "labeling_manifest.jsonl").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest_record["workdir"] == str(workdir)
+
+
+def test_submit_jobs_dry_run_uses_labeling_manifest(tmp_path):
+    """Batch submission should follow prepared labeling workdirs."""
+    workdir = tmp_path / "labeling" / "calc_000000"
+    workdir.mkdir(parents=True)
+    (workdir / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    (tmp_path / "labeling" / "labeling_manifest.jsonl").write_text(
+        json.dumps({"index": 0, "source": "a.vasp", "workdir": str(workdir)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_test
+structures:
+  - POSCAR
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  submit_command: sbatch
+""",
+        encoding="utf-8",
+    )
+
+    result = submit_jobs(load_config(config_path), dry_run=True)
+
+    assert result.message == "Would submit 1 labeling job(s)"
+    log = tmp_path / "labeling" / "labeling_submitted_jobs.txt"
+    assert "DRY-RUN" in log.read_text(encoding="utf-8")
 
 
 def test_sampling_setup_writes_temperature_jobs(tmp_path):

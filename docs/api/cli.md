@@ -66,6 +66,16 @@ Prepare VASP single-point calculation folders:
 pesmaker label-setup examples/te_defect_md.yaml
 ```
 
+## `pesmaker submit`
+
+Submit prepared `submit.sh` files for a workflow stage:
+
+```bash
+pesmaker submit examples/te_defect_md.yaml --stage labeling
+```
+
+Use `--dry-run` to record the commands without invoking the scheduler.
+
 ## `pesmaker collect`
 
 Collect completed single-point outputs into an extxyz training set:

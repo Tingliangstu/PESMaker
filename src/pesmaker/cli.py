@@ -36,6 +36,7 @@ from pesmaker.workflow.stages import (
     setup_labeling,
     setup_sampling,
     setup_training,
+    submit_jobs,
 )
 
 
@@ -99,6 +100,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     train_setup_parser.add_argument("config", type=Path)
 
+    submit_parser = subparsers.add_parser(
+        "submit",
+        help="Submit prepared stage jobs with the configured scheduler.",
+    )
+    submit_parser.add_argument("config", type=Path)
+    submit_parser.add_argument(
+        "--stage",
+        choices=("sampling", "labeling", "training"),
+        default="labeling",
+    )
+    submit_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Write the submission commands without calling the scheduler.",
+    )
+
     init_parser = subparsers.add_parser("init", help="Write a starter config file.")
     init_parser.add_argument(
         "path", type=Path, nargs="?", default=Path("pesmaker.yaml")
@@ -143,6 +160,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "train-setup":
         _print_stage_result(setup_training(config))
+        return 0
+
+    if args.command == "submit":
+        _print_stage_result(submit_jobs(config, stage=args.stage, dry_run=args.dry_run))
         return 0
 
     parser.error(f"unknown command: {args.command}")
@@ -220,7 +241,11 @@ sampling:
 labeling:
   engine: vasp
   output_dir: labeling
+  input_manifest: generated/manifest.jsonl
   incar: templates/vasp/INCAR
+  workdir_naming: source_tree
+  backup_source: true
+  command: /home/a4s5d/software/VASP/CPU_vasp.6.6.0/bin/vasp_std
 
 dataset:
   format: extxyz
@@ -232,9 +257,10 @@ training:
 
 jobs:
   machine: local
+  submit_command: sbatch
   sbatch_templates:
     sampling: templates/sbatch/gpumd.sh
-    labeling: templates/sbatch/vasp.sh
+    labeling: templates/sbatch/vasp_cpu_36.sh
     training: templates/sbatch/nep.sh
 """
     path.write_text(template, encoding="utf-8")
