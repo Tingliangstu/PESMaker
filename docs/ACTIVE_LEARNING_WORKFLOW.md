@@ -12,7 +12,7 @@ The recommended command order is:
 pesmaker generate run.yaml
 pesmaker sample-setup run.yaml
 pesmaker select run.yaml
-pesmaker label-setup run.yaml
+pesmaker scf-setup run.yaml
 pesmaker collect run.yaml
 pesmaker train-setup run.yaml
 ```
@@ -427,12 +427,12 @@ selected/
 
 `selected.xyz` is a multi-frame file for inspection. The single-frame
 `selected_XXXXXX.xyz` files are referenced by `manifest.jsonl` and are used by
-the labeling setup stage.
+the SCF setup stage.
 
-## Stage 4: Prepare VASP Single-Point Calculations
+## Stage 4: Prepare VASP SCF Calculations
 
-The `label-setup` stage turns selected structures into independent VASP
-single-point folders.
+The `scf-setup` stage turns selected structures into independent VASP SCF
+calculation folders.
 
 ```yaml
 labeling:
@@ -446,7 +446,7 @@ labeling:
 Run:
 
 ```bash
-pesmaker label-setup run.yaml
+pesmaker scf-setup run.yaml
 ```
 
 Expected output:

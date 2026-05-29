@@ -5,7 +5,7 @@
 - Parse a simple YAML/TOML input file.
 - Read user structures from POSCAR, CIF, and extxyz.
 - Generate supercells and small perturbations.
-- Create VASP single-point calculation folders from a template.
+- Create VASP SCF calculation folders from a template.
 - Produce a local task manifest.
 
 ## MVP 2: job submission and result collection
@@ -58,4 +58,3 @@ chemical formula
   -> DFT labels
   -> broad PES model
 ```
-
