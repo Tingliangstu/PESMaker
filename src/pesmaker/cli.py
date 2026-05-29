@@ -51,10 +51,6 @@ def main(argv: list[str] | None = None) -> int:
         Process-style exit code. `0` means the selected command completed
         successfully, and nonzero values indicate user-facing errors.
     """
-    raw_argv = list(sys.argv[1:] if argv is None else argv)
-    if raw_argv and raw_argv[0] in {"md_sampling", "sampling", "md-sampling"}:
-        raw_argv[0] = "sample-setup"
-
     parser = argparse.ArgumentParser(
         prog="pesmaker",
         description="Build application-oriented MLIP datasets and potentials.",
@@ -124,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
         "path", type=Path, nargs="?", default=Path("pesmaker.yaml")
     )
 
-    args = parser.parse_args(raw_argv)
+    args = parser.parse_args(argv)
     _print_banner()
 
     if args.command == "init":
@@ -145,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_generate_summary(result)
         return 0
 
-    if args.command in {"md_sampling", "sample-setup", "sampling", "md-sampling"}:
+    if args.command == "sample-setup":
         _print_stage_result(setup_sampling(config))
         return 0
 

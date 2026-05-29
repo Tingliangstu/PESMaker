@@ -29,8 +29,6 @@ def test_cli_help_hides_sampling_aliases(capsys):
     output = capsys.readouterr().out
 
     assert "sample-setup" in output
-    assert "md_sampling" not in output
-    assert "md-sampling" not in output
 
 
 def test_cli_generate_writes_structures(tmp_path, capsys):

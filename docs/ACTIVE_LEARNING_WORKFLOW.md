@@ -10,7 +10,7 @@ The recommended command order is:
 
 ```bash
 pesmaker generate run.yaml
-pesmaker md_sampling run.yaml
+pesmaker sample-setup run.yaml
 pesmaker select run.yaml
 pesmaker label-setup run.yaml
 pesmaker collect run.yaml
@@ -302,7 +302,7 @@ source structure, and variant folder.
 
 ## Stage 2: Prepare Large Model MD Sampling
 
-The `md_sampling` stage creates one MD working directory per generated
+The `sample-setup` stage creates one MD working directory per generated
 structure. For GPUMD:
 
 ```yaml
@@ -354,19 +354,15 @@ dump_position  3000
 run            3000000
 ```
 
-The placeholders are filled by `pesmaker md_sampling`. If you provide a plain
+The placeholders are filled by `pesmaker sample-setup`. If you provide a plain
 GPUMD `run.in` without placeholders, PESMaker still rewrites `potential`,
 `velocity`, and the first two ensemble temperatures from the sampling config.
 
 Run:
 
 ```bash
-pesmaker md_sampling run.yaml
+pesmaker sample-setup run.yaml
 ```
-
-The legacy command `pesmaker sample-setup run.yaml` still works. `pesmaker
-sampling run.yaml` and `pesmaker md-sampling run.yaml` are also accepted as
-aliases.
 
 Expected output:
 

@@ -48,9 +48,6 @@ files from generated structures:
 pesmaker sample-setup examples/te_defect_md.yaml
 ```
 
-Backward-compatible aliases `md_sampling`, `sampling`, and `md-sampling` are
-accepted but hidden from the top-level help output.
-
 ## `pesmaker select`
 
 Select representative MD trajectory frames with farthest point sampling:

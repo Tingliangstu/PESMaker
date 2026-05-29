@@ -77,7 +77,7 @@ training:
         encoding="utf-8",
     )
 
-    assert main(["md_sampling", str(config_path)]) == 0
+    assert main(["sample-setup", str(config_path)]) == 0
     assert main(["label-setup", str(config_path)]) == 0
     assert main(["train-setup", str(config_path)]) == 0
 
@@ -378,7 +378,7 @@ sampling:
         encoding="utf-8",
     )
 
-    assert main(["sampling", str(config_path)]) == 0
+    assert main(["sample-setup", str(config_path)]) == 0
 
     for temperature in (300, 600, 900):
         workdir = tmp_path / "sampling" / f"md_000000_temp_{temperature}K"
@@ -428,7 +428,7 @@ sampling:
         encoding="utf-8",
     )
 
-    assert main(["md-sampling", str(config_path)]) == 0
+    assert main(["sample-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "sampling" / "md_000000_ramp_300K_to_1500K"
     run_in = (workdir / "run.in").read_text(encoding="utf-8")
