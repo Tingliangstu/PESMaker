@@ -261,7 +261,10 @@ def format_generate_summary(result: GenerateResult) -> str:
     task_supercells: dict[str, tuple[int, int, int]] = {}
     source_counts: dict[tuple[str, Path], int] = defaultdict(int)
     source_type_counts: dict[tuple[str, Path, str], int] = defaultdict(int)
-    variant_counts: dict[tuple[str, Path, str, str, Path], int] = defaultdict(int)
+    variant_counts: dict[
+        tuple[str, Path, str, str, Path, str],
+        int,
+    ] = defaultdict(int)
     for structure in result.structures:
         task_counts[structure.task] += 1
         task_supercells[structure.task] = structure.supercell
@@ -276,52 +279,103 @@ def format_generate_summary(result: GenerateResult) -> str:
                 structure.generation_type,
                 structure.variant,
                 structure.path.parent,
+                structure.path.suffix,
             )
         ] += 1
 
     lines = [
-        "Perturbation generation complete.",
+        "Structure generation complete.",
+        f"Input structures     : {_input_count(result)}",
         f"Generated structures : {len(result.structures)}",
         f"Output directory     : {result.output_dir}",
         f"Manifest             : {result.output_dir / 'manifest.jsonl'}",
         f"Summary              : {result.summary_path}",
-        "Generation tasks:",
+        "Generation plan:",
     ]
+    show_task_names = len(task_counts) > 1 or any(task != "default" for task in task_counts)
     for task, task_count in task_counts.items():
         supercell = task_supercells[task]
-        lines.append(f"  - {task}: {task_count} structure(s), supercell={supercell}")
         task_sources = [
             (source, count)
             for (source_task, source), count in source_counts.items()
             if source_task == task
         ]
+        task_label = f"{task}: " if show_task_names else ""
+        lines.append(
+            f"  - {task_label}{len(task_sources)} input(s) -> "
+            f"{task_count} structure(s), supercell={supercell}"
+        )
+        lines.append(
+            f"    per input: "
+            f"{_task_per_input_summary(source_type_counts, task, task_sources)}"
+        )
+        lines.append("    sources:")
         for source, source_count in task_sources:
             type_summary = _generation_type_summary(
                 source_type_counts,
                 task=task,
                 source=source,
             )
-            lines.append(f"      {source}: {source_count} {type_summary} structure(s)")
+            folders = [
+                folder
+                for (
+                    variant_task,
+                    variant_source,
+                    _generation_type,
+                    _variant,
+                    folder,
+                    _suffix,
+                ) in variant_counts
+                if variant_task == task and variant_source == source
+            ]
+            source_root = _common_folder(folders)
+            lines.append(
+                f"      {source}: {type_summary} structure(s) -> {source_root}"
+            )
             task_variants = [
-                (generation_type, variant, folder, count)
+                (generation_type, variant, folder, suffix, count)
                 for (
                     variant_task,
                     variant_source,
                     generation_type,
                     variant,
                     folder,
+                    suffix,
                 ), count in (
                     variant_counts.items()
                 )
                 if variant_task == task and variant_source == source
             ]
-            for generation_type, variant, folder, variant_count in task_variants[:8]:
+            for generation_type, variant, folder, suffix, variant_count in (
+                task_variants[:8]
+            ):
                 label = _summary_variant_label(generation_type, variant)
-                lines.append(f"        - {label} -> {folder} ({variant_count})")
+                pattern = _summary_file_pattern(folder, generation_type, suffix)
+                lines.append(f"        - {label} files -> {pattern} ({variant_count})")
             omitted = len(task_variants) - 8
             if omitted > 0:
                 lines.append(f"        - ... {omitted} more variant folder(s)")
     return "\n".join(lines) + "\n"
+
+
+def _input_count(result: GenerateResult) -> int:
+    return len({structure.source for structure in result.structures})
+
+
+def _task_per_input_summary(
+    counts: dict[tuple[str, Path, str], int],
+    task: str,
+    task_sources: list[tuple[Path, int]],
+) -> str:
+    summaries = [
+        _generation_type_summary(counts, task=task, source=source)
+        for source, _source_count in task_sources
+    ]
+    if not summaries:
+        return "0 structure(s)"
+    if len(set(summaries)) == 1:
+        return f"{summaries[0]} structure(s)"
+    return "varies by input"
 
 
 def _generation_type_summary(
@@ -336,13 +390,36 @@ def _generation_type_summary(
         if count_task == task and count_source == source
     ]
     if len(type_counts) == 1:
-        return type_counts[0][0]
+        generation_type, count = type_counts[0]
+        return f"{count} {generation_type}"
     return ", ".join(
-        f"{generation_type}={count}" for generation_type, count in type_counts
+        f"{count} {generation_type}" for generation_type, count in type_counts
     )
+
+
+def _common_folder(folders: list[Path]) -> Path:
+    if not folders:
+        return Path(".")
+    common = folders[0]
+    for folder in folders[1:]:
+        while not _is_relative_to(folder, common):
+            common = common.parent
+    return common
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 def _summary_variant_label(generation_type: str, variant: str) -> str:
     if variant == "pristine":
         return generation_type
     return f"{generation_type}:{variant}"
+
+
+def _summary_file_pattern(folder: Path, generation_type: str, suffix: str) -> Path:
+    return folder / f"{generation_type}_*{suffix}"
