@@ -96,17 +96,22 @@ generation:
         ).splitlines()
     ]
     assert {record["generation_type"] for record in records} == {"perturb"}
-    assert "Structure generation complete." in output
-    assert "\n\nStructure generation complete." in output
-    assert "Input structures     : 1" in output
-    assert "Generated structures : 2" in output
-    assert f"Output directory     : {output_dir}" in output
-    assert f"Manifest             : {output_dir / 'manifest.jsonl'}" in output
+    assert "Perturbation generation complete." in output
+    assert "\n\nPerturbation generation complete." in output
+    assert "Input structures" not in output
+    assert "Generated structures" not in output
+    assert f"Output directory : {output_dir}" in output
+    assert f"Manifest         : {output_dir / 'manifest.jsonl'}" in output
+    assert f"Summary          : {output_dir / 'generation_summary.txt'}" in output
+    assert "Generation tasks:" in output
     assert "  - 1 input(s) -> 2 structure(s), supercell=(4, 4, 4)" in output
     assert "    per input: 2 perturb structure(s)" in output
-    assert f"{cif_path}: 2 perturb structure(s)" in output
-    assert f"-> {output_dir / 'te'}" in output
-    assert f"perturb files -> {output_dir / 'te' / 'perturb_*.vasp'} (2)" in output
+    assert "    details:" in output
+    assert f"      - input: {cif_path}" in output
+    assert "        generated: 2 perturb structure(s)" in output
+    assert "        outputs:" in output
+    assert f"          - perturb -> {output_dir / 'te'} (2)" in output
+    assert "perturb files ->" not in output
     assert "pristine ->" not in output
     assert output.endswith("\n\n")
 
@@ -217,11 +222,16 @@ generation:
     ).exists()
     assert len(list(output_dir.glob("te2d/*/*.vasp"))) == 4
     summary = (output_dir / "generation_summary.txt").read_text(encoding="utf-8")
-    assert "Input structures     : 1" in summary
+    assert "Structure generation complete." in summary
+    assert "Generation tasks:" in summary
+    assert "Input structures" not in summary
     assert "per input: 1 surface, 3 defect structure(s)" in summary
-    assert f"{structure_path}: 1 surface, 3 defect structure(s)" in summary
-    assert "surface files ->" in summary
-    assert "defect:single_vacancy_Te_000000 files ->" in summary
+    assert "    details:" in summary
+    assert f"      - input: {structure_path}" in summary
+    assert "        generated: 1 surface, 3 defect structure(s)" in summary
+    assert "surface ->" in summary
+    assert "defect:single_vacancy_Te_000000 ->" in summary
+    assert "files ->" not in summary
     assert "pristine ->" not in summary
 
 
@@ -296,7 +306,7 @@ generation:
         (2, 2, 1),
     }
     summary = (output_dir / "generation_summary.txt").read_text(encoding="utf-8")
-    assert "Generation plan:" in summary
+    assert "Generation tasks:" in summary
     assert "surface_111: 1 input(s) ->" in summary
     assert "bulk_221: 1 input(s) ->" in summary
 

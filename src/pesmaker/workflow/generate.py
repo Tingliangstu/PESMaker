@@ -284,13 +284,11 @@ def format_generate_summary(result: GenerateResult) -> str:
         ] += 1
 
     lines = [
-        "Structure generation complete.",
-        f"Input structures     : {_input_count(result)}",
-        f"Generated structures : {len(result.structures)}",
-        f"Output directory     : {result.output_dir}",
-        f"Manifest             : {result.output_dir / 'manifest.jsonl'}",
-        f"Summary              : {result.summary_path}",
-        "Generation plan:",
+        f"{_generation_complete_title(result)}.",
+        f"Output directory : {result.output_dir}",
+        f"Manifest         : {result.output_dir / 'manifest.jsonl'}",
+        f"Summary          : {result.summary_path}",
+        "Generation tasks:",
     ]
     show_task_names = len(task_counts) > 1 or any(task != "default" for task in task_counts)
     for task, task_count in task_counts.items():
@@ -309,57 +307,48 @@ def format_generate_summary(result: GenerateResult) -> str:
             f"    per input: "
             f"{_task_per_input_summary(source_type_counts, task, task_sources)}"
         )
-        lines.append("    sources:")
-        for source, source_count in task_sources:
+        lines.append("    details:")
+        for source, _source_count in task_sources:
             type_summary = _generation_type_summary(
                 source_type_counts,
                 task=task,
                 source=source,
             )
-            folders = [
-                folder
-                for (
-                    variant_task,
-                    variant_source,
-                    _generation_type,
-                    _variant,
-                    folder,
-                    _suffix,
-                ) in variant_counts
-                if variant_task == task and variant_source == source
-            ]
-            source_root = _common_folder(folders)
-            lines.append(
-                f"      {source}: {type_summary} structure(s) -> {source_root}"
-            )
+            lines.append(f"      - input: {source}")
+            lines.append(f"        generated: {type_summary} structure(s)")
+            lines.append("        outputs:")
             task_variants = [
-                (generation_type, variant, folder, suffix, count)
+                (generation_type, variant, folder, count)
                 for (
                     variant_task,
                     variant_source,
                     generation_type,
                     variant,
                     folder,
-                    suffix,
+                    _suffix,
                 ), count in (
                     variant_counts.items()
                 )
                 if variant_task == task and variant_source == source
             ]
-            for generation_type, variant, folder, suffix, variant_count in (
-                task_variants[:8]
-            ):
+            for generation_type, variant, folder, variant_count in task_variants[:8]:
                 label = _summary_variant_label(generation_type, variant)
-                pattern = _summary_file_pattern(folder, generation_type, suffix)
-                lines.append(f"        - {label} files -> {pattern} ({variant_count})")
+                lines.append(f"          - {label} -> {folder} ({variant_count})")
             omitted = len(task_variants) - 8
             if omitted > 0:
-                lines.append(f"        - ... {omitted} more variant folder(s)")
+                lines.append(f"          - ... {omitted} more variant folder(s)")
     return "\n".join(lines) + "\n"
 
 
-def _input_count(result: GenerateResult) -> int:
-    return len({structure.source for structure in result.structures})
+def _generation_complete_title(result: GenerateResult) -> str:
+    generation_types = {structure.generation_type for structure in result.structures}
+    if generation_types == {"perturb"}:
+        return "Perturbation generation complete"
+    if generation_types == {"surface"}:
+        return "Surface generation complete"
+    if generation_types == {"defect"}:
+        return "Defect generation complete"
+    return "Structure generation complete"
 
 
 def _task_per_input_summary(
@@ -397,29 +386,7 @@ def _generation_type_summary(
     )
 
 
-def _common_folder(folders: list[Path]) -> Path:
-    if not folders:
-        return Path(".")
-    common = folders[0]
-    for folder in folders[1:]:
-        while not _is_relative_to(folder, common):
-            common = common.parent
-    return common
-
-
-def _is_relative_to(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-    except ValueError:
-        return False
-    return True
-
-
 def _summary_variant_label(generation_type: str, variant: str) -> str:
     if variant == "pristine":
         return generation_type
     return f"{generation_type}:{variant}"
-
-
-def _summary_file_pattern(folder: Path, generation_type: str, suffix: str) -> Path:
-    return folder / f"{generation_type}_*{suffix}"
