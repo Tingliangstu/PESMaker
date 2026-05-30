@@ -44,23 +44,36 @@ run            3000000
 """
 
 DEFAULT_INCAR = """SYSTEM = PESMaker single point
-GGA = PE
-LREAL = Auto
-ENCUT = 650
-KSPACING = 0.2
-KGAMMA = .TRUE.
-NSW = 1
-IBRION = -1
-ALGO = Normal
-EDIFF = 1E-06
-SIGMA = 0.02
-ISMEAR = 0
-PREC = Accurate
-NELM = 150
+GGA = PE         # Use the PBE functional for exchange-correlation
+LREAL = Auto     # Projection operators: automatic
+ENCUT = 650      # Cut-off energy for plane-wave basis set, in eV
+KSPACING = 0.2   # Automatically calculate k-points
+KGAMMA = .TRUE.  # Include the Gamma point
+NSW = 0          # Static SCF; no ionic steps
+IBRION = -1      # Ions are not moved
+ALGO = Normal    # Standard electronic minimization algorithm
+EDIFF = 1E-06    # SCF energy convergence in eV
+SIGMA = 0.02     # Smearing width in eV
+ISMEAR = 0       # Gaussian smearing
+PREC = Accurate  # High precision level
+NELM = 150       # Maximum electronic SCF steps
 """
 
 STRUCTURE_INPUT_SUFFIXES = {".cif", ".extxyz", ".poscar", ".vasp", ".xyz"}
 STRUCTURE_INPUT_NAMES = {"CONTCAR", "POSCAR"}
+
+
+@dataclass(frozen=True)
+class JobResources:
+    """Scheduler resource settings shared by generated submit scripts."""
+
+    nodes: int
+    cores_cpu: int
+    gpus: int
+    kpar: int
+    ncore: int
+    launcher: str
+
 
 RECOMMENDED_PBE_POTCARS = {
     "H": "H",
@@ -383,7 +396,10 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
     output_dir = _section_output_dir(config, config.labeling.options, "labeling")
     output_dir.mkdir(parents=True, exist_ok=True)
     records = _load_input_records(config, config.labeling.options)
-    incar = _read_optional_file(config.labeling.options.get("incar"), default=DEFAULT_INCAR)
+    incar_template = _read_optional_file(
+        config.labeling.options.get("incar"),
+        default=DEFAULT_INCAR,
+    )
     files: list[Path] = []
     manifest_path = output_dir / "labeling_manifest.jsonl"
     source_root = _labeling_source_root(config, config.labeling.options)
@@ -402,12 +418,17 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
             calc_dir.mkdir(parents=True, exist_ok=True)
             poscar_path = calc_dir / "POSCAR"
             _write_labeling_poscar(source_path, poscar_path)
+            resources = _job_resources(
+                config,
+                atom_count=_labeling_atom_count(record, poscar_path),
+            )
             backup_path = _copy_labeling_source_backup(
                 config.labeling.options,
                 source_path,
                 calc_dir,
             )
             incar_path = calc_dir / "INCAR"
+            incar = _prepare_labeling_incar(incar_template, resources)
             incar_path.write_text(incar, encoding="utf-8")
             _copy_optional_templates(config.labeling.options, calc_dir)
             potcar_paths = _write_potcar_from_library(
@@ -420,6 +441,7 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
                 calc_dir,
                 stage="labeling",
                 command=str(config.labeling.options.get("command", "vasp_std")),
+                resources=resources,
             )
             files.extend(
                 path
@@ -437,7 +459,12 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
                 "engine": config.labeling.engine,
                 "source": str(source_path),
                 "workdir": str(calc_dir),
+                "cores_cpu": resources.cores_cpu,
+                "gpus": resources.gpus,
             }
+            if not resources.gpus:
+                record_data["kpar"] = resources.kpar
+                record_data["ncore"] = resources.ncore
             for key in (
                 "input_dir",
                 "input_mode",
@@ -652,10 +679,7 @@ def _discover_input_structure_files(input_dir: Path) -> list[Path]:
 def _is_input_structure_file(path: Path) -> bool:
     if path.name.upper() in STRUCTURE_INPUT_NAMES:
         return True
-    suffix = path.suffix.lower()
-    if suffix not in STRUCTURE_INPUT_SUFFIXES:
-        return False
-    return path.stem.startswith("structure_") or suffix != ".xyz"
+    return path.suffix.lower() in STRUCTURE_INPUT_SUFFIXES
 
 
 def _labeling_source_root(config: PESMakerConfig, options: dict[str, Any]) -> Path:
@@ -749,6 +773,16 @@ def _copy_labeling_source_backup(
     backup_path = calc_dir / backup_name
     shutil.copy2(source_path, backup_path)
     return backup_path
+
+
+def _labeling_atom_count(record: dict[str, Any], poscar_path: Path) -> int | None:
+    atom_count = record.get("atom_count")
+    if atom_count is not None:
+        return int(atom_count)
+    try:
+        return len(load_structure(poscar_path))
+    except Exception:
+        return None
 
 
 def _write_potcar_from_library(
@@ -1046,17 +1080,32 @@ def _write_submit_script(
     *,
     stage: str,
     command: str,
+    resources: JobResources | None = None,
 ) -> Path:
     template_path = _job_template_path(config, stage)
     job_name = f"{config.project}-{stage}"
+    resources = resources or _job_resources(config)
+    launch_command = _launch_command(command, resources.launcher)
     if template_path:
         text = template_path.read_text(encoding="utf-8").format(
             command=command,
+            launch_command=launch_command,
             job_name=job_name,
             workdir=workdir,
+            nodes=resources.nodes,
+            cores_cpu=resources.cores_cpu,
+            ntasks_per_node=resources.cores_cpu,
+            gpus=resources.gpus,
+            kpar=resources.kpar,
+            ncore=resources.ncore,
+            launcher=resources.launcher,
         )
     else:
-        text = _default_submit_script(command=command, job_name=job_name)
+        text = _default_submit_script(
+            launch_command=launch_command,
+            job_name=job_name,
+            resources=resources,
+        )
     path = workdir / "submit.sh"
     path.write_text(text, encoding="utf-8")
     return path
@@ -1088,18 +1137,179 @@ def _stage_template_value(templates: dict[str, Any], stage: str) -> Any:
     return None
 
 
-def _default_submit_script(*, command: str, job_name: str) -> str:
-    return f"""#!/bin/bash
-#SBATCH --job-name={job_name}
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --gres=gpu:1
-#SBATCH --time=24:00:00
+def _job_resources(
+    config: PESMakerConfig,
+    *,
+    atom_count: int | None = None,
+) -> JobResources:
+    options = config.jobs.options
+    nodes = _positive_int_option(options, "nodes", default=1)
+    cores_cpu = _positive_int_option(options, "cores_cpu", default=1)
+    gpus = _nonnegative_int_option(
+        options,
+        "gpus",
+        default=_nonnegative_int_option(options, "gpus_gpu", default=0),
+    )
+    kpar = _positive_int_option(options, "kpar", default=_default_vasp_kpar(cores_cpu))
+    if cores_cpu % kpar != 0:
+        raise ValueError("jobs.kpar must divide jobs.cores_cpu")
+    if "ncore" in options:
+        ncore = _positive_int_option(options, "ncore", default=1)
+        if (cores_cpu // kpar) % ncore != 0:
+            raise ValueError("jobs.ncore must divide jobs.cores_cpu / jobs.kpar")
+    else:
+        _, ncore = _vasp_parallel_factors(
+            cores_cpu,
+            atom_count=atom_count,
+            kpar=kpar,
+        )
+    launcher = str(options.get("launcher", "srun")).strip()
+    return JobResources(
+        nodes=nodes,
+        cores_cpu=cores_cpu,
+        gpus=gpus,
+        kpar=kpar,
+        ncore=ncore,
+        launcher=launcher,
+    )
 
-set -euo pipefail
-cd "$(dirname "$0")"
-{command}
-"""
+
+def _positive_int_option(
+    options: dict[str, Any],
+    key: str,
+    *,
+    default: int,
+) -> int:
+    value = int(options.get(key, default))
+    if value < 1:
+        raise ValueError(f"jobs.{key} must be a positive integer")
+    return value
+
+
+def _nonnegative_int_option(
+    options: dict[str, Any],
+    key: str,
+    *,
+    default: int,
+) -> int:
+    value = int(options.get(key, default))
+    if value < 0:
+        raise ValueError(f"jobs.{key} must be a non-negative integer")
+    return value
+
+
+def _vasp_parallel_factors(
+    cores_cpu: int,
+    *,
+    atom_count: int | None = None,
+    kpar: int | None = None,
+) -> tuple[int, int]:
+    """Choose conservative VASP CPU parallel settings.
+
+    KPAR defaults to two groups when the requested rank count permits it.
+    NCORE is selected from ranks available within each KPAR group.
+    """
+    if cores_cpu < 1:
+        raise ValueError("cores_cpu must be a positive integer")
+    if kpar is None:
+        kpar = _default_vasp_kpar(cores_cpu)
+    if kpar < 1:
+        raise ValueError("kpar must be a positive integer")
+    if cores_cpu % kpar != 0:
+        raise ValueError("kpar must divide cores_cpu")
+
+    ranks_per_kpar = cores_cpu // kpar
+    return kpar, _vasp_ncore_factor(ranks_per_kpar, atom_count=atom_count)
+
+
+def _default_vasp_kpar(cores_cpu: int) -> int:
+    if cores_cpu >= 2 and cores_cpu % 2 == 0:
+        return 2
+    return 1
+
+
+def _vasp_ncore_factor(
+    ranks_per_kpar: int,
+    *,
+    atom_count: int | None,
+) -> int:
+    if ranks_per_kpar <= 8:
+        return 1
+
+    target = ranks_per_kpar**0.5
+    prefer_below = False
+    if atom_count is not None:
+        if atom_count > 400:
+            target = max(target, 16)
+            prefer_below = True
+        elif atom_count >= 100:
+            target = max(target, 4)
+
+    return _factor_near(ranks_per_kpar, target, prefer_below=prefer_below)
+
+
+def _factor_near(value: int, target: float, *, prefer_below: bool = False) -> int:
+    factors = [factor for factor in range(1, value + 1) if value % factor == 0]
+    if prefer_below:
+        below = [factor for factor in factors if factor <= target]
+        if below:
+            return max(below)
+    return min(factors, key=lambda factor: (abs(factor - target), factor))
+
+
+def _launch_command(command: str, launcher: str) -> str:
+    return f"{launcher} {command}".strip() if launcher else command
+
+
+def _default_submit_script(
+    *,
+    launch_command: str,
+    job_name: str,
+    resources: JobResources,
+) -> str:
+    lines = [
+        "#!/bin/bash",
+        f"#SBATCH --job-name={job_name}",
+        f"#SBATCH --nodes={resources.nodes}",
+        f"#SBATCH --ntasks-per-node={resources.cores_cpu}",
+    ]
+    if resources.gpus:
+        lines.append(f"#SBATCH --gres=gpu:{resources.gpus}")
+    lines.extend(["", launch_command, ""])
+    return "\n".join(lines)
+
+
+def _prepare_labeling_incar(text: str, resources: JobResources) -> str:
+    if resources.gpus:
+        return _ensure_trailing_newline(text)
+    text = _set_incar_value(
+        text,
+        "KPAR",
+        str(resources.kpar),
+        "K-point parallel groups",
+    )
+    text = _set_incar_value(
+        text,
+        "NCORE",
+        str(resources.ncore),
+        "MPI ranks per band group",
+    )
+    return _ensure_trailing_newline(text)
+
+
+def _set_incar_value(text: str, key: str, value: str, comment: str) -> str:
+    line = f"{key} = {value}       # {comment}"
+    lines = text.splitlines()
+    for index, existing in enumerate(lines):
+        if existing.strip().upper().startswith(f"{key.upper()}"):
+            lines[index] = line
+            return "\n".join(lines)
+    lines.append(line)
+    return "\n".join(lines)
+
+
+def _ensure_trailing_newline(text: str) -> str:
+    return text if text.endswith("\n") else f"{text}\n"
 
 
 def _copy_optional_templates(options: dict[str, Any], calc_dir: Path) -> None:

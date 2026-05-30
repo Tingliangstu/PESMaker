@@ -85,17 +85,25 @@ generation:
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (output_dir / "te" / "structure_000000.vasp").exists()
-    assert (output_dir / "te" / "structure_000001.vasp").exists()
+    assert (output_dir / "te" / "perturb_000000.vasp").exists()
+    assert (output_dir / "te" / "perturb_000001.vasp").exists()
     assert (output_dir / "manifest.jsonl").exists()
-    assert len(list(output_dir.glob("te/structure_*.vasp"))) == 2
+    assert len(list(output_dir.glob("te/perturb_*.vasp"))) == 2
+    records = [
+        json.loads(line)
+        for line in (output_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert {record["generation_type"] for record in records} == {"perturb"}
     assert "Perturbation generation complete." in output
     assert "\n\nPerturbation generation complete." in output
     assert "Generated structures : 2" in output
     assert f"Output directory     : {output_dir}" in output
     assert f"Manifest             : {output_dir / 'manifest.jsonl'}" in output
-    assert f"{cif_path}: 2 structure(s)" in output
-    assert f"pristine -> {output_dir / 'te'} (2)" in output
+    assert f"{cif_path}: 2 perturb structure(s)" in output
+    assert f"perturb -> {output_dir / 'te'} (2)" in output
+    assert "pristine ->" not in output
     assert output.endswith("\n\n")
 
 
@@ -144,8 +152,8 @@ generation:
     exit_code = main(["generate", str(config_path)])
 
     assert exit_code == 0
-    assert (output_dir / "te" / "structure_000000.vasp").exists()
-    assert (output_dir / "te_2" / "structure_000000.vasp").exists()
+    assert (output_dir / "te" / "perturb_000000.vasp").exists()
+    assert (output_dir / "te_2" / "perturb_000000.vasp").exists()
 
 
 def test_cli_generate_writes_surface_defect_folders(tmp_path):
@@ -199,11 +207,16 @@ generation:
     exit_code = main(["generate", str(config_path)])
 
     assert exit_code == 0
-    assert (output_dir / "te2d" / "pristine" / "structure_000000.vasp").exists()
+    assert (output_dir / "te2d" / "pristine" / "surface_000000.vasp").exists()
     assert (
-        output_dir / "te2d" / "single_vacancy_Te_000000" / "structure_000000.vasp"
+        output_dir / "te2d" / "single_vacancy_Te_000000" / "defect_000000.vasp"
     ).exists()
-    assert len(list(output_dir.glob("te2d/*/structure_000000.vasp"))) == 4
+    assert len(list(output_dir.glob("te2d/*/*.vasp"))) == 4
+    summary = (output_dir / "generation_summary.txt").read_text(encoding="utf-8")
+    assert f"{structure_path}: 4 surface=1, defect=3 structure(s)" in summary
+    assert "surface ->" in summary
+    assert "defect:single_vacancy_Te_000000 ->" in summary
+    assert "pristine ->" not in summary
 
 
 def test_cli_generate_writes_multiple_task_folders(tmp_path):
@@ -255,10 +268,10 @@ generation:
         / "surface_111"
         / "te"
         / "single_vacancy_Te_000000"
-        / "structure_000001.vasp"
+        / "defect_000001.vasp"
     ).exists()
     assert (
-        output_dir / "bulk_221" / "te" / "pristine" / "structure_000000.vasp"
+        output_dir / "bulk_221" / "te" / "pristine" / "perturb_000000.vasp"
     ).exists()
     records = [
         json.loads(line)
@@ -267,6 +280,11 @@ generation:
         ).splitlines()
     ]
     assert {record["task"] for record in records} == {"surface_111", "bulk_221"}
+    assert {record["generation_type"] for record in records} == {
+        "defect",
+        "surface",
+        "perturb",
+    }
     assert {tuple(record["supercell"]) for record in records} == {
         (1, 1, 1),
         (2, 2, 1),

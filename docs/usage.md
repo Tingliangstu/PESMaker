@@ -39,8 +39,8 @@ The output directory contains generated VASP structure files and a manifest:
 ```text
 runs/Te_mp_19_test/generated/
   input/
-    structure_000000.vasp
-    structure_000001.vasp
+    perturb_000000.vasp
+    perturb_000001.vasp
     ...
   manifest.jsonl
 ```

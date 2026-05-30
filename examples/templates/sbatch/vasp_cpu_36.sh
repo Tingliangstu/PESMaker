@@ -4,12 +4,11 @@
 #SBATCH --error=err.%j
 #SBATCH --partition=normal
 #SBATCH --account=sait
-#SBATCH --nodes=1
-#SBATCH --ntasks=36
+#SBATCH --nodes={nodes}
+#SBATCH --ntasks-per-node={cores_cpu}
 #SBATCH --cpus-per-task=1
 #SBATCH --exclusive
 
-set -euo pipefail
 cd "{workdir}"
 
 module purge
@@ -27,6 +26,6 @@ echo "Using total cores: $SLURM_NTASKS"
 echo "Working directory: $(pwd)"
 echo "--------------------------------"
 
-mpirun {command}
+mpirun -np {cores_cpu} {command}
 
 echo "Simulation finished at $(date)"

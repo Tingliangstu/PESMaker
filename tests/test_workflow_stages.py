@@ -25,6 +25,7 @@ from pesmaker.workflow.stages import (
     RECOMMENDED_GW_POTCARS,
     RECOMMENDED_PBE_POTCARS,
     _potcar_directory_name,
+    _vasp_parallel_factors,
     submit_jobs,
 )
 
@@ -84,9 +85,12 @@ training:
     assert (tmp_path / "sampling" / "md_000000_temp_300K" / "run.in").exists()
     assert (tmp_path / "sampling" / "md_000000_temp_300K" / "submit.sh").exists()
     assert (tmp_path / "labeling" / "calc_000000" / "POSCAR").exists()
-    assert (tmp_path / "labeling" / "calc_000000" / "INCAR").read_text(
+    incar_text = (tmp_path / "labeling" / "calc_000000" / "INCAR").read_text(
         encoding="utf-8"
-    ) == "NSW = 0\n"
+    )
+    assert "NSW = 0\n" in incar_text
+    assert "KPAR = 1" in incar_text
+    assert "NCORE = 1" in incar_text
     assert (tmp_path / "training" / "nep.in").exists()
 
 
@@ -171,6 +175,7 @@ labeling:
 jobs:
   submit_command: sbatch
   sub_file: templates/sbatch/vasp_cpu_36.sh
+  cores_cpu: 36
 """,
         encoding="utf-8",
     )
@@ -179,7 +184,10 @@ jobs:
 
     workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
     assert (workdir / "POSCAR").read_text(encoding="utf-8") == source_text
-    assert (workdir / "INCAR").read_text(encoding="utf-8") == "NSW = 0\n"
+    incar_text = (workdir / "INCAR").read_text(encoding="utf-8")
+    assert "NSW = 0\n" in incar_text
+    assert "KPAR = 2" in incar_text
+    assert "NCORE = 3" in incar_text
     assert "/opt/vasp/vasp_std" in (workdir / "submit.sh").read_text(
         encoding="utf-8"
     )
@@ -193,7 +201,7 @@ def test_labeling_setup_scans_explicit_input_dir_without_manifest(tmp_path):
     source_path = source_dir / "structure_000000.vasp"
     source_text = "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n"
     source_path.write_text(source_text, encoding="utf-8")
-    (source_dir / "movie.xyz").write_text("ignored trajectory\n", encoding="utf-8")
+    (source_dir / "notes.txt").write_text("ignored note\n", encoding="utf-8")
     config_path = tmp_path / "sub.yaml"
     config_path.write_text(
         f"""project: Te_bulk_mp
@@ -220,6 +228,163 @@ labeling:
     assert manifest_records[0]["input_relative_path"] == (
         "mp-105_Te/structure_000000.vasp"
     )
+    assert manifest_records[0]["cores_cpu"] == 1
+    assert manifest_records[0]["gpus"] == 0
+    assert manifest_records[0]["kpar"] == 1
+    assert manifest_records[0]["ncore"] == 1
+
+
+def test_labeling_setup_scans_generic_xyz_without_manifest(tmp_path):
+    """Non-PESMaker structure filenames should be valid SCF inputs."""
+    from ase import Atoms
+    from ase.io import write
+
+    input_dir = tmp_path / "generated"
+    source_dir = input_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "manual_candidate.xyz"
+    write(
+        source_path,
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[1.0, 1.0, 1.0], pbc=True),
+        format="extxyz",
+    )
+    (source_dir / "notes.txt").write_text("ignored note\n", encoding="utf-8")
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        f"""project: Te_bulk_mp
+labeling:
+  engine: vasp
+  input_dir: {input_dir.as_posix()}
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    manifest_records = [
+        json.loads(line)
+        for line in (tmp_path / "labeling" / "labeling_manifest.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(manifest_records) == 1
+    assert manifest_records[0]["source"] == str(source_path)
+    assert manifest_records[0]["input_relative_path"] == (
+        "mp-105_Te/manual_candidate.xyz"
+    )
+    assert (tmp_path / "labeling" / "mp-105_Te" / "manual_candidate").exists()
+
+
+def test_labeling_setup_writes_cpu_resources_to_incar_and_submit(tmp_path):
+    """Default VASP setup should match CPU Slurm resources."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: cpu_resources_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: /opt/vasp/vasp_std
+jobs:
+  cores_cpu: 36
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    incar_text = (workdir / "INCAR").read_text(encoding="utf-8")
+    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert "ENCUT = 650" in incar_text
+    assert "KSPACING = 0.2" in incar_text
+    assert "EDIFF = 1E-06" in incar_text
+    assert "SIGMA = 0.02" in incar_text
+    assert "ISMEAR = 0" in incar_text
+    assert "IVDW" not in incar_text
+    assert "KPAR = 2" in incar_text
+    assert "NCORE = 3" in incar_text
+    assert "#SBATCH --ntasks-per-node=36" in submit_text
+    assert "#SBATCH --gres" not in submit_text
+    assert "#SBATCH --time" not in submit_text
+    assert "set -euo pipefail" not in submit_text
+    assert 'cd "$(dirname "$0")"' not in submit_text
+    assert "srun /opt/vasp/vasp_std" in submit_text
+
+
+def test_vasp_parallel_factors_follow_requested_cpu_cores():
+    """KPAR/NCORE should be calculated from jobs.cores_cpu, not fixed."""
+    expected = {
+        24: (2, 3),
+        32: (2, 4),
+        36: (2, 3),
+        40: (2, 4),
+        48: (2, 4),
+        64: (2, 4),
+    }
+
+    for cores_cpu, factors in expected.items():
+        assert _vasp_parallel_factors(cores_cpu) == factors
+
+
+def test_vasp_parallel_factors_keep_manual_kpar_and_large_cell_ncore():
+    """KPAR is user-controlled, while large cells prefer larger NCORE."""
+    assert _vasp_parallel_factors(48, kpar=4) == (4, 3)
+    assert _vasp_parallel_factors(36, atom_count=500) == (2, 9)
+    assert _vasp_parallel_factors(48, atom_count=500) == (2, 12)
+
+
+def test_labeling_setup_writes_gpu_resources_to_submit_without_cpu_incar(tmp_path):
+    """GPU jobs should request GPUs without adding VASP CPU parallel tags."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: gpu_resources_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: /opt/vasp/vasp_std
+jobs:
+  cores_cpu: 8
+  gpus: 2
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    incar_text = (workdir / "INCAR").read_text(encoding="utf-8")
+    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert "KPAR =" not in incar_text
+    assert "NCORE =" not in incar_text
+    assert "#SBATCH --ntasks-per-node=8" in submit_text
+    assert "#SBATCH --gres=gpu:2" in submit_text
 
 
 def test_labeling_setup_can_generate_potcar_from_library(tmp_path):

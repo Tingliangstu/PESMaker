@@ -281,22 +281,22 @@ generated/
   surface_331/
     Te-mp-19/
       pristine/
-        structure_000000.vasp
+        surface_000000.vasp
       single_vacancy_Te_000000/
-        structure_000000.vasp
+        defect_000000.vasp
       double_vacancy_Te000000_Te000001/
-        structure_000000.vasp
+        defect_000000.vasp
       line_defect_axis1_000/
-        structure_000000.vasp
+        defect_000000.vasp
   bulk_333/
     Te-mp-19/
       pristine/
-        structure_000000.vasp
+        perturb_000000.vasp
 ```
 
 The JSONL manifest records task name, source structure, output path, supercell,
-variant name, variant description, perturbation index, and atom count. It is
-machine-readable and can be dense. For humans, inspect
+variant name, variant description, generation type, perturbation index, and atom
+count. It is machine-readable and can be dense. For humans, inspect
 `generated/generation_summary.txt`, which groups the same information by task,
 source structure, and variant folder.
 
@@ -471,20 +471,27 @@ template:
 
 ```text
 SYSTEM = PESMaker single point
-GGA = PE
-LREAL = Auto
-ENCUT = 650
-KSPACING = 0.2
-KGAMMA = .TRUE.
-NSW = 1
-IBRION = -1
-ALGO = Normal
-EDIFF = 1E-06
-SIGMA = 0.02
-ISMEAR = 0
-PREC = Accurate
-NELM = 150
+GGA = PE         # Use the PBE functional for exchange-correlation
+LREAL = Auto     # Projection operators: automatic
+ENCUT = 650      # Cut-off energy for plane-wave basis set, in eV
+KSPACING = 0.2   # Automatically calculate k-points
+KGAMMA = .TRUE.  # Include the Gamma point
+NSW = 0          # Static SCF; no ionic steps
+IBRION = -1      # Ions are not moved
+ALGO = Normal    # Standard electronic minimization algorithm
+EDIFF = 1E-06    # SCF energy convergence in eV
+SIGMA = 0.02     # Smearing width in eV
+ISMEAR = 0       # Gaussian smearing
+PREC = Accurate  # High precision level
+NELM = 150       # Maximum electronic SCF steps
 ```
+
+For CPU VASP jobs, PESMaker also writes `KPAR` and `NCORE`. `KPAR` defaults to
+`2` when `jobs.cores_cpu` is even, otherwise `1`; `NCORE` is then chosen as a
+factor inside each KPAR group. For example, `cores_cpu: 36` gives `KPAR = 2`
+and `NCORE = 3`. PESMaker does not write `NPAR`; VASP treats it as a legacy
+alternative to `NCORE`. Set `jobs.kpar` or `jobs.ncore` when a cluster, k-point
+mesh, or benchmark suggests a manual override.
 
 You can also provide `potcar`, `kpoints`, or a complete `template_dir` under
 `labeling`; these files are copied into every calculation folder.
@@ -503,26 +510,29 @@ labeling:
 
 jobs:
   submit_command: sbatch
+  cores_cpu: 36
   sub_file: templates/sbatch/vasp_cpu_36.sh
 ```
 
 This SCF-only config does not need a `structures` section. `labeling.input_dir`
 can point at a previous `generated` folder. PESMaker reads
 `input_dir/manifest.jsonl` when it exists; otherwise it recursively scans the
-folder for structure files such as `structure_*.vasp`, `structure_*.xyz`,
-`*.cif`, `*.extxyz`, and `POSCAR`.
+folder for structure files such as `POSCAR`, `CONTCAR`, `*.vasp`, `*.poscar`,
+`*.cif`, `*.extxyz`, and `*.xyz`. The calculation folder uses the source path
+without its file suffix.
 
 Each prepared calculation is recorded in `labeling_manifest.jsonl` with the
-source file, workdir, input directory, input mode, and relative path.
+source file, workdir, input directory, input mode, relative path, and resource
+settings such as `cores_cpu`, `gpus`, `kpar`, and `ncore`.
 
 This writes folders such as:
 
 ```text
 labeling/
   mp-105_Te/
-    structure_000000/
+    perturb_000000/
       POSCAR
-      structure_000000.vasp-bak
+      perturb_000000.vasp-bak
       INCAR
       POTCAR
       POTCAR.spec
@@ -614,6 +624,8 @@ Cluster submission settings belong in the `jobs` section:
 ```yaml
 jobs:
   machine: cluster-a
+  cores_cpu: 36
+  gpus: 0
   sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp.sh
@@ -625,30 +637,42 @@ For a single-stage config, `sub_file` can be a direct path instead:
 ```yaml
 jobs:
   submit_command: sbatch
+  cores_cpu: 36
   sub_file: templates/sbatch/vasp_cpu_36.sh
 ```
 
 Templates can use these placeholders:
 
 ```text
-{job_name}    # generated stage job name
-{workdir}     # stage working directory
-{command}     # engine command, such as gpumd, vasp_std, or nep
+{job_name}          # generated stage job name
+{workdir}           # stage working directory
+{command}           # engine command, such as gpumd, vasp_std, or nep
+{launch_command}    # command prefixed by jobs.launcher, default srun
+{nodes}             # jobs.nodes, default 1
+{cores_cpu}         # CPU cores per node
+{ntasks_per_node}   # alias for cores_cpu
+{gpus}              # GPUs per node
+{kpar}              # generated VASP KPAR
+{ncore}             # generated VASP NCORE
 ```
 
-A GPUMD template can look like:
+A default CPU-style Slurm script looks like:
 
 ```bash
 #!/bin/bash
 #SBATCH --job-name={job_name}
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --gres=gpu:1
-#SBATCH --time=24:00:00
+#SBATCH --nodes={nodes}
+#SBATCH --ntasks-per-node={cores_cpu}
 
-set -euo pipefail
-cd "{workdir}"
-{command}
+{launch_command}
+```
+
+For GPU jobs, set `gpus`:
+
+```yaml
+jobs:
+  cores_cpu: 8
+  gpus: 1
 ```
 
 Use one template set per machine. This keeps the scientific workflow stable

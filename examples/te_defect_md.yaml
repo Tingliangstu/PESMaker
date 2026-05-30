@@ -75,6 +75,8 @@ training:
 jobs:
   machine: local
   submit_command: sbatch
+  cores_cpu: 36
+  gpus: 0
   sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp_cpu_36.sh

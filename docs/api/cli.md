@@ -57,9 +57,8 @@ pesmaker scf-setup examples/te_defect_md.yaml
 ```
 
 For a follow-up run that only labels structures already written by
-`pesmaker generate`, the config can omit `structures`. Without
-`labeling.input_manifest` or `generation.output_dir`, `scf-setup` reads
-`generated/manifest.jsonl` from the current working directory when it exists.
+`pesmaker generate`, the config can omit `structures`. Use
+`labeling.input_dir` to point at the existing generated-structure directory.
 
 ```yaml
 project: Te_bulk_mp
@@ -74,12 +73,20 @@ labeling:
 
 jobs:
   submit_command: sbatch
+  cores_cpu: 36
   sub_file: templates/sbatch/vasp_cpu_36.sh
 ```
 
 `labeling.input_dir` may contain a `manifest.jsonl`. If it does not, PESMaker
-recursively scans that folder for structure files and marks each prepared job
-in `labeling/labeling_manifest.jsonl`.
+recursively scans that folder for `POSCAR`, `CONTCAR`, `*.vasp`, `*.poscar`,
+`*.cif`, `*.extxyz`, and `*.xyz` files. Each prepared job keeps the source
+path, uses the source path without its suffix as the calculation folder name,
+and records resource fields such as `cores_cpu`, `gpus`, `kpar`, and `ncore`.
+
+For CPU VASP jobs, `KPAR` defaults to `2` when `jobs.cores_cpu` is even, and
+PESMaker chooses `NCORE` inside each KPAR group; for example, `cores_cpu: 36`
+generates `KPAR = 2` and `NCORE = 3`. PESMaker writes `NCORE`, not legacy
+`NPAR`. For GPU jobs, set `gpus: <count>` under `jobs`.
 
 ## `pesmaker submit`
 

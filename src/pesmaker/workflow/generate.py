@@ -45,6 +45,7 @@ class GeneratedStructure:
         supercell: Three integer expansion factors used for this structure.
         variant: Structural variant name, such as `pristine` or a defect name.
         variant_description: Human-readable variant description.
+        generation_type: Concise origin tag used as the output filename prefix.
         index: Zero-based index within the source structure's output folder.
         atom_count: Number of atoms in the generated structure.
     """
@@ -57,6 +58,7 @@ class GeneratedStructure:
     supercell: tuple[int, int, int] = (1, 1, 1)
     variant: str = "pristine"
     variant_description: str = "pristine"
+    generation_type: str = "perturb"
 
 
 @dataclass(frozen=True)
@@ -150,10 +152,13 @@ def _generate_task_structures(
                 structure_dir / variant.name if use_variant_dirs else structure_dir
             )
             variant_dir.mkdir(parents=True, exist_ok=True)
+            generation_type = _generation_type(task, variant.name)
             for structure_index, perturbed in enumerate(
                 perturb_structures(variant.atoms, settings)
             ):
-                output_path = variant_dir / f"structure_{structure_index:06d}.{suffix}"
+                output_path = (
+                    variant_dir / f"{generation_type}_{structure_index:06d}.{suffix}"
+                )
                 write_structure(perturbed, output_path, fmt=ase_format)
                 item = GeneratedStructure(
                     source=structure.path,
@@ -162,6 +167,7 @@ def _generate_task_structures(
                     supercell=task.supercell,
                     variant=variant.name,
                     variant_description=variant.description,
+                    generation_type=generation_type,
                     index=structure_index,
                     atom_count=len(perturbed),
                 )
@@ -192,6 +198,20 @@ def _structure_output_dirs(
         folder = stem if seen[stem] == 1 else f"{stem}_{seen[stem]}"
         paths.append(output_dir / folder)
     return tuple(paths)
+
+
+def _generation_type(task: GenerationTask, variant: str) -> str:
+    """Return the concise origin tag used as the generated filename prefix."""
+    if variant != "pristine":
+        return "defect"
+    if _has_surface_generation(task.surface):
+        return "surface"
+    return "perturb"
+
+
+def _has_surface_generation(surface: dict) -> bool:
+    """Return whether current surface settings actually change the structure."""
+    return "vacuum" in surface
 
 
 def _resolve_output_format(name: str) -> tuple[str, str]:
@@ -230,6 +250,7 @@ def _manifest_record(item: GeneratedStructure) -> dict[str, str | int | list[int
         "supercell": list(item.supercell),
         "variant": item.variant,
         "variant_description": item.variant_description,
+        "generation_type": item.generation_type,
         "atom_count": item.atom_count,
     }
 
@@ -239,13 +260,23 @@ def format_generate_summary(result: GenerateResult) -> str:
     task_counts: dict[str, int] = defaultdict(int)
     task_supercells: dict[str, tuple[int, int, int]] = {}
     source_counts: dict[tuple[str, Path], int] = defaultdict(int)
-    variant_counts: dict[tuple[str, Path, str, Path], int] = defaultdict(int)
+    source_type_counts: dict[tuple[str, Path, str], int] = defaultdict(int)
+    variant_counts: dict[tuple[str, Path, str, str, Path], int] = defaultdict(int)
     for structure in result.structures:
         task_counts[structure.task] += 1
         task_supercells[structure.task] = structure.supercell
         source_counts[(structure.task, structure.source)] += 1
+        source_type_counts[
+            (structure.task, structure.source, structure.generation_type)
+        ] += 1
         variant_counts[
-            (structure.task, structure.source, structure.variant, structure.path.parent)
+            (
+                structure.task,
+                structure.source,
+                structure.generation_type,
+                structure.variant,
+                structure.path.parent,
+            )
         ] += 1
 
     lines = [
@@ -265,17 +296,53 @@ def format_generate_summary(result: GenerateResult) -> str:
             if source_task == task
         ]
         for source, source_count in task_sources:
-            lines.append(f"      {source}: {source_count} structure(s)")
+            type_summary = _generation_type_summary(
+                source_type_counts,
+                task=task,
+                source=source,
+            )
+            lines.append(f"      {source}: {source_count} {type_summary} structure(s)")
             task_variants = [
-                (variant, folder, count)
-                for (variant_task, variant_source, variant, folder), count in (
+                (generation_type, variant, folder, count)
+                for (
+                    variant_task,
+                    variant_source,
+                    generation_type,
+                    variant,
+                    folder,
+                ), count in (
                     variant_counts.items()
                 )
                 if variant_task == task and variant_source == source
             ]
-            for variant, folder, variant_count in task_variants[:8]:
-                lines.append(f"        - {variant} -> {folder} ({variant_count})")
+            for generation_type, variant, folder, variant_count in task_variants[:8]:
+                label = _summary_variant_label(generation_type, variant)
+                lines.append(f"        - {label} -> {folder} ({variant_count})")
             omitted = len(task_variants) - 8
             if omitted > 0:
                 lines.append(f"        - ... {omitted} more variant folder(s)")
     return "\n".join(lines) + "\n"
+
+
+def _generation_type_summary(
+    counts: dict[tuple[str, Path, str], int],
+    *,
+    task: str,
+    source: Path,
+) -> str:
+    type_counts = [
+        (generation_type, count)
+        for (count_task, count_source, generation_type), count in counts.items()
+        if count_task == task and count_source == source
+    ]
+    if len(type_counts) == 1:
+        return type_counts[0][0]
+    return ", ".join(
+        f"{generation_type}={count}" for generation_type, count in type_counts
+    )
+
+
+def _summary_variant_label(generation_type: str, variant: str) -> str:
+    if variant == "pristine":
+        return generation_type
+    return f"{generation_type}:{variant}"
