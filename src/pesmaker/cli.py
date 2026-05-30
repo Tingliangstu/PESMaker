@@ -146,40 +146,47 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init":
         return _write_starter_config(args.path)
 
-    config = load_config(args.config)
+    config = None
+    try:
+        config = load_config(args.config)
 
-    if args.command == "validate":
-        print(f"OK: {args.config} describes project '{config.project}'.")
-        return 0
+        if args.command == "validate":
+            print(f"OK: {args.config} describes project '{config.project}'.")
+            return 0
 
-    if args.command == "generate":
-        result = generate_structures(config)
-        _print_generate_summary(result)
-        return 0
+        if args.command == "generate":
+            result = generate_structures(config)
+            _print_generate_summary(result)
+            return 0
 
-    if args.command == "sample-setup":
-        _print_stage_result(setup_sampling(config))
-        return 0
+        if args.command == "sample-setup":
+            _print_stage_result(setup_sampling(config))
+            return 0
 
-    if args.command == "select":
-        _print_stage_result(select_sampling_frames(config))
-        return 0
+        if args.command == "select":
+            _print_stage_result(select_sampling_frames(config))
+            return 0
 
-    if args.command == "scf-setup":
-        _print_stage_result(setup_labeling(config))
-        return 0
+        if args.command == "scf-setup":
+            _print_stage_result(setup_labeling(config))
+            return 0
 
-    if args.command == "collect":
-        _print_stage_result(collect_labeled_dataset(config))
-        return 0
+        if args.command == "collect":
+            _print_stage_result(collect_labeled_dataset(config))
+            return 0
 
-    if args.command == "train-setup":
-        _print_stage_result(setup_training(config))
-        return 0
+        if args.command == "train-setup":
+            _print_stage_result(setup_training(config))
+            return 0
 
-    if args.command == "submit":
-        _print_stage_result(submit_jobs(config, stage=args.stage, dry_run=args.dry_run))
-        return 0
+        if args.command == "submit":
+            _print_stage_result(
+                submit_jobs(config, stage=args.stage, dry_run=args.dry_run)
+            )
+            return 0
+    except (OSError, ValueError) as exc:
+        print(_format_cli_error(args.command, args.config, config, exc), file=sys.stderr)
+        return 2
 
     parser.error(f"unknown command: {args.command}")
     return 2
@@ -188,6 +195,35 @@ def main(argv: list[str] | None = None) -> int:
 def _add_config_argument(parser: argparse.ArgumentParser) -> None:
     """Add the common config-file argument to a subcommand parser."""
     parser.add_argument("config", type=Path, help="YAML config file.")
+
+
+def _format_cli_error(
+    command: str,
+    config_path: Path,
+    config,
+    exc: OSError | ValueError,
+) -> str:
+    """Format user-facing command errors without exposing a traceback."""
+    message = str(exc)
+    if (
+        command == "generate"
+        and config is not None
+        and not config.structures
+        and config.labeling.options
+        and "requires 'structures'" in message
+    ):
+        return "\n".join(
+            [
+                "Error: this config is for SCF setup, not structure generation.",
+                "`pesmaker generate` creates new structures and requires a "
+                "`structures:` section.",
+                "For your labeling/input_dir workflow, run:",
+                f"  pesmaker scf-setup {config_path}",
+                "After the SCF folders are prepared, submit them with:",
+                f"  pesmaker submit {config_path} --stage scf",
+            ]
+        )
+    return f"Error: {message}"
 
 
 def _write_starter_config(path: Path) -> int:

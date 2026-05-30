@@ -116,6 +116,34 @@ generation:
     assert output.endswith("\n\n")
 
 
+def test_cli_generate_explains_scf_only_config(tmp_path, capsys):
+    """SCF-only configs should point users at the SCF setup command."""
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        """project: Te_bulk_mp
+labeling:
+  engine: vasp
+  output_dir: run_vasp_scf
+  input_dir: generated
+  incar: INCAR
+  command: vasp_std
+
+jobs:
+  submit_command: sbatch
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["generate", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "Traceback" not in captured.err
+    assert "this config is for SCF setup" in captured.err
+    assert f"pesmaker scf-setup {config_path}" in captured.err
+    assert f"pesmaker submit {config_path} --stage scf" in captured.err
+
+
 def test_cli_generate_uses_unique_folders_for_duplicate_stems(tmp_path):
     """Duplicate input stems should not overwrite each other's outputs.
 
