@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import json
 
-from pesmaker.cli import main
+from pesmaker.cli import _print_submit_result, main
 from pesmaker.config.io import load_config
 from pesmaker.workflow.stages import (
     RECOMMENDED_GW_POTCARS,
     RECOMMENDED_PBE_POTCARS,
+    StageResult,
     _potcar_directory_name,
     _vasp_parallel_factors,
     submit_jobs,
@@ -809,8 +810,31 @@ jobs:
     assert f"Output directory : {tmp_path / 'labeling'}" in output
     assert f"Log              : {log}" in output
     assert f"Review commands in {log}" in output
-    assert "Submit jobs: rerun without --dry-run" in output
+    assert f"Submit jobs: pesmaker submit {config_path}" in output
     assert "Files written" not in output
+
+
+def test_cli_submit_prints_collect_next_step(tmp_path, capsys):
+    """Real SCF submission output should point to queue checks and collection."""
+    log = tmp_path / "labeling" / "scf_submitted_jobs.txt"
+    log.parent.mkdir()
+    result = StageResult(
+        output_dir=tmp_path / "labeling",
+        files=(log,),
+        message="Submitted 2 scf job(s)",
+    )
+    config_path = tmp_path / "sub.yaml"
+
+    _print_submit_result(result, config_path=config_path, stage="scf", dry_run=False)
+    output = capsys.readouterr().out
+
+    assert "Job submission complete." in output
+    assert "Jobs submitted  : 2" in output
+    assert f"Log              : {log}" in output
+    assert "Check queue: squeue" in output
+    assert f"Collect finished results: pesmaker collect {config_path}" in output
+    assert f"Submit more prepared SCF jobs: pesmaker submit {config_path}" in output
+    assert "--stage scf" not in output
 
 
 def test_sampling_setup_writes_temperature_jobs(tmp_path):
