@@ -182,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "submit":
             _print_submit_result(
                 submit_jobs(config, stage=args.stage, dry_run=args.dry_run),
+                config_path=args.config,
+                stage=args.stage,
                 dry_run=args.dry_run,
             )
             return 0
@@ -368,7 +370,13 @@ def _manifest_line_count(path: Path) -> int:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line)
 
 
-def _print_submit_result(result: StageResult, *, dry_run: bool) -> None:
+def _print_submit_result(
+    result: StageResult,
+    *,
+    config_path: Path,
+    stage: str,
+    dry_run: bool,
+) -> None:
     """Print a concise summary for submitted or previewed jobs."""
     log_path = result.files[0] if result.files else result.output_dir
     job_count = _stage_job_count(result.message)
@@ -384,12 +392,26 @@ def _print_submit_result(result: StageResult, *, dry_run: bool) -> None:
     if dry_run:
         print("Next steps:")
         print(f"  - Review commands in {log_path}")
-        print("  - Submit jobs: rerun without --dry-run")
+        print(f"  - Submit jobs: {_submit_command(config_path, stage)}")
     else:
         print("Next steps:")
-        print(f"  - Review scheduler output in {log_path}")
-        print("  - Check queue status with squeue")
+        print("  - Check queue: squeue")
+        if stage == "scf":
+            print(f"  - Collect finished results: pesmaker collect {config_path}")
+            print(
+                f"  - Submit more prepared SCF jobs: "
+                f"{_submit_command(config_path, stage)}"
+            )
+        else:
+            print(f"  - Review scheduler output in {log_path}")
     print()
+
+
+def _submit_command(config_path: Path, stage: str) -> str:
+    command = f"pesmaker submit {config_path}"
+    if stage != "scf":
+        command = f"{command} --stage {stage}"
+    return command
 
 
 def _stage_job_count(message: str) -> int:
