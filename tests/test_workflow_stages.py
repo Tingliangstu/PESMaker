@@ -778,6 +778,41 @@ jobs:
     assert "DRY-RUN" in log.read_text(encoding="utf-8")
 
 
+def test_cli_submit_dry_run_prints_clear_summary(tmp_path, capsys):
+    """Dry-run submission output should point users at the command log."""
+    workdir = tmp_path / "labeling" / "calc_000000"
+    workdir.mkdir(parents=True)
+    (workdir / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    (tmp_path / "labeling" / "labeling_manifest.jsonl").write_text(
+        json.dumps({"index": 0, "source": "a.vasp", "workdir": str(workdir)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_test
+structures:
+  - POSCAR
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  submit_command: sbatch
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["submit", str(config_path), "--dry-run"]) == 0
+    output = capsys.readouterr().out
+    log = tmp_path / "labeling" / "scf_submitted_jobs.txt"
+
+    assert "Submission preview complete." in output
+    assert "Jobs found       : 1" in output
+    assert f"Output directory : {tmp_path / 'labeling'}" in output
+    assert f"Log              : {log}" in output
+    assert f"Review commands in {log}" in output
+    assert "Submit jobs: rerun without --dry-run" in output
+    assert "Files written" not in output
+
+
 def test_sampling_setup_writes_temperature_jobs(tmp_path):
     """GPUMD setup should expand a temperature list into independent jobs."""
     from ase import Atoms

@@ -180,8 +180,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "submit":
-            _print_stage_result(
-                submit_jobs(config, stage=args.stage, dry_run=args.dry_run)
+            _print_submit_result(
+                submit_jobs(config, stage=args.stage, dry_run=args.dry_run),
+                dry_run=args.dry_run,
             )
             return 0
     except (OSError, ValueError) as exc:
@@ -365,6 +366,38 @@ def _manifest_line_count(path: Path) -> int:
     if not path.exists():
         return 0
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line)
+
+
+def _print_submit_result(result: StageResult, *, dry_run: bool) -> None:
+    """Print a concise summary for submitted or previewed jobs."""
+    log_path = result.files[0] if result.files else result.output_dir
+    job_count = _stage_job_count(result.message)
+    if dry_run:
+        print("Submission preview complete.")
+        print(f"Jobs found       : {job_count}")
+    else:
+        print("Job submission complete.")
+        print(f"Jobs submitted  : {job_count}")
+    print(f"Output directory : {result.output_dir}")
+    print(f"Log              : {log_path}")
+    print()
+    if dry_run:
+        print("Next steps:")
+        print(f"  - Review commands in {log_path}")
+        print("  - Submit jobs: rerun without --dry-run")
+    else:
+        print("Next steps:")
+        print(f"  - Review scheduler output in {log_path}")
+        print("  - Check queue status with squeue")
+    print()
+
+
+def _stage_job_count(message: str) -> int:
+    parts = message.split()
+    for part in parts:
+        if part.isdigit():
+            return int(part)
+    return 0
 
 
 def _print_banner() -> None:
