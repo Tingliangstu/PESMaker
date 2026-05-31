@@ -20,6 +20,6 @@ echo "Using total tasks: ${SLURM_NTASKS:-unknown}"
 echo "Working directory: $(pwd)"
 echo "--------------------------------"
 
-{launch_command}
+{command}
 
 echo "Simulation finished at $(date)"

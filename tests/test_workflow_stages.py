@@ -328,43 +328,7 @@ jobs:
     assert f'cd "{workdir}"' in submit_text
     assert "export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}" in submit_text
     assert "ulimit -s unlimited" in submit_text
-    assert "srun /opt/vasp/vasp_std" in submit_text
-
-
-def test_labeling_setup_formats_launcher_placeholders(tmp_path):
-    """Launchers can include resource placeholders such as cores_cpu."""
-    generated_dir = tmp_path / "generated"
-    source_dir = generated_dir / "mp-105_Te"
-    source_dir.mkdir(parents=True)
-    source_path = source_dir / "structure_000000.vasp"
-    source_path.write_text(
-        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
-        encoding="utf-8",
-    )
-    (generated_dir / "manifest.jsonl").write_text(
-        json.dumps({"path": str(source_path)}) + "\n",
-        encoding="utf-8",
-    )
-    config_path = tmp_path / "pesmaker.yaml"
-    config_path.write_text(
-        f"""project: mpirun_launcher_test
-generation:
-  output_dir: {generated_dir.as_posix()}
-labeling:
-  output_dir: {(tmp_path / 'labeling').as_posix()}
-  command: /opt/vasp/vasp_std
-jobs:
-  cores_cpu: 36
-  launcher: mpirun -np {{cores_cpu}}
-""",
-        encoding="utf-8",
-    )
-
-    assert main(["scf-setup", str(config_path)]) == 0
-
-    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
-    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
-    assert "mpirun -np 36 /opt/vasp/vasp_std" in submit_text
+    assert "/opt/vasp/vasp_std" in submit_text
 
 
 def test_labeling_setup_uses_manual_vasp_parallel_options(tmp_path):

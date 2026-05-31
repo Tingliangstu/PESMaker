@@ -656,7 +656,6 @@ Templates can use these placeholders:
 {job_name}          # generated stage job name
 {workdir}           # stage working directory
 {command}           # engine command, such as gpumd, vasp_std, or nep
-{launch_command}    # command prefixed by jobs.launcher, default srun
 {nodes}             # jobs.nodes, default 1
 {cores_cpu}         # CPU cores per node
 {ntasks_per_node}   # alias for cores_cpu
@@ -664,8 +663,6 @@ Templates can use these placeholders:
 {vasp_kpar}         # generated VASP KPAR
 {vasp_ncore}        # generated VASP NCORE
 ```
-
-The same resource placeholders can be used in `jobs.launcher`.
 
 A default CPU-style Slurm script looks like:
 
@@ -692,17 +689,9 @@ echo "Using total tasks: ${SLURM_NTASKS:-unknown}"
 echo "Working directory: $(pwd)"
 echo "--------------------------------"
 
-{launch_command}
+{command}
 
 echo "Simulation finished at $(date)"
-```
-
-`jobs.launcher` defaults to `srun`. On clusters where the VASP MPI stack is
-configured around `mpirun`, set:
-
-```yaml
-jobs:
-  launcher: mpirun -np {cores_cpu}
 ```
 
 For GPU jobs, set `gpus`:
