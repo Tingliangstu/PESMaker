@@ -94,6 +94,48 @@ training:
     assert (tmp_path / "training" / "nep.in").exists()
 
 
+def test_scf_setup_prints_clear_next_steps(tmp_path, capsys):
+    """SCF setup output should show useful next commands instead of file counts."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "perturb_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        f"""project: scf_print_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'run_vasp_scf').as_posix()}
+  command: /opt/vasp/vasp_std
+jobs:
+  cores_cpu: 36
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "SCF setup complete." in output
+    assert "Jobs prepared    : 1" in output
+    assert f"Output directory : {tmp_path / 'run_vasp_scf'}" in output
+    assert f"Manifest         : {tmp_path / 'run_vasp_scf' / 'labeling_manifest.jsonl'}" in output
+    assert "Next steps:" in output
+    assert "Inspect one job folder" in output
+    assert f"pesmaker submit {config_path} --stage scf --dry-run" in output
+    assert f"pesmaker submit {config_path} --stage scf" in output
+    assert "Files written" not in output
+
+
 def test_labeling_setup_can_preserve_generated_vasp_source_tree(tmp_path):
     """VASP SCF setup can keep generated path identity for batch jobs."""
     generated_dir = tmp_path / "generated"

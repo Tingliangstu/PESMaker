@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "scf-setup":
-            _print_stage_result(setup_labeling(config))
+            _print_labeling_result(setup_labeling(config), args.config)
             return 0
 
         if args.command == "collect":
@@ -340,6 +340,31 @@ def _print_stage_result(result: StageResult) -> None:
     print(f"Output directory : {result.output_dir}")
     print(f"Files written    : {len(result.files)}")
     print()
+
+
+def _print_labeling_result(result: StageResult, config_path: Path) -> None:
+    """Print a focused summary for prepared SCF calculation jobs."""
+    manifest_path = result.output_dir / "labeling_manifest.jsonl"
+    job_count = _manifest_line_count(manifest_path)
+    print("SCF setup complete.")
+    print(f"Jobs prepared    : {job_count}")
+    print(f"Output directory : {result.output_dir}")
+    print(f"Manifest         : {manifest_path}")
+    print()
+    print("Next steps:")
+    print(
+        f"  - Inspect one job folder under {result.output_dir} "
+        "(INCAR, POSCAR, POTCAR, submit.sh)"
+    )
+    print(f"  - Preview submissions: pesmaker submit {config_path} --stage scf --dry-run")
+    print(f"  - Submit jobs       : pesmaker submit {config_path} --stage scf")
+    print()
+
+
+def _manifest_line_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line)
 
 
 def _print_banner() -> None:
