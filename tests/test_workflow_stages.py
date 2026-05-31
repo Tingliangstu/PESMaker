@@ -131,8 +131,9 @@ jobs:
     assert f"Manifest         : {tmp_path / 'run_vasp_scf' / 'labeling_manifest.jsonl'}" in output
     assert "Next steps:" in output
     assert "Inspect one job folder" in output
-    assert f"pesmaker submit {config_path} --stage scf --dry-run" in output
-    assert f"pesmaker submit {config_path} --stage scf" in output
+    assert f"pesmaker submit {config_path} --dry-run" in output
+    assert f"pesmaker submit {config_path}" in output
+    assert "--stage scf" not in output
     assert "Files written" not in output
 
 

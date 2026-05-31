@@ -141,7 +141,8 @@ jobs:
     assert "Traceback" not in captured.err
     assert "this config is for SCF setup" in captured.err
     assert f"pesmaker scf-setup {config_path}" in captured.err
-    assert f"pesmaker submit {config_path} --stage scf" in captured.err
+    assert f"pesmaker submit {config_path}" in captured.err
+    assert "--stage scf" not in captured.err
 
 
 def test_cli_generate_uses_unique_folders_for_duplicate_stems(tmp_path):

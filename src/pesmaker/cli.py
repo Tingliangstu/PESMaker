@@ -220,7 +220,7 @@ def _format_cli_error(
                 "For your labeling/input_dir workflow, run:",
                 f"  pesmaker scf-setup {config_path}",
                 "After the SCF folders are prepared, submit them with:",
-                f"  pesmaker submit {config_path} --stage scf",
+                f"  pesmaker submit {config_path}",
             ]
         )
     return f"Error: {message}"
@@ -356,8 +356,8 @@ def _print_labeling_result(result: StageResult, config_path: Path) -> None:
         f"  - Inspect one job folder under {result.output_dir} "
         "(INCAR, POSCAR, POTCAR, submit.sh)"
     )
-    print(f"  - Preview submissions: pesmaker submit {config_path} --stage scf --dry-run")
-    print(f"  - Submit jobs       : pesmaker submit {config_path} --stage scf")
+    print(f"  - Preview submissions: pesmaker submit {config_path} --dry-run")
+    print(f"  - Submit jobs       : pesmaker submit {config_path}")
     print()
 
 
