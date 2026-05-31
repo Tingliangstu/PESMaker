@@ -72,7 +72,6 @@ class JobResources:
     gpus: int
     vasp_kpar: int
     vasp_ncore: int
-    launcher: str
 
 
 RECOMMENDED_PBE_POTCARS = {
@@ -1083,13 +1082,11 @@ def _write_submit_script(
     resources: JobResources | None = None,
 ) -> Path:
     template_path = _job_template_path(config, stage)
-    job_name = f"{config.project}-{stage}"
+    job_name = workdir.name
     resources = resources or _job_resources(config)
-    launch_command = _launch_command(command, resources.launcher, resources)
     if template_path:
         text = template_path.read_text(encoding="utf-8").format(
             command=command,
-            launch_command=launch_command,
             job_name=job_name,
             workdir=workdir,
             nodes=resources.nodes,
@@ -1098,11 +1095,10 @@ def _write_submit_script(
             gpus=resources.gpus,
             vasp_kpar=resources.vasp_kpar,
             vasp_ncore=resources.vasp_ncore,
-            launcher=resources.launcher,
         )
     else:
         text = _default_submit_script(
-            launch_command=launch_command,
+            command=command,
             job_name=job_name,
             workdir=workdir,
             resources=resources,
@@ -1171,14 +1167,12 @@ def _job_resources(
             atom_count=atom_count,
             kpar=vasp_kpar,
         )
-    launcher = str(options.get("launcher", "srun")).strip()
     return JobResources(
         nodes=nodes,
         cores_cpu=cores_cpu,
         gpus=gpus,
         vasp_kpar=vasp_kpar,
         vasp_ncore=vasp_ncore,
-        launcher=launcher,
     )
 
 
@@ -1272,23 +1266,9 @@ def _factor_near(value: int, target: float, *, prefer_below: bool = False) -> in
     return min(factors, key=lambda factor: (abs(factor - target), factor))
 
 
-def _launch_command(command: str, launcher: str, resources: JobResources) -> str:
-    if not launcher:
-        return command
-    formatted_launcher = launcher.format(
-        nodes=resources.nodes,
-        cores_cpu=resources.cores_cpu,
-        ntasks_per_node=resources.cores_cpu,
-        gpus=resources.gpus,
-        vasp_kpar=resources.vasp_kpar,
-        vasp_ncore=resources.vasp_ncore,
-    )
-    return f"{formatted_launcher} {command}".strip()
-
-
 def _default_submit_script(
     *,
-    launch_command: str,
+    command: str,
     job_name: str,
     workdir: Path,
     resources: JobResources,
@@ -1321,7 +1301,7 @@ def _default_submit_script(
             'echo "Working directory: $(pwd)"',
             'echo "--------------------------------"',
             "",
-            launch_command,
+            command,
             "",
             'echo "Simulation finished at $(date)"',
             "",
