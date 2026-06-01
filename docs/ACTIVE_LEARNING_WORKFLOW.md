@@ -1,89 +1,76 @@
-# Active Learning Workflow Manual
+# PESMaker Workflow Manual
 
-This manual explains the complete PESMaker workflow for generating structures,
-preparing sampling jobs, selecting representative frames, preparing VASP SCF
-calculations, collecting labeled datasets, and preparing potential training.
+This manual is organized by function. Each command has its own section with
+the same pattern: what it does, what it reads, what it writes, and which YAML
+keys control it.
 
-PESMaker intentionally splits the work into independent stages. Each command
-writes normal files and folders, so expensive calculations can be inspected,
-submitted, repaired, and rerun without hiding the process behind one monolithic
-driver.
+PESMaker is built around ordinary files and directories. Each command prepares
+one visible stage of the workflow, so generated structures, sampling jobs, SCF
+inputs, collected datasets, and training folders can be inspected and repaired
+without rerunning the whole pipeline.
 
-## Workflow Map
+## Command Map
 
-Direct generation and SCF labeling:
+| Command | Purpose | Main output |
+| --- | --- | --- |
+| `pesmaker init` | Write a starter YAML file | `pesmaker.yaml` or a chosen path |
+| `pesmaker validate` | Check YAML syntax and schema | terminal validation result |
+| `pesmaker generate` | Build supercells, surfaces, defects, and perturbations | `generated/` and `manifest.jsonl` |
+| `pesmaker sample-setup` | Prepare MD sampling jobs | `sampling/` |
+| `pesmaker select` | Select representative MD frames | `selected/` |
+| `pesmaker scf-setup` | Prepare VASP SCF folders | `labeling/` |
+| `pesmaker submit` | Submit prepared `submit.sh` files | scheduler submissions or dry-run log |
+| `pesmaker collect` | Collect completed SCF outputs | `train.xyz` or configured dataset path |
+| `pesmaker train-setup` | Prepare model training inputs | `training/` |
+
+## Common Workflow Paths
+
+Use the direct SCF path when generated structures should go straight to VASP
+labeling:
 
 ```bash
-pesmaker validate run.yaml
-pesmaker generate run.yaml
-pesmaker scf-setup run.yaml
-pesmaker submit run.yaml --dry-run   # preview SCF/VASP submissions
-pesmaker submit run.yaml             # submit SCF/VASP jobs
-pesmaker collect run.yaml
+pesmaker validate run.yaml           # check the config before doing work
+pesmaker generate run.yaml           # create structural candidates
+pesmaker scf-setup run.yaml          # prepare VASP calculation folders
+pesmaker submit run.yaml --dry-run   # preview SCF submissions
+pesmaker submit run.yaml             # submit SCF jobs
+pesmaker collect run.yaml            # collect finished SCF results
 ```
 
-Full active-learning style loop:
+Use the sampling path when generated structures should first seed MD:
 
 ```bash
-pesmaker validate run.yaml
-pesmaker generate run.yaml
-pesmaker sample-setup run.yaml
-pesmaker submit run.yaml --stage sampling   # submit MD sampling jobs
-pesmaker select run.yaml
-pesmaker scf-setup run.yaml
-pesmaker submit run.yaml --dry-run          # preview SCF/VASP submissions
-pesmaker submit run.yaml                    # submit SCF/VASP jobs
-pesmaker collect run.yaml
-pesmaker train-setup run.yaml
-pesmaker submit run.yaml --stage training   # submit NEP training jobs
+pesmaker validate run.yaml                  # check the config before doing work
+pesmaker generate run.yaml                  # create initial structures
+pesmaker sample-setup run.yaml              # prepare MD sampling folders
+pesmaker submit run.yaml --stage sampling   # submit MD jobs
+pesmaker select run.yaml                    # select representative MD frames
+pesmaker scf-setup run.yaml                 # prepare SCF folders for selected frames
+pesmaker submit run.yaml                    # submit SCF jobs
+pesmaker collect run.yaml                   # collect finished SCF results
+pesmaker train-setup run.yaml               # prepare model training inputs
+pesmaker submit run.yaml --stage training   # submit training jobs
 ```
 
-Expected stage outputs:
+Typical stage directories are:
 
 ```text
-generated/   # supercells, slabs, defects, perturbed structures, manifest
-sampling/    # MD job folders, model.xyz, run.in, submit.sh
-selected/    # selected trajectory frames and manifest
-labeling/    # VASP SCF folders with POSCAR, INCAR, optional POTCAR, submit.sh
-train.xyz    # collected extxyz dataset from completed SCF outputs
-training/    # NEP input files and training submit script
+generated/   # generated supercells, surfaces, defects, perturbations
+sampling/    # MD job folders with model.xyz, run.in, submit.sh
+selected/    # selected MD frames and manifest
+labeling/    # VASP SCF folders with POSCAR, INCAR, POTCAR, submit.sh
+training/    # model training inputs and submit.sh
 ```
 
-There are multiple `submit` commands because they target different prepared
-stages. `sample-setup` creates sampling `submit.sh` files, submitted with
-`--stage sampling`. `scf-setup` creates labeling `submit.sh` files, submitted
-by the default `pesmaker submit run.yaml`. `train-setup` creates training
-`submit.sh` files, submitted with `--stage training`.
+## Configuration Basics
 
-## Why PESMaker
-
-PESMaker is built for targeted MLIP dataset construction. Instead of starting
-from random structures, it starts from structures that matter for the target
-application and makes the workflow reproducible.
-
-Key benefits:
-
-- one YAML file can describe bulk, surface, defect, and perturbed structure
-  families;
-- each generated structure is recorded in `manifest.jsonl` and summarized in
-  `generation_summary.txt`;
-- generated structures can go directly to VASP SCF labeling or first through
-  GPUMD sampling and frame selection;
-- `scf-setup` creates complete calculation folders and preserves source-path
-  traceability;
-- `submit` runs from the correct job directories and supports dry-run previews;
-- collection and training setup are separate stages, so failed SCF jobs do not
-  corrupt the dataset silently.
-
-## Configuration Overview
-
-Start from `examples/te_defect_md.yaml` or create a new starter file:
+Create a starter file:
 
 ```bash
 pesmaker init run.yaml
 ```
 
-A complete workflow config has these main sections:
+A full config can contain these sections:
 
 ```yaml
 project: Te_Pd_rich_defect_md
@@ -94,91 +81,59 @@ structures:
 
 generation:
   output_dir: generated
-  tasks:
-    - name: surface_331
-      supercell: [3, 3, 1]
-      surface:
-        vacuum: 30.0
-        axis: 2
-        center: true
-        defects:
-          mode: random
-          seed: 42
-          single_vacancies:
-            elements: [Te]
-            max_count: 8
-          double_vacancies:
-            elements: [Te]
-            max_count: 8
-          line_defects:
-            elements: [Te]
-            max_count: 4
-        perturb:
-          include_pristine: true
-          pert_num: 20
-          cell_pert_fraction: 0.03
-          atom_pert_distance: 0.1
-          atom_pert_style: normal
-          seed: 42
-          format: vasp
-    - name: bulk_333
-      supercell: [3, 3, 3]
-      perturb:
-        include_pristine: true
-        pert_num: 20
-        cell_pert_fraction: 0.03
-        atom_pert_distance: 0.1
-        atom_pert_style: normal
-        seed: 42
-        format: vasp
 
 sampling:
   engine: gpumd
-  output_dir: sampling
-  gpumd_dir: /path/to/GPUMD/src
-  potential: nep89_20250409.txt
-  temperatures: [300, 600, 900]
-  run_in: templates/gpumd/run.in
-  selection:
-    trajectory_pattern: sampling/**/movie.xyz
-    output_dir: selected
-    min_distance: 0.2
-    max_count: 200
 
 labeling:
   engine: vasp
-  output_dir: labeling
-  input_manifest: selected/manifest.jsonl
-  incar: templates/vasp/INCAR
-  potcar_library: /path/to/VASP/potentials
-  command: /path/to/vasp_std
 
 dataset:
   format: extxyz
-  split: [0.8, 0.1, 0.1]
 
 training:
   model: nep
-  output_dir: training
-  dataset: train.xyz
-  command: nep
 
 jobs:
-  machine: cluster-a
   submit_command: sbatch
-  cores_cpu: 36
-  gpus: 0
-  sub_file:
-    sampling: templates/sbatch/gpumd.sh
-    labeling: templates/sbatch/vasp_cpu_36.sh
-    training: templates/sbatch/nep.sh
 ```
 
-Use `generation.tasks` when one run should prepare several independent
-structure families. Do not repeat the same YAML key in one mapping; use
-separate task entries instead.
+Important conventions:
 
-## Stage 1: Generate Structures
+- `project` names the campaign and is used in default output paths.
+- `structures` is required for `generate`, but later stages can read generated
+  manifests or directories without listing original structures again.
+- `structures` can be a list of paths or an `include` glob map.
+- `generation.tasks` should be used when one config needs several independent
+  structure families.
+- Do not repeat the same YAML key in one mapping. PESMaker rejects duplicate
+  keys because silent overwrites are dangerous in production runs.
+
+## `init`: Create a Starter Config
+
+Run:
+
+```bash
+pesmaker init run.yaml
+```
+
+`init` writes a starter YAML file and refuses to overwrite an existing file.
+Use it as a scaffold, then replace paths, potentials, and scheduler settings
+with values for your project and cluster.
+
+## `validate`: Check the Config
+
+Run:
+
+```bash
+pesmaker validate run.yaml
+```
+
+`validate` checks that the YAML can be parsed and that top-level sections have
+valid shapes. It is cheap and should be run before expensive generation,
+sampling, or SCF setup.
+
+## `generate`: Build Structures
 
 Run:
 
@@ -186,52 +141,92 @@ Run:
 pesmaker generate run.yaml
 ```
 
-The `generation` section prepares the structural candidates for direct SCF
-labeling or for MD sampling. The operation order inside each task is:
+`generate` reads the `structures` and `generation` sections. It writes
+generated structures, a machine-readable `manifest.jsonl`, and a human-readable
+`generation_summary.txt`.
+
+Inside each generation task, operations happen in this order:
 
 ```text
 input structure -> supercell -> surface -> defects -> perturb
 ```
 
-Each task has its own `name`, `supercell`, optional `surface`, optional
-`defects`, and optional `perturb` settings.
+### Inputs
 
-### Bulk and Perturbed Structures
+Use explicit paths:
 
-For bulk perturbations:
+```yaml
+structures:
+  - Te-mp-19.cif
+  - Te-mp-23.cif
+```
+
+Or use glob patterns:
+
+```yaml
+structures:
+  include:
+    - initial_structures/*.cif
+```
+
+Input structures are read through ASE, so CIF, POSCAR, VASP, extxyz, and xyz
+style files are suitable starting points.
+
+### Tasks
+
+Use one task for one structural family:
 
 ```yaml
 generation:
   output_dir: generated
   tasks:
-    - name: bulk_333
-      supercell: [3, 3, 3]
+    - name: surface_331
+      supercell: [3, 3, 1]
+      surface:
+        vacuum: 30.0
+        axis: 2
+        center: true
       perturb:
-        include_pristine: true
-        pert_num: 20
-        cell_pert_fraction: 0.03
-        atom_pert_distance: 0.1
-        atom_pert_style: normal
-        seed: 42
+        pert_num: 3
         format: vasp
 ```
 
-Important perturbation fields:
+Use several tasks when one config should build several independent families:
 
-- `pert_num`: number of structures generated from each variant;
-- `include_pristine`: when `true`, also write `unperturbed.<format>` for
-  every defect variant before random cell and atom perturbations. The
-  `pristine/` output always includes `unperturbed.<format>`, even when this
-  option is omitted;
-- `cell_pert_fraction`: random cell perturbation amplitude;
-- `atom_pert_distance`: atomic displacement scale in Angstrom;
-- `atom_pert_style`: `normal`, `uniform`, or `const`;
-- `seed`: reproducible random seed;
-- `format`: `vasp` or `extxyz`.
+```yaml
+generation:
+  output_dir: generated
+  tasks:
+    - name: surface_331
+      supercell: [3, 3, 1]
+      surface:
+        vacuum: 30.0
+        axis: 2
+        center: true
+      perturb:
+        pert_num: 3
+        format: vasp
+    - name: bulk_333
+      supercell: [3, 3, 3]
+      perturb:
+        pert_num: 3
+        format: vasp
+```
 
-### Surface Slabs
+### Supercells
 
-For 2D materials or slab-like systems:
+`supercell` contains replication factors along the three lattice directions:
+
+```yaml
+supercell: [4, 4, 1]
+```
+
+For a 2D material, a common choice is `[n, n, 1]`. For a bulk seed structure,
+use all three directions as needed.
+
+### Surface Slabs and Vacuum
+
+For slab or 2D systems:
 
 ```yaml
 surface:
@@ -240,15 +235,88 @@ surface:
   center: true
 ```
 
-`vacuum` is the total empty-space thickness in Angstrom. Existing vacuum in
-the input structure is replaced, so `vacuum: 30.0` gives about 30 Angstrom of
-empty space total, not 30 Angstrom added to each side. `axis: 2` applies this
-along the z direction, which is the usual choice for structures lying in the xy
-plane. `center: true` places the slab in the middle of the vacuum direction.
+`vacuum` is the total empty-space thickness in Angstrom. Existing vacuum in the
+input structure is replaced. For example, if the slab thickness is about 4
+Angstrom and `vacuum: 30.0`, the final cell length along the vacuum axis is
+about 34 Angstrom.
+
+`axis` chooses the lattice vector used as the vacuum direction:
+
+- `axis: 0`: vacuum along lattice vector a;
+- `axis: 1`: vacuum along lattice vector b;
+- `axis: 2`: vacuum along lattice vector c, the usual setting for 2D slabs in
+  the xy plane.
+
+`center: true` places the slab near the middle of the vacuum direction.
+
+### Perturbations
+
+Perturbation settings live under `perturb`:
+
+```yaml
+perturb:
+  pert_num: 3
+  cell_pert_fraction: 0.03
+  atom_pert_distance: 0.1
+  atom_pert_style: normal
+  seed: 421
+  format: vasp
+```
+
+Key fields:
+
+- `pert_num`: number of random perturbations generated from each variant.
+- `cell_pert_fraction`: random cell strain amplitude.
+- `atom_pert_distance`: atomic displacement scale in Angstrom.
+- `atom_pert_style`: `normal`, `uniform`, or `const`.
+- `atom_pert_prob`: fraction of atoms displaced, default `1.0`.
+- `seed`: reproducible random seed.
+- `format`: `vasp` or `extxyz`.
+
+The pristine variant always gets one unperturbed file before random
+perturbations:
+
+```text
+pristine/
+  unperturbed.vasp
+  perturb_000000.vasp
+  perturb_000001.vasp
+```
+
+For surface tasks, the perturbed pristine files use the `surface_` prefix:
+
+```text
+pristine/
+  unperturbed.vasp
+  surface_000000.vasp
+  surface_000001.vasp
+```
+
+Set `include_pristine: true` when every defect variant should also receive its
+own unperturbed file:
+
+```yaml
+perturb:
+  include_pristine: true
+  pert_num: 3
+  format: vasp
+```
+
+Then a defect folder looks like:
+
+```text
+single_vacancy_Te_000001/
+  unperturbed.vasp
+  defect_000000.vasp
+  defect_000001.vasp
+  defect_000002.vasp
+```
 
 ### Defects
 
-Defects can be applied after surface generation:
+Defects can be written under `generation.defects` or nested under
+`generation.surface.defects`. For slab workflows, the nested form keeps the
+operation order visually clear:
 
 ```yaml
 surface:
@@ -260,84 +328,95 @@ surface:
     seed: 42
     single_vacancies:
       elements: [Te]
-      max_count: 8
+      max_count: 5
     double_vacancies:
       elements: [Te]
-      max_count: 8
+      max_count: 5
     line_defects:
       elements: [Te]
-      max_count: 4
-  perturb:
-    include_pristine: true
-    pert_num: 20
-    format: vasp
+      max_count: 5
 ```
 
-Supported variant families:
+Supported families:
 
-- `pristine`: the structure after supercell and surface operations, without
-  removed atoms;
-- `single_vacancies`: remove one atom from selected elements;
-- `double_vacancies`: remove atom pairs, with nearest pairs generated first by
-  default;
-- `line_defects`: remove atom rows, with row grouping inferred automatically.
+- `pristine`: no atoms removed;
+- `single_vacancies`: remove one atom;
+- `double_vacancies`: remove two atoms;
+- `line_defects`: remove one row of atoms.
 
-Defect folder suffixes are 1-based serial numbers within each defect family,
-not atom IDs. For example, `single_vacancy_Te_000001` is the first selected Te
-single vacancy. The exact removed atom indices are stored in `manifest.jsonl`
-as `variant_description`.
+Shared defect options such as `mode`, `selection`, and `seed` are inherited by
+the individual defect families unless a family overrides them.
 
-For reproducible random choices, set:
+Folder names use 1-based serial numbers within each family. They are not atom
+IDs. Exact removed atom indices are written in `manifest.jsonl` as
+`variant_description`.
+
+Example:
+
+```json
+{
+  "variant": "line_defect_Te_const_b_000001",
+  "variant_description": "line defect: fixed fractional b coordinate, remove atoms [1, 4, 7, 10]"
+}
+```
+
+### Single Vacancies
 
 ```yaml
-defects:
-  mode: random
-  seed: 42
+single_vacancies:
+  elements: [Te]
+  max_count: 5
 ```
 
-Per-family random settings can override the global mode:
+When `mode: random` or `selection: random` is active, PESMaker randomly samples
+candidate atoms. Without random selection, it takes the first candidates in
+atom order.
+
+### Double Vacancies
 
 ```yaml
-defects:
-  single_vacancies:
-    selection: random
-    seed: 7
-    elements: [Te]
-    max_count: 8
+double_vacancies:
+  elements: [Te]
+  max_count: 5
 ```
+
+By default, double vacancies are ordered by nearest atom-pair distance, then
+the first `max_count` pairs are used. With `selection: random`, PESMaker
+randomly samples atom pairs instead.
+
+### Line Defects
 
 Line-defect generation has two separate steps:
 
 1. Group candidate atoms into rows.
 2. Select which rows to remove.
 
-`coordinate_axis` controls only the row grouping step. It is not the random
-selection switch.
+`coordinate_axis` controls the grouping step. It is not the random-selection
+switch.
 
 ```yaml
 line_defects:
   elements: [Te]
   max_count: 5
-  coordinate_axis: 0
+  coordinate_axis: 1
 ```
 
-The `coordinate_axis` values are fractional-coordinate axes:
+The values are fractional-coordinate axes:
 
 - `coordinate_axis: 0`: group atoms with similar fractional `a` coordinate;
 - `coordinate_axis: 1`: group atoms with similar fractional `b` coordinate;
 - `coordinate_axis: 2`: group atoms with similar fractional `c` coordinate,
-  which is usually not useful for in-plane line defects in 2D slabs.
+  usually not useful for in-plane line defects in 2D slabs.
 
 Folder names use `const_a`, `const_b`, or `const_c` for the fractional
-coordinate held constant while grouping a row. In an orthogonal 2D cell,
-`const_a` usually means the removed row runs along the b/y direction, while
-`const_b` usually means the removed row runs along the a/x direction. For
-hexagonal or other non-orthogonal cells, use the lattice vectors rather than
-Cartesian x/y labels when interpreting the line direction.
+coordinate held constant. In an orthogonal 2D cell, `const_a` usually removes a
+row running along b/y, while `const_b` usually removes a row running along a/x.
+For hexagonal or otherwise non-orthogonal cells, interpret the row using the
+lattice vectors rather than Cartesian x/y labels.
 
-If `coordinate_axis` is omitted, PESMaker tries fractional `a` and `b`, then
-uses the axis that gives the clearest row grouping. It does not infer
-fractional `c` automatically for 2D line defects.
+If `coordinate_axis` is omitted, PESMaker tries fractional `a` and `b` and uses
+the axis that gives the clearest row grouping. It does not automatically use
+fractional `c` for 2D line defects.
 
 `tolerance` controls how close fractional coordinates must be to count as the
 same row:
@@ -351,7 +430,7 @@ line_defects:
 ```
 
 If `tolerance` is omitted, PESMaker infers it from the spacing between
-candidate fractional coordinates.
+candidate rows.
 
 Row selection is controlled by `mode` or `selection`:
 
@@ -366,14 +445,14 @@ defects:
 ```
 
 With `mode: random`, PESMaker randomly selects `max_count` rows from the
-grouped rows. The `seed` makes the random selection reproducible, so running
-the same config again gives the same line defects.
+grouped rows. `seed` makes the selection reproducible. Running the same config
+again gives the same rows.
 
-Without `mode: random`, row selection is deterministic: PESMaker sorts rows by
-row size and atom index, then takes the first `max_count` rows. This is useful
-for debugging but is not a random sampling of line positions.
+Without random selection, PESMaker sorts rows by row size and atom index, then
+takes the first `max_count` rows. This deterministic mode is useful for
+debugging but is not a random sampling of line positions.
 
-Per-family settings can override the global defect mode:
+Per-family settings can override the global mode:
 
 ```yaml
 defects:
@@ -386,11 +465,9 @@ defects:
     coordinate_axis: 0
 ```
 
-The exact removed atom indices are written in `manifest.jsonl` under
-`variant_description`, for example `line defect: fixed fractional b coordinate,
-remove atoms [1, 4, 7, 10]`.
+### Generate Outputs and Summary
 
-Expected output:
+Generated folders are grouped by task, input structure, and variant:
 
 ```text
 generated/
@@ -402,28 +479,17 @@ generated/
         unperturbed.vasp
         surface_000000.vasp
       single_vacancy_Te_000001/
-        unperturbed.vasp
         defect_000000.vasp
       double_vacancy_Te_000001/
-        unperturbed.vasp
         defect_000000.vasp
       line_defect_Te_const_b_000001/
-        unperturbed.vasp
         defect_000000.vasp
-  bulk_333/
-    Te-mp-19/
-      pristine/
-        unperturbed.vasp
-        perturb_000000.vasp
 ```
 
-`manifest.jsonl` is machine-readable. `generation_summary.txt` is the faster
-file to inspect by eye.
+`manifest.jsonl` is the file later stages read. `generation_summary.txt` is the
+fastest file to inspect by eye.
 
-The generate command summary groups counts by defect family so it is clear how
-many pristine, single-vacancy, double-vacancy, and line-defect structures were
-written. For example, `max_count: 5`, `pert_num: 3`, and no
-`include_pristine` line gives this per input:
+For `max_count: 5` and `pert_num: 3`, the summary is shaped like:
 
 ```text
 per input:
@@ -433,11 +499,14 @@ per input:
   line defects: 5 variant(s), 15 structure(s) (15 perturbed)
 ```
 
-With `include_pristine: true`, each defect variant also gets one
-`unperturbed.<format>` file, so each defect family above becomes
-`5 variant(s), 20 structure(s) (5 unperturbed, 15 perturbed)`.
+With `include_pristine: true`, each defect variant also gets one unperturbed
+file, so each defect family above becomes:
 
-## Stage 2: Prepare Sampling Jobs
+```text
+single vacancies: 5 variant(s), 20 structure(s) (5 unperturbed, 15 perturbed)
+```
+
+## `sample-setup`: Prepare MD Sampling Jobs
 
 Run:
 
@@ -445,23 +514,42 @@ Run:
 pesmaker sample-setup run.yaml
 ```
 
-The `sample-setup` stage creates one MD working directory for each generated
-structure and sampling condition.
+`sample-setup` prepares MD folders from generated structures or from an
+explicit input directory or manifest.
 
-For GPUMD:
+Input priority:
+
+1. `sampling.input_manifest`
+2. `sampling.input_dir`
+3. `generation.output_dir`
+4. local `generated/`
+5. `runs/<project>/generated`
+
+Minimal GPUMD setup:
 
 ```yaml
 sampling:
   engine: gpumd
-  gpumd_dir: /path/to/GPUMD/src
   output_dir: sampling
+  gpumd_dir: /path/to/GPUMD/src
   potential: nep89_20250409.txt
   temperatures: [300, 600, 900]
   run_in: templates/gpumd/run.in
 ```
 
-`temperatures: [300, 600, 900]` creates one constant-temperature job per
-temperature and generated structure:
+Constant temperatures:
+
+```yaml
+temperatures: [300, 600, 900]
+```
+
+Heating ramp:
+
+```yaml
+temperature: 300-1500
+```
+
+Expected output:
 
 ```text
 sampling/
@@ -476,18 +564,9 @@ sampling/
     submit.sh
 ```
 
-For a heating ramp, use:
-
-```yaml
-sampling:
-  engine: gpumd
-  potential: nep89_20250409.txt
-  temperature: 300-1500
-```
-
 If `potential` points to an existing file, PESMaker copies it into each MD
-folder. If it is only a filename, PESMaker writes that filename into `run.in`
-and assumes it will be available when GPUMD runs.
+folder. If it is only a filename, PESMaker writes the filename into `run.in`
+and assumes it will be available when the job runs.
 
 Submit sampling jobs with:
 
@@ -495,24 +574,15 @@ Submit sampling jobs with:
 pesmaker submit run.yaml --stage sampling
 ```
 
-Use a dry run first when checking a new machine template:
+## `select`: Select Representative Frames
 
-```bash
-pesmaker submit run.yaml --stage sampling --dry-run
-```
-
-Future sampling engines, such as LAMMPS-MACE, can use the same stage boundary
-with engine-specific writers.
-
-## Stage 3: Select Representative Frames
-
-After MD jobs finish and trajectories such as `movie.xyz` exist, run:
+Run after sampling trajectories are available:
 
 ```bash
 pesmaker select run.yaml
 ```
 
-Configure selection under `sampling.selection`:
+Configure frame selection under `sampling.selection`:
 
 ```yaml
 sampling:
@@ -523,9 +593,10 @@ sampling:
     max_count: 200
 ```
 
-The current selector uses farthest point sampling. It keeps adding the frame
-farthest from the selected set until `max_count` is reached or the
-nearest-selected distance falls below `min_distance`.
+The current selector uses farthest point sampling on simple structural
+features. It keeps adding the frame farthest from the selected set until
+`max_count` is reached or the nearest-selected distance falls below
+`min_distance`.
 
 Expected output:
 
@@ -537,10 +608,10 @@ selected/
   manifest.jsonl
 ```
 
-`selected.xyz` is a multi-frame inspection file. The single-frame files listed
-in `selected/manifest.jsonl` are used by `scf-setup`.
+Use `selected.xyz` for quick visual inspection. Use `selected/manifest.jsonl`
+as the input to `scf-setup`.
 
-## Stage 4: Prepare VASP SCF Jobs
+## `scf-setup`: Prepare VASP Labeling Jobs
 
 Run:
 
@@ -548,12 +619,18 @@ Run:
 pesmaker scf-setup run.yaml
 ```
 
-The `scf-setup` stage turns generated structures or selected frames into
-independent SCF calculation folders.
+`scf-setup` turns generated structures or selected frames into independent VASP
+SCF folders.
 
-### From Selected MD Frames
+Input priority:
 
-Use `input_manifest` when labeling frames selected from MD:
+1. `labeling.input_manifest`
+2. `labeling.input_dir`
+3. `generation.output_dir`
+4. local `generated/`
+5. `runs/<project>/generated`
+
+### Label Selected MD Frames
 
 ```yaml
 labeling:
@@ -565,22 +642,7 @@ labeling:
   command: /path/to/vasp_std
 ```
 
-Expected output:
-
-```text
-labeling/
-  labeling_manifest.jsonl
-  selected_000000/
-    POSCAR
-    INCAR
-    POTCAR
-    POTCAR.spec
-    submit.sh
-```
-
-### Directly From Generated Structures
-
-Use `input_dir` when generated structures should go straight to SCF labeling:
+### Label Generated Structures Directly
 
 ```yaml
 labeling:
@@ -592,16 +654,15 @@ labeling:
   command: /path/to/vasp_std
 ```
 
-This SCF-only config can omit `structures`. PESMaker reads
-`input_dir/manifest.jsonl` when present. If no manifest exists, it recursively
-scans for `POSCAR`, `CONTCAR`, `*.vasp`, `*.poscar`, `*.cif`, `*.extxyz`, and
-`*.xyz`.
+When an input directory has `manifest.jsonl`, PESMaker reads it for
+traceability. Without a manifest, it recursively scans for `POSCAR`, `CONTCAR`,
+`*.vasp`, `*.poscar`, `*.cif`, `*.extxyz`, and `*.xyz`.
 
-The generated folder structure is preserved by default while file suffixes are
-dropped from calculation folder names:
+Expected output:
 
 ```text
 labeling/
+  labeling_manifest.jsonl
   surface_331/
     Te-mp-19/
       single_vacancy_Te_000001/
@@ -614,37 +675,24 @@ labeling/
           submit.sh
 ```
 
-The original generated structure is backed up by default. Set
-`backup_source: false` under `labeling` only if these backups are not wanted.
+The generated structure is backed up by default. Set `backup_source: false`
+under `labeling` only if these backups are not wanted.
 
-### VASP Inputs
+### VASP Input Controls
 
 The default `examples/templates/vasp/INCAR` is a conservative static SCF
-template:
+template. You can provide your own file:
 
-```text
-SYSTEM = PESMaker single point
-GGA = PE
-LREAL = Auto
-ENCUT = 650
-KSPACING = 0.2
-KGAMMA = .TRUE.
-NSW = 0
-IBRION = -1
-ALGO = Normal
-EDIFF = 1E-06
-SIGMA = 0.02
-ISMEAR = 0
-PREC = Accurate
-NELM = 150
+```yaml
+labeling:
+  incar: templates/vasp/INCAR
 ```
 
 For CPU VASP jobs, PESMaker writes `KPAR` and `NCORE` into `INCAR`. `KPAR`
 defaults to `2` when `jobs.cores_cpu` is even, otherwise `1`. `NCORE` is chosen
-as a factor within each KPAR group. For example, `cores_cpu: 36` gives
-`KPAR = 2` and `NCORE = 3`.
+as a factor within each KPAR group.
 
-Override these values when your cluster or benchmarks require it:
+Override these when benchmarks or cluster rules require it:
 
 ```yaml
 jobs:
@@ -655,20 +703,21 @@ jobs:
 
 PESMaker writes `NCORE`, not legacy `NPAR`.
 
-If `potcar_library` is set, PESMaker writes `POTCAR` automatically from its
-built-in recommended VASP potential table. For ordinary PBE calculations this
-uses the standard PBE recommendations, such as `Te`, `Na_pv`, `K_sv`, and
-`Ga_d`. For GW potentials, set:
+If `potcar_library` is set, PESMaker assembles `POTCAR` from the built-in
+recommended VASP potential table. For ordinary PBE calculations this uses
+standard recommendations such as `Te`, `Na_pv`, `K_sv`, and `Ga_d`.
+
+For GW potentials:
 
 ```yaml
 labeling:
   gw_potcar: true
 ```
 
-Each calculation folder also contains `POTCAR.spec`, recording the exact
-potential directories concatenated into `POTCAR`.
+Each folder also receives `POTCAR.spec`, recording the exact potential
+directories concatenated into `POTCAR`.
 
-You can also provide explicit files:
+Explicit files can also be copied in:
 
 ```yaml
 labeling:
@@ -677,11 +726,12 @@ labeling:
   template_dir: templates/vasp/static_scf
 ```
 
-## Stage 5: Submit Jobs
+## `submit`: Submit Prepared Jobs
 
-`submit` submits prepared `submit.sh` files. It does not create new inputs; it
-only submits files created by `sample-setup`, `scf-setup`, or `train-setup`.
-By default it submits the SCF labeling stage:
+`submit` submits existing `submit.sh` files. It does not create structures,
+sampling inputs, SCF folders, or training inputs.
+
+Default behavior submits the SCF labeling stage:
 
 ```bash
 pesmaker submit run.yaml
@@ -693,14 +743,20 @@ Preview first:
 pesmaker submit run.yaml --dry-run
 ```
 
-Submit other stages explicitly:
+Submit other stages:
 
 ```bash
-pesmaker submit run.yaml --stage sampling   # MD sampling jobs from sampling/
-pesmaker submit run.yaml --stage training   # training jobs from training/
+pesmaker submit run.yaml --stage sampling
+pesmaker submit run.yaml --stage training
 ```
 
-Machine-specific submission settings live under `jobs`:
+Stage meaning:
+
+- `--stage sampling`: submit jobs prepared by `sample-setup`;
+- no `--stage`, or `--stage scf`: submit jobs prepared by `scf-setup`;
+- `--stage training`: submit jobs prepared by `train-setup`.
+
+Scheduler settings live under `jobs`:
 
 ```yaml
 jobs:
@@ -715,7 +771,7 @@ jobs:
     training: templates/sbatch/nep.sh
 ```
 
-For a single-stage config, `sub_file` can be one path:
+For one-stage configs, `sub_file` can be a single path:
 
 ```yaml
 jobs:
@@ -724,7 +780,7 @@ jobs:
   sub_file: templates/sbatch/vasp_cpu_36.sh
 ```
 
-Submit templates can use these placeholders:
+Templates can use:
 
 ```text
 {job_name}          # generated from the work directory name
@@ -739,10 +795,9 @@ Submit templates can use these placeholders:
 {vasp_ncore}        # generated VASP NCORE
 ```
 
-Placeholders are optional for common Slurm fields. When a user-provided
-template already contains `#SBATCH --job-name`, `#SBATCH --ntasks`, or a VASP
-run line such as `mpirun /path/to/vasp_std`, PESMaker rewrites those values for
-each calculation folder while keeping site-specific lines such as partitions,
+When a template already contains `#SBATCH --job-name`, `#SBATCH --ntasks`, or a
+VASP run line such as `mpirun /path/to/vasp_std`, PESMaker rewrites those values
+for each calculation folder while preserving site-specific partitions,
 accounts, modules, and environment setup.
 
 The default CPU VASP run command is:
@@ -751,7 +806,7 @@ The default CPU VASP run command is:
 mpirun {command}
 ```
 
-For GPU jobs, set `gpus`:
+For GPU jobs:
 
 ```yaml
 jobs:
@@ -759,23 +814,23 @@ jobs:
   gpus: 1
 ```
 
-`pesmaker submit` runs the scheduler command from each job folder, so manual
-submission should do the same:
+`submit` runs the scheduler command from each job folder. Manual submission
+should do the same:
 
 ```bash
 cd labeling/path/to/calc
 sbatch submit.sh
 ```
 
-## Stage 6: Collect the Labeled Dataset
+## `collect`: Build the Labeled Dataset
 
-After SCF jobs finish, collect completed outputs:
+Run after SCF jobs finish:
 
 ```bash
 pesmaker collect run.yaml
 ```
 
-Configure the OUTCAR search pattern and dataset path:
+Configure completed-output discovery:
 
 ```yaml
 labeling:
@@ -783,11 +838,11 @@ labeling:
   dataset_path: train.xyz
 ```
 
-The command reads matched VASP outputs with ASE and writes an extxyz dataset.
-Collection is separate from SCF setup and submission so failed or partial
-calculations can be inspected before rebuilding the dataset.
+`collect` reads matched VASP outputs with ASE and writes an extxyz dataset.
+Collection is separate from SCF setup and submission so failed or partial jobs
+can be inspected before rebuilding the dataset.
 
-## Stage 7: Prepare Training
+## `train-setup`: Prepare Training Inputs
 
 Run:
 
@@ -824,41 +879,42 @@ For non-NEP trainers, set `training.model` and `training.command`. The stage
 boundary remains the same, so new trainers can be added without changing
 generation, sampling, labeling, or collection.
 
-## Practical Checklist
+## Inspection Checklist
 
 Before generation:
 
 - Run `pesmaker validate run.yaml`.
-- Confirm input structures have the intended chemistry, cell, and dimensionality.
+- Check input chemistry, cell, dimensionality, and units.
 - For 2D materials, confirm `surface.axis` and `surface.vacuum`.
-- Start with small `max_count` and `pert_num` values before scaling up.
+- Start with small `max_count` and `pert_num` values.
 
 After generation:
 
-- Inspect `generated/generation_summary.txt`.
-- Open representative pristine, vacancy, double-vacancy, and line-defect
+- Read `generated/generation_summary.txt`.
+- Inspect representative `pristine`, vacancy, double-vacancy, and line-defect
   structures visually.
 - Confirm atom counts and defect families match the intended campaign.
+- Check `manifest.jsonl` when you need exact removed atom indices.
 
 Before submission:
 
 - Run `pesmaker submit run.yaml --dry-run`.
-- Inspect one `submit.sh` per stage.
-- For SCF jobs, inspect one folder for `POSCAR`, `INCAR`, `POTCAR`,
-  `POTCAR.spec`, and resource settings.
-- Confirm `labeling.command`, `jobs.cores_cpu`, and any cluster modules match
-  the target machine.
+- Inspect at least one `submit.sh` per stage.
+- For SCF jobs, inspect `POSCAR`, `INCAR`, `POTCAR`, `POTCAR.spec`, and resource
+  settings.
+- Confirm `labeling.command`, `jobs.cores_cpu`, modules, and cluster account
+  settings match the target machine.
 
 After SCF jobs:
 
 - Check convergence before collection.
 - Collect only completed outputs matched by `labeling.outcar_pattern`.
 - Keep `train.xyz` versioned by project or campaign name.
-- Prepare training only after confirming the dataset contents.
+- Prepare training only after confirming dataset contents.
 
-## Current Scope and Extension Points
+## Current Scope
 
-Current implemented capabilities:
+Implemented capabilities:
 
 - multi-task structure generation;
 - supercells, 2D vacuum setup, pristine structures, single vacancies, double
