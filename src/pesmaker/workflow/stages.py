@@ -61,6 +61,7 @@ NELM = 150       # Maximum electronic SCF steps
 
 STRUCTURE_INPUT_SUFFIXES = {".cif", ".extxyz", ".poscar", ".vasp", ".xyz"}
 STRUCTURE_INPUT_NAMES = {"CONTCAR", "POSCAR"}
+LARGE_SCF_ATOM_WARNING_THRESHOLD = 250
 
 
 @dataclass(frozen=True)
@@ -421,10 +422,15 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
             warning = _write_labeling_poscar(source_path, poscar_path)
             if warning:
                 warnings.append(warning)
-            resources = _job_resources(
-                config,
-                atom_count=_labeling_atom_count(record, poscar_path),
+            atom_count = _labeling_atom_count(record, poscar_path)
+            warning = _large_scf_atom_count_warning(
+                source_path,
+                poscar_path,
+                atom_count,
             )
+            if warning:
+                warnings.append(warning)
+            resources = _job_resources(config, atom_count=atom_count)
             backup_path = _copy_labeling_source_backup(
                 config.labeling.options,
                 source_path,
@@ -813,6 +819,19 @@ def _labeling_atom_count(record: dict[str, Any], poscar_path: Path) -> int | Non
         return len(load_structure(poscar_path))
     except Exception:
         return None
+
+
+def _large_scf_atom_count_warning(
+    source_path: Path,
+    poscar_path: Path,
+    atom_count: int | None,
+) -> str | None:
+    if atom_count is None or atom_count <= LARGE_SCF_ATOM_WARNING_THRESHOLD:
+        return None
+    return (
+        f"Large SCF job: {source_path} -> {poscar_path} has {atom_count} atoms; "
+        "single-point calculation may be expensive."
+    )
 
 
 def _write_potcar_from_library(

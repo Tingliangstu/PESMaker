@@ -300,6 +300,90 @@ jobs:
     ).read_text(encoding="utf-8") == source_text
 
 
+def test_labeling_setup_warns_for_large_scf_jobs(tmp_path, capsys):
+    """Large SCF inputs should be called out before users submit jobs."""
+    from ase import Atoms
+    from ase.io import write
+
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "large"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.xyz"
+    atoms = Atoms(
+        "Te251",
+        positions=[(float(index), 0.0, 0.0) for index in range(251)],
+        cell=[300.0, 10.0, 10.0],
+        pbc=True,
+    )
+    write(source_path, atoms, format="extxyz")
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path), "atom_count": 251}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: large_scf_warning
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  cores_cpu: 36
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    poscar = tmp_path / "labeling" / "large" / "structure_000000" / "POSCAR"
+    assert "Warnings:" in output
+    assert f"Large SCF job: {source_path}" in output
+    assert f"-> {poscar}" in output
+    assert "has 251 atoms" in output
+    assert "single-point calculation may be expensive" in output
+
+
+def test_labeling_setup_does_not_warn_for_250_atom_scf_jobs(tmp_path, capsys):
+    """The large-job warning should only trigger above 250 atoms."""
+    from ase import Atoms
+    from ase.io import write
+
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "medium"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.xyz"
+    atoms = Atoms(
+        "Te250",
+        positions=[(float(index), 0.0, 0.0) for index in range(250)],
+        cell=[300.0, 10.0, 10.0],
+        pbc=True,
+    )
+    write(source_path, atoms, format="extxyz")
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path), "atom_count": 250}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: no_large_scf_warning
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  cores_cpu: 36
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Warnings:" not in output
+    assert "Large SCF job" not in output
+
+
 def test_labeling_setup_normalizes_literal_submit_template(tmp_path):
     """User submit scripts should inherit generated job names and resources."""
     generated_dir = tmp_path / "generated"
