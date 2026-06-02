@@ -68,9 +68,7 @@ class PerturbationSettings:
             atom_pert_style=str(data.get("atom_pert_style", "normal")),
             atom_pert_prob=float(data.get("atom_pert_prob", 1.0)),
             seed=int(data["seed"]) if data.get("seed") is not None else None,
-            include_pristine=bool(
-                data.get("include_pristine", data.get("include_unperturbed", False))
-            ),
+            include_pristine=bool(data.get("include_pristine", False)),
         )
 
 
