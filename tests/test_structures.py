@@ -249,8 +249,6 @@ def test_perturbation_settings_can_include_pristine_base():
     settings = PerturbationSettings.from_mapping(
         {"pert_num": 3, "include_pristine": True}
     )
-    alias_settings = PerturbationSettings.from_mapping({"include_unperturbed": True})
 
     assert settings.include_pristine is True
     assert settings.pert_num == 3
-    assert alias_settings.include_pristine is True

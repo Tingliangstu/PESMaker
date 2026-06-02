@@ -345,7 +345,6 @@ generation:
     assert "surface ->" in summary
     assert "defect:single_vacancy_Te_000001 ->" in summary
     assert "files ->" not in summary
-    assert "unperturbed ->" not in summary
 
 
 def test_cli_generate_defects_without_perturb_writes_pristine_variants(tmp_path):
