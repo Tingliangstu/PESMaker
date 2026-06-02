@@ -106,7 +106,9 @@ These values generate moderately distorted structures around the starting
 geometry and are useful for preparing initial DFT single-point candidates.
 The expanded pristine structure is always written as
 `pristine_<supercell>.<format>`, for example `pristine_3x3x3.vasp`.
-`include_pristine: true` also writes one `pristine_<supercell>.<format>` file
-for every generated defect variant when random perturbations are enabled.
-Without random perturbations, every generated variant is written once as a
-pristine structure.
+`include_pristine: true` also writes one pristine file for every generated
+defect variant when random perturbations are enabled. Defect-variant pristine
+files append the variant name, for example
+`pristine_3x3x3_single_vacancy_Te_000001.vasp` or
+`pristine_3x3x1_line_defect_Te_const_a_000002.vasp`. Without random
+perturbations, every generated variant is written once as a pristine structure.

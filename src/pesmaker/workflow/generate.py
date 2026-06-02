@@ -154,7 +154,11 @@ def _generate_task_structures(
             variant_dir.mkdir(parents=True, exist_ok=True)
             generation_type = _generation_type(task, variant.name)
             if _should_write_pristine_variant(variant.name, settings):
-                output_path = variant_dir / _pristine_filename(task.supercell, suffix)
+                output_path = variant_dir / _pristine_filename(
+                    task.supercell,
+                    variant.name,
+                    suffix,
+                )
                 write_structure(variant.atoms, output_path, fmt=ase_format)
                 item = GeneratedStructure(
                     source=structure.path,
@@ -199,9 +203,15 @@ def _should_write_pristine_variant(
     return variant == "pristine" or settings.include_pristine or settings.pert_num == 0
 
 
-def _pristine_filename(supercell: tuple[int, int, int], suffix: str) -> str:
+def _pristine_filename(
+    supercell: tuple[int, int, int],
+    variant: str,
+    suffix: str,
+) -> str:
     label = "x".join(str(value) for value in supercell)
-    return f"pristine_{label}.{suffix}"
+    if variant == "pristine":
+        return f"pristine_{label}.{suffix}"
+    return f"pristine_{label}_{variant}.{suffix}"
 
 
 def _structure_output_dirs(

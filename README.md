@@ -94,6 +94,9 @@ generation:
   output_dir: generated
 ```
 
+For defect variants, the pristine file also includes the variant name, for
+example `pristine_3x3x3_single_vacancy_Te_000001.vasp`.
+
 ```yaml
 project: Te_Pd_rich_defect_md
 

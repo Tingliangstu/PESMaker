@@ -32,7 +32,8 @@ The current implementation writes structure files and a `manifest.jsonl` file in
 the configured `generation.output_dir`. Omit `generation.perturb`, or set
 `generation.perturb.pert_num: 0`, when only expanded pristine structures are
 needed. Pristine outputs are named with the supercell, such as
-`pristine_3x3x3.vasp`.
+`pristine_3x3x3.vasp`. Pristine files for defect variants also append the
+variant name, such as `pristine_3x3x3_single_vacancy_Te_000001.vasp`.
 
 ## `pesmaker sample-setup`
 

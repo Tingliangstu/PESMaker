@@ -312,7 +312,9 @@ pristine/
 ```
 
 When no random perturbations are requested, every generated variant is written
-once as `pristine_<supercell>.vasp`. When random perturbations are requested, set
+once as a named pristine file. The true pristine variant uses
+`pristine_<supercell>.vasp`; defect variants append the variant name. When
+random perturbations are requested, set
 `include_pristine: true` when every defect variant should also receive its own
 named pristine file:
 
@@ -327,11 +329,15 @@ Then a defect folder looks like:
 
 ```text
 single_vacancy_Te_000001/
-  pristine_3x3x3.vasp
+  pristine_3x3x3_single_vacancy_Te_000001.vasp
   defect_000000.vasp
   defect_000001.vasp
   defect_000002.vasp
 ```
+
+The true pristine variant keeps the short name, such as
+`pristine_3x3x3.vasp`. Defect variants append the variant name so the file
+still identifies the defect if it is copied out of its folder.
 
 ### Defects
 
@@ -526,6 +532,9 @@ file, so each defect family above becomes:
 ```text
 single vacancies: 5 variant(s), 20 structure(s) (5 pristine, 15 perturbed)
 ```
+
+The corresponding defect files are named with both the supercell and variant,
+for example `pristine_3x3x1_line_defect_Te_const_b_000001.vasp`.
 
 ## `sample-setup`: Prepare MD Sampling Jobs
 

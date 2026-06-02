@@ -317,7 +317,16 @@ generation:
         output_dir / "te2d" / "single_vacancy_Te_000001" / "defect_000000.vasp"
     ).exists()
     assert (
-        output_dir / "te2d" / "single_vacancy_Te_000001" / "pristine_1x1x1.vasp"
+        output_dir
+        / "te2d"
+        / "single_vacancy_Te_000001"
+        / "pristine_1x1x1_single_vacancy_Te_000001.vasp"
+    ).exists()
+    assert (
+        output_dir
+        / "te2d"
+        / "line_defect_Te_const_a_000001"
+        / "pristine_1x1x1_line_defect_Te_const_a_000001.vasp"
     ).exists()
     assert len(list(output_dir.glob("te2d/*/*.vasp"))) == 8
     summary = (output_dir / "generation_summary.txt").read_text(encoding="utf-8")
@@ -380,11 +389,17 @@ generation:
 
     assert (output_dir / "te" / "pristine" / "pristine_1x1x1.vasp").exists()
     assert (
-        output_dir / "te" / "single_vacancy_Te_000001" / "pristine_1x1x1.vasp"
+        output_dir
+        / "te"
+        / "single_vacancy_Te_000001"
+        / "pristine_1x1x1_single_vacancy_Te_000001.vasp"
     ).exists()
     assert set(output_dir.glob("te/**/*.vasp")) == {
         output_dir / "te" / "pristine" / "pristine_1x1x1.vasp",
-        output_dir / "te" / "single_vacancy_Te_000001" / "pristine_1x1x1.vasp",
+        output_dir
+        / "te"
+        / "single_vacancy_Te_000001"
+        / "pristine_1x1x1_single_vacancy_Te_000001.vasp",
     }
     records = [
         json.loads(line)
