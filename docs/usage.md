@@ -35,6 +35,20 @@ pesmaker submit run.yaml             # submit SCF/VASP jobs
 pesmaker collect run.yaml
 ```
 
+Supercell-only generation does not need a `perturb` section:
+
+```yaml
+project: Te_bulk_mp
+
+structures:
+  include:
+    - initial_structures/*.cif
+
+generation:
+  supercell: [3, 3, 3]
+  output_dir: generated
+```
+
 Minimal structure-generation and SCF setup example:
 
 ```yaml

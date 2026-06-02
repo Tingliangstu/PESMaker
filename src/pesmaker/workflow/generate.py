@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
-"""Structure generation workflow for supercells and perturbations."""
+"""Structure generation workflow for supercells and optional perturbations."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ class GenerateResult:
 
 
 def generate_structures(config: PESMakerConfig) -> GenerateResult:
-    """Generate perturbed structures from every configured input structure.
+    """Generate structures from every configured input structure.
 
     Args:
         config: Validated PESMaker configuration.
@@ -196,7 +196,7 @@ def _should_write_unperturbed_variant(
     variant: str,
     settings: PerturbationSettings,
 ) -> bool:
-    return variant == "pristine" or settings.include_pristine
+    return variant == "pristine" or settings.include_pristine or settings.pert_num == 0
 
 
 def _structure_output_dirs(

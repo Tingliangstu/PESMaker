@@ -57,7 +57,7 @@ PESMaker should be different:
 MVP 1 should not try to implement all planned science modules. It should support:
 
 1. read one or more initial structures;
-2. generate supercells and perturbations;
+2. generate supercells and optional perturbations;
 3. create SCF calculation folders from a user template;
 4. write a manifest of all generated calculation tasks;
 5. provide a CLI that can validate configs and prepare workflow stages.

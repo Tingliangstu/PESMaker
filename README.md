@@ -15,8 +15,8 @@ and training inputs.
 PESMaker helps you move from structures to MLIP training data without turning
 the workflow into one large hidden script:
 
-- generate supercells, surface slabs, vacancies, line defects, and perturbed
-  structures from CIF, POSCAR, XYZ, and other ASE-readable inputs;
+- generate supercells, surface slabs, vacancies, line defects, and optional
+  perturbed structures from CIF, POSCAR, XYZ, and other ASE-readable inputs;
 - keep every generated structure traceable through `manifest.jsonl` and
   human-readable summaries;
 - prepare VASP SCF folders with `POSCAR`, `INCAR`, optional `POTCAR`, and
@@ -38,7 +38,7 @@ go straight to VASP SCF labeling:
 
 ```bash
 pesmaker validate run.yaml           # check YAML syntax and required fields
-pesmaker generate run.yaml           # build supercells, surfaces, defects, and perturbations
+pesmaker generate run.yaml           # build supercells, surfaces, defects, and optional perturbations
 pesmaker scf-setup run.yaml          # prepare VASP SCF folders with POSCAR/INCAR/submit.sh
 pesmaker submit run.yaml --dry-run   # preview SCF/VASP submission commands
 pesmaker submit run.yaml             # submit prepared SCF/VASP jobs
@@ -68,7 +68,7 @@ Each stage writes normal files and folders that can be inspected, edited, and
 rerun independently.
 
 ```text
-generated/   # supercells, surfaces, defects, perturbations
+generated/   # supercells, surfaces, defects, optional perturbations
 sampling/    # GPUMD MD job folders and submit scripts
 selected/    # representative frames selected from trajectories
 labeling/    # VASP SCF calculation folders
@@ -77,6 +77,21 @@ training/    # NEP training input folder and submit script
 ```
 
 ## Example Config
+
+For pure supercell expansion, omit the `perturb` section. PESMaker writes one
+expanded `unperturbed.vasp` per input structure:
+
+```yaml
+project: Te_bulk_mp
+
+structures:
+  include:
+    - initial_structures/*.cif
+
+generation:
+  supercell: [3, 3, 3]
+  output_dir: generated
+```
 
 ```yaml
 project: Te_Pd_rich_defect_md

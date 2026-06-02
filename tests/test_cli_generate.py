@@ -122,6 +122,65 @@ generation:
     assert output.endswith("\n\n")
 
 
+def test_cli_generate_omitted_perturb_writes_only_unperturbed_supercell(
+    tmp_path, capsys
+):
+    """A config without `perturb` should only expand and write the structure."""
+    cif_path = tmp_path / "te.cif"
+    cif_path.write_text(
+        """data_te
+_symmetry_space_group_name_H-M    'P 1'
+_cell_length_a    3.0
+_cell_length_b    3.0
+_cell_length_c    3.0
+_cell_angle_alpha 90
+_cell_angle_beta  90
+_cell_angle_gamma 90
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+Te1 Te 0 0 0
+""",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "generated"
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: test_generate
+structures:
+  include:
+    - {cif_path.as_posix()}
+generation:
+  supercell: [2, 2, 1]
+  output_dir: {output_dir.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["generate", str(config_path)])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert (output_dir / "te" / "unperturbed.vasp").exists()
+    assert list(output_dir.glob("te/perturb_*.vasp")) == []
+    records = [
+        json.loads(line)
+        for line in (output_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert len(records) == 1
+    assert records[0]["generation_type"] == "unperturbed"
+    assert records[0]["atom_count"] == 4
+    assert "Structure generation complete." in output
+    assert "Perturbation generation complete." not in output
+    assert "  - 1 input(s) -> 1 structure(s), supercell=(2, 2, 1)" in output
+    assert "      pristine: 1 structure(s) (1 unperturbed)" in output
+
+
 def test_cli_generate_explains_scf_only_config(tmp_path, capsys):
     """SCF-only configs should point users at the SCF setup command."""
     config_path = tmp_path / "sub.yaml"
@@ -287,6 +346,58 @@ generation:
     assert "defect:single_vacancy_Te_000001 ->" in summary
     assert "files ->" not in summary
     assert "pristine ->" not in summary
+
+
+def test_cli_generate_defects_without_perturb_writes_unperturbed_variants(tmp_path):
+    """Defect-only generation should not require random perturbation settings."""
+    from ase import Atoms
+    from ase.io import write
+
+    atoms = Atoms(
+        "Te2",
+        positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+        cell=[3.0, 3.0, 3.0],
+        pbc=True,
+    )
+    structure_path = tmp_path / "te.xyz"
+    write(structure_path, atoms, format="extxyz")
+    output_dir = tmp_path / "generated"
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: defect_no_perturb
+structures:
+  - {structure_path.as_posix()}
+generation:
+  output_dir: {output_dir.as_posix()}
+  defects:
+    single_vacancies:
+      elements: [Te]
+      max_count: 1
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["generate", str(config_path)]) == 0
+
+    assert (output_dir / "te" / "pristine" / "unperturbed.vasp").exists()
+    assert (
+        output_dir / "te" / "single_vacancy_Te_000001" / "unperturbed.vasp"
+    ).exists()
+    assert set(output_dir.glob("te/**/*.vasp")) == {
+        output_dir / "te" / "pristine" / "unperturbed.vasp",
+        output_dir / "te" / "single_vacancy_Te_000001" / "unperturbed.vasp",
+    }
+    records = [
+        json.loads(line)
+        for line in (output_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert [record["variant"] for record in records] == [
+        "pristine",
+        "single_vacancy_Te_000001",
+    ]
+    assert {record["generation_type"] for record in records} == {"unperturbed"}
 
 
 def test_cli_generate_writes_multiple_task_folders(tmp_path):

@@ -22,14 +22,16 @@ pesmaker validate examples/perturb.yaml
 
 ## `pesmaker generate`
 
-Generate supercells and perturbed structures:
+Generate supercells, surfaces, defects, and optional perturbed structures:
 
 ```bash
 pesmaker generate examples/perturb.yaml
 ```
 
 The current implementation writes structure files and a `manifest.jsonl` file in
-the configured `generation.output_dir`.
+the configured `generation.output_dir`. Omit `generation.perturb`, or set
+`generation.perturb.pert_num: 0`, when only expanded unperturbed structures are
+needed.
 
 ## `pesmaker sample-setup`
 

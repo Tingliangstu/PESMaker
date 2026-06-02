@@ -111,6 +111,32 @@ def test_perturb_structures_keeps_atom_count_and_changes_cell():
     assert not np.allclose(generated[0].cell.array, atoms.cell.array)
 
 
+def test_default_perturbation_settings_do_not_generate_random_structures():
+    """Omitted perturb settings should leave generation in supercell-only mode."""
+    from ase import Atoms
+
+    atoms = Atoms("Te", positions=[[0.0, 0.0, 0.0]], cell=[3.0, 3.0, 3.0], pbc=True)
+    settings = PerturbationSettings.from_mapping({})
+
+    assert settings.pert_num == 0
+    assert list(perturb_structures(atoms, settings)) == []
+
+
+def test_negative_perturbation_count_is_rejected():
+    """Invalid perturbation counts should fail instead of silently doing nothing."""
+    from ase import Atoms
+
+    atoms = Atoms("Te", positions=[[0.0, 0.0, 0.0]], cell=[3.0, 3.0, 3.0], pbc=True)
+    settings = PerturbationSettings.from_mapping({"pert_num": -1})
+
+    try:
+        list(perturb_structures(atoms, settings))
+    except ValueError as exc:
+        assert "pert_num can not be negative" in str(exc)
+    else:
+        raise AssertionError("negative pert_num should fail")
+
+
 def test_surface_and_defect_variants_are_generated():
     """2D surface and defect settings should create concrete variants."""
     from ase import Atoms

@@ -31,7 +31,7 @@ flowchart TD
     G --> S["PESMakerConfig"]
     S --> T["validate: print OK"]
     S --> X["generate_structures(config)"]
-    X --> Y["load_structure -> make_supercell -> perturb_structures -> write_structure"]
+    X --> Y["load_structure -> make_supercell -> variants -> optional perturb -> write_structure"]
 ```
 
 ## Module dependencies
@@ -61,7 +61,7 @@ flowchart LR
 ```mermaid
 flowchart TD
     A["input structures"] --> B["structures: read, normalize, supercell"]
-    B --> C["generators: perturb, defects, surfaces, reactions"]
+    B --> C["generators: surfaces, defects, optional perturb, reactions"]
     C --> D["samplers: GPUMD/NEP, LAMMPS/MACE"]
     D --> E["labelers: VASP first, CP2K later"]
     E --> F["jobs: local/Slurm/PBS submit and monitor"]

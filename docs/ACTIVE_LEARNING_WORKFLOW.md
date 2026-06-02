@@ -15,7 +15,7 @@ without rerunning the whole pipeline.
 | --- | --- | --- |
 | `pesmaker init` | Write a starter YAML file | `pesmaker.yaml` or a chosen path |
 | `pesmaker validate` | Check YAML syntax and schema | terminal validation result |
-| `pesmaker generate` | Build supercells, surfaces, defects, and perturbations | `generated/` and `manifest.jsonl` |
+| `pesmaker generate` | Build supercells, surfaces, defects, and optional perturbations | `generated/` and `manifest.jsonl` |
 | `pesmaker sample-setup` | Prepare MD sampling jobs | `sampling/` |
 | `pesmaker select` | Select representative MD frames | `selected/` |
 | `pesmaker scf-setup` | Prepare VASP SCF folders | `labeling/` |
@@ -55,7 +55,7 @@ pesmaker submit run.yaml --stage training   # submit training jobs
 Typical stage directories are:
 
 ```text
-generated/   # generated supercells, surfaces, defects, perturbations
+generated/   # generated supercells, surfaces, defects, optional perturbations
 sampling/    # MD job folders with model.xyz, run.in, submit.sh
 selected/    # selected MD frames and manifest
 labeling/    # VASP SCF folders with POSCAR, INCAR, POTCAR, submit.sh
@@ -148,7 +148,7 @@ generated structures, a machine-readable `manifest.jsonl`, and a human-readable
 Inside each generation task, operations happen in this order:
 
 ```text
-input structure -> supercell -> surface -> defects -> perturb
+input structure -> supercell -> surface -> defects -> optional perturb
 ```
 
 ### Inputs
@@ -224,6 +224,23 @@ supercell: [4, 4, 1]
 For a 2D material, a common choice is `[n, n, 1]`. For a bulk seed structure,
 use all three directions as needed.
 
+For pure supercell expansion, omit `perturb` entirely:
+
+```yaml
+project: Te_bulk_mp
+
+structures:
+  include:
+    - initial_structures/*.cif
+
+generation:
+  supercell: [3, 3, 3]
+  output_dir: generated
+```
+
+This writes one expanded `unperturbed.vasp` file for each input structure and
+does not create `perturb_*.vasp` files.
+
 ### Surface Slabs and Vacuum
 
 For slab or 2D systems:
@@ -251,7 +268,8 @@ about 34 Angstrom.
 
 ### Perturbations
 
-Perturbation settings live under `perturb`:
+Perturbation settings live under `perturb`. Random perturbations are disabled
+unless `pert_num` is greater than zero:
 
 ```yaml
 perturb:
@@ -266,6 +284,7 @@ perturb:
 Key fields:
 
 - `pert_num`: number of random perturbations generated from each variant.
+  Default is `0`.
 - `cell_pert_fraction`: random cell strain amplitude.
 - `atom_pert_distance`: atomic displacement scale in Angstrom.
 - `atom_pert_style`: `normal`, `uniform`, or `const`.
@@ -273,8 +292,8 @@ Key fields:
 - `seed`: reproducible random seed.
 - `format`: `vasp` or `extxyz`.
 
-The pristine variant always gets one unperturbed file before random
-perturbations:
+The pristine variant always gets one unperturbed file. When `pert_num` is
+greater than zero, the random perturbation files are written after it:
 
 ```text
 pristine/
@@ -292,8 +311,10 @@ pristine/
   surface_000001.vasp
 ```
 
-Set `include_pristine: true` when every defect variant should also receive its
-own unperturbed file:
+When no random perturbations are requested, every generated variant is written
+once as `unperturbed.vasp`. When random perturbations are requested, set
+`include_pristine: true` when every defect variant should also receive its own
+unperturbed file:
 
 ```yaml
 perturb:
@@ -918,7 +939,7 @@ Implemented capabilities:
 
 - multi-task structure generation;
 - supercells, 2D vacuum setup, pristine structures, single vacancies, double
-  vacancies, line defects, and perturbations;
+  vacancies, line defects, and optional perturbations;
 - GPUMD sampling setup;
 - farthest point trajectory-frame selection;
 - VASP SCF folder setup with submit scripts and optional POTCAR assembly;

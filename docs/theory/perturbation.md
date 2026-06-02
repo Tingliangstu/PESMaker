@@ -88,7 +88,10 @@ PESMaker currently supports three atomic perturbation styles:
 - `uniform`: random direction with radius sampled uniformly inside a sphere.
 - `const`: random direction with fixed displacement length.
 
-The default parameters mirror a common practical setting:
+Random perturbations are opt-in. If `generation.perturb` is omitted, or
+`pert_num` is `0`, PESMaker writes only the expanded unperturbed structures.
+
+A practical explicit perturbation setting is:
 
 ```yaml
 perturb:
@@ -103,4 +106,6 @@ These values generate moderately distorted structures around the starting
 geometry and are useful for preparing initial DFT single-point candidates.
 The expanded, unperturbed pristine structure is always written as
 `unperturbed.<format>`. `include_pristine: true` also writes one
-`unperturbed.<format>` file for every generated defect variant.
+`unperturbed.<format>` file for every generated defect variant when random
+perturbations are enabled. Without random perturbations, every generated
+variant is written once as an unperturbed structure.

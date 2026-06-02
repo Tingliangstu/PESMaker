@@ -8,7 +8,7 @@ It supports a staged workflow:
 
 ```text
 initial structures
-  -> supercells, surfaces, defects, perturbations
+  -> supercells, surfaces, defects, optional perturbations
   -> optional GPUMD sampling and frame selection
   -> VASP SCF labeling setup and submission
   -> extxyz dataset collection

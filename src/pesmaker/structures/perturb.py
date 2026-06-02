@@ -28,8 +28,9 @@ class PerturbationSettings:
     """Parameters controlling cell and atomic coordinate perturbations.
 
     Attributes:
-        pert_num: Number of perturbed structures to generate per input
-            structure.
+        pert_num: Number of randomly perturbed structures to generate per input
+            structure. The default is zero so generation can be used for
+            supercell-only structure expansion.
         cell_pert_fraction: Maximum absolute cell perturbation fraction.
         atom_pert_distance: Atomic displacement scale in Angstrom.
         atom_pert_style: Distribution used for atomic displacement. Supported
@@ -38,10 +39,10 @@ class PerturbationSettings:
         seed: Optional random seed for reproducible perturbations.
         include_pristine: Whether to also write an unperturbed structure for
             every generated variant. The pristine variant is always written
-            once before random perturbations in generation workflows.
+            once in generation workflows.
     """
 
-    pert_num: int = 1
+    pert_num: int = 0
     cell_pert_fraction: float = 0.03
     atom_pert_distance: float = 0.1
     atom_pert_style: str = "normal"
@@ -61,7 +62,7 @@ class PerturbationSettings:
         """
         data = data or {}
         return cls(
-            pert_num=int(data.get("pert_num", 1)),
+            pert_num=int(data.get("pert_num", 0)),
             cell_pert_fraction=float(data.get("cell_pert_fraction", 0.03)),
             atom_pert_distance=float(data.get("atom_pert_distance", 0.1)),
             atom_pert_style=str(data.get("atom_pert_style", "normal")),
@@ -156,6 +157,9 @@ def perturb_structures(atoms, settings: PerturbationSettings) -> Iterable:
     Yields:
         Perturbed ASE `Atoms` objects.
     """
+    if settings.pert_num < 0:
+        raise ValueError("pert_num can not be negative")
+
     rng = np.random.default_rng(settings.seed)
     for _ in range(settings.pert_num):
         yield perturb_structure(atoms, settings, rng=rng)

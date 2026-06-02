@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
 
     generate_parser = subparsers.add_parser(
         "generate",
-        help="Generate supercells and perturbed structures.",
+        help="Generate supercells and optional perturbations.",
         description="Generate structures and write a manifest for later stages.",
     )
     _add_config_argument(generate_parser)
@@ -330,7 +330,7 @@ jobs:
 
 
 def _print_generate_summary(result: GenerateResult) -> None:
-    """Print a concise summary of generated perturbation outputs.
+    """Print a concise summary of generated structure outputs.
 
     Args:
         result: Completed generation result returned by the workflow layer.
