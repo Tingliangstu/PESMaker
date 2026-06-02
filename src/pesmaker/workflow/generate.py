@@ -153,8 +153,8 @@ def _generate_task_structures(
             )
             variant_dir.mkdir(parents=True, exist_ok=True)
             generation_type = _generation_type(task, variant.name)
-            if _should_write_unperturbed_variant(variant.name, settings):
-                output_path = variant_dir / f"unperturbed.{suffix}"
+            if _should_write_pristine_variant(variant.name, settings):
+                output_path = variant_dir / _pristine_filename(task.supercell, suffix)
                 write_structure(variant.atoms, output_path, fmt=ase_format)
                 item = GeneratedStructure(
                     source=structure.path,
@@ -163,7 +163,7 @@ def _generate_task_structures(
                     supercell=task.supercell,
                     variant=variant.name,
                     variant_description=variant.description,
-                    generation_type="unperturbed",
+                    generation_type="pristine",
                     index=0,
                     atom_count=len(variant.atoms),
                 )
@@ -192,11 +192,16 @@ def _generate_task_structures(
     return generated
 
 
-def _should_write_unperturbed_variant(
+def _should_write_pristine_variant(
     variant: str,
     settings: PerturbationSettings,
 ) -> bool:
     return variant == "pristine" or settings.include_pristine or settings.pert_num == 0
+
+
+def _pristine_filename(supercell: tuple[int, int, int], suffix: str) -> str:
+    label = "x".join(str(value) for value in supercell)
+    return f"pristine_{label}.{suffix}"
 
 
 def _structure_output_dirs(
@@ -381,7 +386,7 @@ def format_generate_summary(
 
 def _generation_complete_title(result: GenerateResult) -> str:
     generation_types = {structure.generation_type for structure in result.structures}
-    if generation_types <= {"perturb", "unperturbed"} and "perturb" in generation_types:
+    if generation_types <= {"perturb", "pristine"} and "perturb" in generation_types:
         return "Perturbation generation complete"
     if generation_types == {"surface"}:
         return "Surface generation complete"
@@ -475,12 +480,12 @@ def _variant_family_order() -> tuple[str, ...]:
 
 def _summary_type_counts(type_counts: dict[str, int]) -> str:
     ordered = []
-    for generation_type in ("unperturbed", "surface", "perturb", "defect"):
+    for generation_type in ("pristine", "surface", "perturb", "defect"):
         count = type_counts.get(generation_type)
         if count:
             ordered.append((generation_type, count))
     for generation_type, count in type_counts.items():
-        if generation_type not in {"unperturbed", "surface", "perturb", "defect"}:
+        if generation_type not in {"pristine", "surface", "perturb", "defect"}:
             ordered.append((generation_type, count))
     return ", ".join(
         f"{count} {_summary_generation_type_label(generation_type)}"
@@ -489,8 +494,8 @@ def _summary_type_counts(type_counts: dict[str, int]) -> str:
 
 
 def _summary_generation_type_label(generation_type: str) -> str:
-    if generation_type == "unperturbed":
-        return "unperturbed"
+    if generation_type == "pristine":
+        return "pristine"
     return "perturbed"
 
 

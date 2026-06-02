@@ -238,8 +238,8 @@ generation:
   output_dir: generated
 ```
 
-This writes one expanded `unperturbed.vasp` file for each input structure and
-does not create `perturb_*.vasp` files.
+This writes one expanded `pristine_3x3x3.vasp` file for each input structure
+and does not create `perturb_*.vasp` files.
 
 ### Surface Slabs and Vacuum
 
@@ -292,12 +292,12 @@ Key fields:
 - `seed`: reproducible random seed.
 - `format`: `vasp` or `extxyz`.
 
-The pristine variant always gets one unperturbed file. When `pert_num` is
+The pristine variant always gets one named pristine file. When `pert_num` is
 greater than zero, the random perturbation files are written after it:
 
 ```text
 pristine/
-  unperturbed.vasp
+  pristine_3x3x3.vasp
   perturb_000000.vasp
   perturb_000001.vasp
 ```
@@ -306,15 +306,15 @@ For surface tasks, the perturbed pristine files use the `surface_` prefix:
 
 ```text
 pristine/
-  unperturbed.vasp
+  pristine_3x3x1.vasp
   surface_000000.vasp
   surface_000001.vasp
 ```
 
 When no random perturbations are requested, every generated variant is written
-once as `unperturbed.vasp`. When random perturbations are requested, set
+once as `pristine_<supercell>.vasp`. When random perturbations are requested, set
 `include_pristine: true` when every defect variant should also receive its own
-unperturbed file:
+named pristine file:
 
 ```yaml
 perturb:
@@ -327,7 +327,7 @@ Then a defect folder looks like:
 
 ```text
 single_vacancy_Te_000001/
-  unperturbed.vasp
+  pristine_3x3x3.vasp
   defect_000000.vasp
   defect_000001.vasp
   defect_000002.vasp
@@ -497,7 +497,7 @@ generated/
   surface_331/
     Te-mp-19/
       pristine/
-        unperturbed.vasp
+        pristine_3x3x1.vasp
         surface_000000.vasp
       single_vacancy_Te_000001/
         defect_000000.vasp
@@ -514,17 +514,17 @@ For `max_count: 5` and `pert_num: 3`, the summary is shaped like:
 
 ```text
 per input:
-  pristine: 4 structure(s) (1 unperturbed, 3 perturbed)
+  pristine: 4 structure(s) (1 pristine, 3 perturbed)
   single vacancies: 5 variant(s), 15 structure(s) (15 perturbed)
   double vacancies: 5 variant(s), 15 structure(s) (15 perturbed)
   line defects: 5 variant(s), 15 structure(s) (15 perturbed)
 ```
 
-With `include_pristine: true`, each defect variant also gets one unperturbed
+With `include_pristine: true`, each defect variant also gets one named pristine
 file, so each defect family above becomes:
 
 ```text
-single vacancies: 5 variant(s), 20 structure(s) (5 unperturbed, 15 perturbed)
+single vacancies: 5 variant(s), 20 structure(s) (5 pristine, 15 perturbed)
 ```
 
 ## `sample-setup`: Prepare MD Sampling Jobs

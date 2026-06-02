@@ -245,7 +245,7 @@ def test_random_vacancies_are_seeded_and_reproducible():
 
 
 def test_perturbation_settings_can_include_pristine_base():
-    """Perturbation settings can request an unperturbed generated structure."""
+    """Perturbation settings can request a pristine generated structure."""
     settings = PerturbationSettings.from_mapping(
         {"pert_num": 3, "include_pristine": True}
     )

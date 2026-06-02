@@ -85,7 +85,7 @@ generation:
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (output_dir / "te" / "unperturbed.vasp").exists()
+    assert (output_dir / "te" / "pristine_4x4x4.vasp").exists()
     assert (output_dir / "te" / "perturb_000000.vasp").exists()
     assert (output_dir / "te" / "perturb_000001.vasp").exists()
     assert (output_dir / "manifest.jsonl").exists()
@@ -97,7 +97,7 @@ generation:
         ).splitlines()
     ]
     assert [record["generation_type"] for record in records] == [
-        "unperturbed",
+        "pristine",
         "perturb",
         "perturb",
     ]
@@ -111,7 +111,7 @@ generation:
     assert "Generation tasks:" in output
     assert "  - 1 input(s) -> 3 structure(s), supercell=(4, 4, 4)" in output
     assert "    per input:" in output
-    assert "      pristine: 3 structure(s) (1 unperturbed, 2 perturbed)" in output
+    assert "      pristine: 3 structure(s) (1 pristine, 2 perturbed)" in output
     assert "    details:" not in output
     assert f"      - input: {cif_path}" not in output
     assert "        generated: 2 perturb structure(s)" not in output
@@ -122,7 +122,7 @@ generation:
     assert output.endswith("\n\n")
 
 
-def test_cli_generate_omitted_perturb_writes_only_unperturbed_supercell(
+def test_cli_generate_omitted_perturb_writes_only_pristine_supercell(
     tmp_path, capsys
 ):
     """A config without `perturb` should only expand and write the structure."""
@@ -164,7 +164,7 @@ generation:
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (output_dir / "te" / "unperturbed.vasp").exists()
+    assert (output_dir / "te" / "pristine_2x2x1.vasp").exists()
     assert list(output_dir.glob("te/perturb_*.vasp")) == []
     records = [
         json.loads(line)
@@ -173,12 +173,12 @@ generation:
         ).splitlines()
     ]
     assert len(records) == 1
-    assert records[0]["generation_type"] == "unperturbed"
+    assert records[0]["generation_type"] == "pristine"
     assert records[0]["atom_count"] == 4
     assert "Structure generation complete." in output
     assert "Perturbation generation complete." not in output
     assert "  - 1 input(s) -> 1 structure(s), supercell=(2, 2, 1)" in output
-    assert "      pristine: 1 structure(s) (1 unperturbed)" in output
+    assert "      pristine: 1 structure(s) (1 pristine)" in output
 
 
 def test_cli_generate_explains_scf_only_config(tmp_path, capsys):
@@ -311,13 +311,13 @@ generation:
     exit_code = main(["generate", str(config_path)])
 
     assert exit_code == 0
-    assert (output_dir / "te2d" / "pristine" / "unperturbed.vasp").exists()
+    assert (output_dir / "te2d" / "pristine" / "pristine_1x1x1.vasp").exists()
     assert (output_dir / "te2d" / "pristine" / "surface_000000.vasp").exists()
     assert (
         output_dir / "te2d" / "single_vacancy_Te_000001" / "defect_000000.vasp"
     ).exists()
     assert (
-        output_dir / "te2d" / "single_vacancy_Te_000001" / "unperturbed.vasp"
+        output_dir / "te2d" / "single_vacancy_Te_000001" / "pristine_1x1x1.vasp"
     ).exists()
     assert len(list(output_dir.glob("te2d/*/*.vasp"))) == 8
     summary = (output_dir / "generation_summary.txt").read_text(encoding="utf-8")
@@ -326,18 +326,18 @@ generation:
     assert "Generation tasks:" in summary
     assert "Input structures" not in summary
     assert "    per input:" in summary
-    assert "      pristine: 2 structure(s) (1 unperturbed, 1 perturbed)" in summary
+    assert "      pristine: 2 structure(s) (1 pristine, 1 perturbed)" in summary
     assert (
         "      single vacancies: 1 variant(s), 2 structure(s) "
-        "(1 unperturbed, 1 perturbed)"
+        "(1 pristine, 1 perturbed)"
     ) in summary
     assert (
         "      double vacancies: 1 variant(s), 2 structure(s) "
-        "(1 unperturbed, 1 perturbed)"
+        "(1 pristine, 1 perturbed)"
     ) in summary
     assert (
         "      line defects: 1 variant(s), 2 structure(s) "
-        "(1 unperturbed, 1 perturbed)"
+        "(1 pristine, 1 perturbed)"
     ) in summary
     assert "    details:" in summary
     assert f"      - input: {structure_path}" in summary
@@ -345,10 +345,10 @@ generation:
     assert "surface ->" in summary
     assert "defect:single_vacancy_Te_000001 ->" in summary
     assert "files ->" not in summary
-    assert "pristine ->" not in summary
+    assert "unperturbed ->" not in summary
 
 
-def test_cli_generate_defects_without_perturb_writes_unperturbed_variants(tmp_path):
+def test_cli_generate_defects_without_perturb_writes_pristine_variants(tmp_path):
     """Defect-only generation should not require random perturbation settings."""
     from ase import Atoms
     from ase.io import write
@@ -379,13 +379,13 @@ generation:
 
     assert main(["generate", str(config_path)]) == 0
 
-    assert (output_dir / "te" / "pristine" / "unperturbed.vasp").exists()
+    assert (output_dir / "te" / "pristine" / "pristine_1x1x1.vasp").exists()
     assert (
-        output_dir / "te" / "single_vacancy_Te_000001" / "unperturbed.vasp"
+        output_dir / "te" / "single_vacancy_Te_000001" / "pristine_1x1x1.vasp"
     ).exists()
     assert set(output_dir.glob("te/**/*.vasp")) == {
-        output_dir / "te" / "pristine" / "unperturbed.vasp",
-        output_dir / "te" / "single_vacancy_Te_000001" / "unperturbed.vasp",
+        output_dir / "te" / "pristine" / "pristine_1x1x1.vasp",
+        output_dir / "te" / "single_vacancy_Te_000001" / "pristine_1x1x1.vasp",
     }
     records = [
         json.loads(line)
@@ -397,7 +397,7 @@ generation:
         "pristine",
         "single_vacancy_Te_000001",
     ]
-    assert {record["generation_type"] for record in records} == {"unperturbed"}
+    assert {record["generation_type"] for record in records} == {"pristine"}
 
 
 def test_cli_generate_writes_multiple_task_folders(tmp_path):
@@ -455,7 +455,7 @@ generation:
         output_dir / "bulk_221" / "te" / "pristine" / "perturb_000000.vasp"
     ).exists()
     assert (
-        output_dir / "bulk_221" / "te" / "pristine" / "unperturbed.vasp"
+        output_dir / "bulk_221" / "te" / "pristine" / "pristine_2x2x1.vasp"
     ).exists()
     records = [
         json.loads(line)
@@ -468,7 +468,7 @@ generation:
         "defect",
         "surface",
         "perturb",
-        "unperturbed",
+        "pristine",
     }
     assert {tuple(record["supercell"]) for record in records} == {
         (1, 1, 1),
@@ -480,7 +480,7 @@ generation:
     assert "bulk_221: 1 input(s) ->" in summary
 
 
-def test_cli_generate_writes_default_unperturbed_supercell(tmp_path):
+def test_cli_generate_writes_named_pristine_supercell(tmp_path):
     """Generation writes the expanded pristine structure before perturbations."""
     cif_path = tmp_path / "te.cif"
     cif_path.write_text(
@@ -521,7 +521,7 @@ generation:
 
     assert main(["generate", str(config_path)]) == 0
 
-    assert (output_dir / "te" / "unperturbed.vasp").exists()
+    assert (output_dir / "te" / "pristine_2x2x1.vasp").exists()
     assert (output_dir / "te" / "perturb_000000.vasp").exists()
     assert (output_dir / "te" / "perturb_000001.vasp").exists()
     records = [
@@ -531,7 +531,7 @@ generation:
         ).splitlines()
     ]
     assert [record["generation_type"] for record in records] == [
-        "unperturbed",
+        "pristine",
         "perturb",
         "perturb",
     ]

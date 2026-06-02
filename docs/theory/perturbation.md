@@ -89,7 +89,7 @@ PESMaker currently supports three atomic perturbation styles:
 - `const`: random direction with fixed displacement length.
 
 Random perturbations are opt-in. If `generation.perturb` is omitted, or
-`pert_num` is `0`, PESMaker writes only the expanded unperturbed structures.
+`pert_num` is `0`, PESMaker writes only the expanded pristine structures.
 
 A practical explicit perturbation setting is:
 
@@ -104,8 +104,9 @@ perturb:
 
 These values generate moderately distorted structures around the starting
 geometry and are useful for preparing initial DFT single-point candidates.
-The expanded, unperturbed pristine structure is always written as
-`unperturbed.<format>`. `include_pristine: true` also writes one
-`unperturbed.<format>` file for every generated defect variant when random
-perturbations are enabled. Without random perturbations, every generated
-variant is written once as an unperturbed structure.
+The expanded pristine structure is always written as
+`pristine_<supercell>.<format>`, for example `pristine_3x3x3.vasp`.
+`include_pristine: true` also writes one `pristine_<supercell>.<format>` file
+for every generated defect variant when random perturbations are enabled.
+Without random perturbations, every generated variant is written once as a
+pristine structure.

@@ -105,10 +105,10 @@ class GenerationConfig:
         perturb: Free-form perturbation options consumed by
             `PerturbationSettings`. These can be written directly under
             `generation.perturb` or nested under `generation.surface.perturb`.
-            PESMaker writes expanded unperturbed structures by default. Random
+            PESMaker writes expanded pristine structures by default. Random
             perturbations are enabled only when `pert_num` is greater than
             zero. Set `include_pristine: true` inside `perturb` to also write
-            unperturbed defect variants when random perturbations are enabled.
+            pristine defect variants when random perturbations are enabled.
         tasks: Independent generation tasks. New configs should use this when
             multiple supercells or nested operation chains are needed.
     """

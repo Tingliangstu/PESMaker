@@ -79,7 +79,8 @@ training/    # NEP training input folder and submit script
 ## Example Config
 
 For pure supercell expansion, omit the `perturb` section. PESMaker writes one
-expanded `unperturbed.vasp` per input structure:
+expanded `pristine_<supercell>.vasp` file per input structure, such as
+`pristine_3x3x3.vasp`:
 
 ```yaml
 project: Te_bulk_mp
