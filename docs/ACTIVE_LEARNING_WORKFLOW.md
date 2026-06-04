@@ -562,7 +562,7 @@ sampling:
   engine: gpumd
   output_dir: sampling
   gpumd_dir: /path/to/GPUMD/src
-  potential: nep89_20250409.txt
+  potential: ../potentials/nep/nep89_20250409/nep89_20250409.txt
   temperatures: [300, 600, 900]
   run_steps: 3000000
   ensemble_mode: auto
@@ -626,8 +626,13 @@ sampling/
 ```
 
 If `potential` points to an existing file, PESMaker copies it into each MD
-folder. If it is only a filename, PESMaker writes the filename into `run.in`
-and assumes it will be available when the job runs.
+folder. Relative paths are resolved first from the current working directory
+and then from `gpumd_dir`; for a GPUMD source directory, the bundled NEP89 file
+is usually `../potentials/nep/nep89_20250409/nep89_20250409.txt` relative to
+`gpumd_dir`. If `potential` is omitted, PESMaker uses that bundled NEP89
+relative path when `gpumd_dir` is configured. If no source file is found,
+PESMaker writes `nep89_20250409.txt` into `run.in` and assumes it will be
+available when the job runs.
 
 Submit sampling jobs with:
 
@@ -651,7 +656,7 @@ sampling:
     trajectory_pattern: sampling/**/movie.xyz
     output_dir: selected
     descriptor: calorine
-    potential: nep89_20250409.txt
+    potential: ../potentials/nep/nep89_20250409/nep89_20250409.txt
     descriptor_pooling: mean
     min_distance: 0.2
     max_count: 200

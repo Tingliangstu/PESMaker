@@ -1037,6 +1037,59 @@ sampling:
     ) == 3
 
 
+def test_sampling_setup_resolves_default_nep89_relative_to_gpumd_dir(tmp_path):
+    """Omitted potential should resolve to GPUMD's bundled NEP89 path."""
+    from ase import Atoms
+    from ase.io import write
+
+    gpumd_dir = tmp_path / "GPUMD" / "src"
+    gpumd_dir.mkdir(parents=True)
+    potential = (
+        tmp_path
+        / "GPUMD"
+        / "potentials"
+        / "nep"
+        / "nep89_20250409"
+        / "nep89_20250409.txt"
+    )
+    potential.parent.mkdir(parents=True)
+    potential.write_text("dummy nep89 potential\n", encoding="utf-8")
+    structure_path = tmp_path / "structure.xyz"
+    write(
+        structure_path,
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[3, 3, 20], pbc=True),
+        format="extxyz",
+    )
+    generated_dir = tmp_path / "generated"
+    generated_dir.mkdir()
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(structure_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: default_nep89
+generation:
+  output_dir: {generated_dir.as_posix()}
+sampling:
+  engine: gpumd
+  output_dir: {(tmp_path / 'sampling').as_posix()}
+  gpumd_dir: {gpumd_dir.as_posix()}
+  temperature: 300
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["sample-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    assert (workdir / "nep89_20250409.txt").exists()
+    run_in = (workdir / "run.in").read_text(encoding="utf-8")
+    assert "potential      nep89_20250409.txt" in run_in
+    submit = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert str(gpumd_dir / "gpumd") in submit
+
+
 def test_sampling_setup_writes_temperature_ramp(tmp_path):
     """A temperature range should produce one ramp MD job."""
     from ase import Atoms

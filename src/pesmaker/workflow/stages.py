@@ -44,6 +44,11 @@ run            {run_steps}
 """
 
 DEFAULT_GPUMD_RUN_STEPS = 3000000
+DEFAULT_GPUMD_DIR = Path("/home/tingliang/software/GPUMD/GPUMD-master-26-05-2026/src")
+DEFAULT_GPUMD_NEP89_NAME = "nep89_20250409.txt"
+DEFAULT_GPUMD_NEP89_RELATIVE_PATH = Path(
+    "../potentials/nep/nep89_20250409/nep89_20250409.txt"
+)
 DEFAULT_GPUMD_TEMP_COUPLING = 100.0
 DEFAULT_GPUMD_PRESSURE_COUPLING = 1000.0
 DEFAULT_GPUMD_ORTHOGONAL_ELASTIC = (50.0, 50.0, 50.0)
@@ -1283,12 +1288,55 @@ def _prepare_sampling_potential(
     options: dict[str, Any],
     stage_dir: Path,
 ) -> tuple[str, Path | None]:
-    potential = Path(str(options.get("potential", "nep89_20250409.txt")))
-    if potential.exists() and potential.is_file():
+    potential = _resolve_sampling_potential_path(options)
+    if potential is not None and potential.exists() and potential.is_file():
         target = stage_dir / potential.name
         shutil.copy2(potential, target)
         return potential.name, target
-    return str(options.get("potential", "nep89_20250409.txt")), None
+    return _sampling_potential_name(options), None
+
+
+def _resolve_sampling_potential_path(options: dict[str, Any]) -> Path | None:
+    raw_potential = options.get("potential")
+    gpumd_dir = _sampling_gpumd_dir(options)
+    candidates = []
+
+    if raw_potential:
+        potential = Path(str(raw_potential))
+        candidates.append(potential)
+        if not potential.is_absolute() and gpumd_dir is not None:
+            candidates.append(gpumd_dir / potential)
+            if potential.name == DEFAULT_GPUMD_NEP89_NAME:
+                candidates.append(gpumd_dir / DEFAULT_GPUMD_NEP89_RELATIVE_PATH)
+    elif gpumd_dir is not None:
+        candidates.append(gpumd_dir / DEFAULT_GPUMD_NEP89_RELATIVE_PATH)
+        candidates.append(Path(DEFAULT_GPUMD_NEP89_NAME))
+    else:
+        candidates.append(Path(DEFAULT_GPUMD_NEP89_NAME))
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate.resolve()
+    return candidates[0] if candidates else None
+
+
+def _sampling_potential_name(options: dict[str, Any]) -> str:
+    potential = _resolve_sampling_potential_path(options)
+    if potential is not None and potential.exists():
+        return potential.name
+    raw_potential = options.get("potential")
+    if raw_potential:
+        return Path(str(raw_potential)).name
+    return DEFAULT_GPUMD_NEP89_NAME
+
+
+def _sampling_gpumd_dir(options: dict[str, Any]) -> Path | None:
+    value = options.get("gpumd_dir")
+    if value:
+        return Path(str(value))
+    if DEFAULT_GPUMD_DIR.exists() and DEFAULT_GPUMD_DIR.is_dir():
+        return DEFAULT_GPUMD_DIR
+    return None
 
 
 def _rewrite_gpumd_run_line(text: str, keyword: str, replacement: str) -> str:
@@ -1319,9 +1367,9 @@ def _sampling_command(config: PESMakerConfig) -> str:
         command = config.sampling.options.get("command")
         if command:
             return str(command)
-        gpumd_dir = config.sampling.options.get("gpumd_dir")
+        gpumd_dir = _sampling_gpumd_dir(config.sampling.options)
         if gpumd_dir:
-            return str(Path(str(gpumd_dir)) / "gpumd")
+            return str(gpumd_dir / "gpumd")
         return "gpumd"
     return str(config.sampling.options.get("command", config.sampling.engine))
 
@@ -1786,10 +1834,13 @@ def _selection_features(
 ) -> tuple[np.ndarray, str]:
     descriptor = str(options.get("descriptor", "calorine")).lower()
     if descriptor in {"calorine", "nep", "calorine-nep", "calorine_nep"}:
-        potential = options.get(
-            "potential",
-            options.get("model", sampling_options.get("potential")),
-        )
+        selection_potential = options.get("potential", options.get("model"))
+        potential_options = dict(sampling_options)
+        if selection_potential:
+            potential_options["potential"] = selection_potential
+        potential = _resolve_sampling_potential_path(potential_options)
+        if potential is not None and potential.exists():
+            potential = str(potential.resolve())
         features = _calorine_nep_structure_features(frames, potential, options)
         return features, "calorine"
     if descriptor in {"simple", "geometry"}:
@@ -1817,6 +1868,8 @@ def _calorine_nep_structure_features(
         ) from exc
 
     potential_path = Path(str(potential))
+    if not potential_path.exists():
+        raise ValueError(f"Calorine NEP potential file does not exist: {potential_path}")
     pooling = str(options.get("descriptor_pooling", options.get("pooling", "mean")))
     features = []
     for atoms in frames:

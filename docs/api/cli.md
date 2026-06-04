@@ -56,6 +56,9 @@ By default this uses Calorine NEP descriptors from `sampling.selection.potential
 or `sampling.potential`, writes `selected/selection_features.npy`, and writes a
 PCA diagnostic plot at `selected/fps_selection.png`. Set
 `sampling.selection.descriptor: simple` only for lightweight debugging.
+When `gpumd_dir` is configured and no potential is given, PESMaker looks for the
+bundled GPUMD NEP89 file at
+`../potentials/nep/nep89_20250409/nep89_20250409.txt` relative to `gpumd_dir`.
 
 ## `pesmaker scf-setup`
 

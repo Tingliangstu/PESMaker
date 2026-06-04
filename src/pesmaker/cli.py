@@ -290,7 +290,7 @@ sampling:
   engine: gpumd
   gpumd_dir: /home/tingliang/software/GPUMD/GPUMD-master-26-05-2026/src
   output_dir: sampling
-  potential: nep89_20250409.txt
+  potential: ../potentials/nep/nep89_20250409/nep89_20250409.txt
   temperatures: [300, 600, 900]
   run_steps: 3000000
   ensemble_mode: auto
@@ -299,7 +299,7 @@ sampling:
     trajectory_pattern: sampling/**/movie.xyz
     output_dir: selected
     descriptor: calorine
-    potential: nep89_20250409.txt
+    potential: ../potentials/nep/nep89_20250409/nep89_20250409.txt
     min_distance: 0.2
     max_count: 200
     plot: true
