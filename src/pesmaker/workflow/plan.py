@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
-"""Workflow-mode and artifact helpers for `pesmaker next`."""
+"""Artifact helpers for `pesmaker next`."""
 
 from __future__ import annotations
 
@@ -22,17 +22,6 @@ from pathlib import Path
 
 from pesmaker.artifacts import _generated_structures_dir, _section_output_dir
 from pesmaker.config.schema import PESMakerConfig
-
-
-def resolve_workflow_mode(config: PESMakerConfig) -> str:
-    """Resolve `workflow: auto` into a concrete smart-next path."""
-    mode = config.workflow.mode
-    if mode != "auto":
-        return mode
-    selection = config.sampling.options.get("selection")
-    if config.sampling.engine.lower() != "none" and isinstance(selection, dict):
-        return "sampling-training"
-    return "direct-scf"
 
 
 def generated_manifest_path(config: PESMakerConfig) -> Path:

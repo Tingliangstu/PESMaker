@@ -241,13 +241,13 @@ WORKFLOW_MODES = {"auto", "direct-scf", "sampling-training"}
 
 @dataclass(frozen=True)
 class WorkflowConfig:
-    """High-level workflow mode used by `pesmaker next`.
+    """Optional advanced override for `pesmaker next`.
 
     Attributes:
-        mode: Smart-next mode. `auto` infers a mode from configured engines,
-            `direct-scf` goes from generated structures directly to SCF
-            labeling, and `sampling-training` includes sampling, selection,
-            labeling, collection, and training setup.
+        mode: Smart-next compatibility mode. `auto` lets PESMaker infer the
+            flow from configured sections and artifacts. `direct-scf` skips
+            sampling and training even if those sections are present.
+            `sampling-training` is accepted for older configs.
     """
 
     mode: str = "auto"
@@ -277,7 +277,7 @@ class PESMakerConfig:
         dataset: Dataset export configuration.
         training: Potential training engine configuration.
         jobs: Cluster submission and machine-specific template options.
-        workflow: High-level smart-next workflow mode.
+        workflow: Optional advanced smart-next override.
     """
 
     project: str

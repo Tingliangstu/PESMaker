@@ -29,17 +29,32 @@ Run the smart workflow driver:
 pesmaker next run.yaml
 ```
 
-`next` runs local setup stages until it reaches a submit preview, waits for
-external outputs, or completes the workflow. It never submits jobs for real; it
-writes dry-run logs and prints the matching `pesmaker submit ...` command.
+`next` infers the flow from the YAML sections and existing artifacts. It runs
+local setup stages until it reaches a submit preview, waits for external
+outputs, or completes the workflow. It never submits jobs for real; it writes
+dry-run logs and prints the matching `pesmaker submit ...` command.
+
+Check what would happen next without writing files:
+
+```bash
+pesmaker status run.yaml
+```
+
+Practical loop:
+
+1. Write the YAML sections for the work you want: `generation`, optional
+   `sampling.selection`, `labeling`, optional `training`.
+2. Run `pesmaker validate run.yaml`.
+3. Run `pesmaker next run.yaml`.
+4. If `next` prints `Submit jobs`, inspect the dry-run log and run that exact
+   command.
+5. After the external jobs finish, run `pesmaker next run.yaml` again.
 
 ## Direct Generate to SCF Workflow
 
-Use this path when generated structures should go directly to DFT labeling:
-
-```yaml
-workflow: direct-scf
-```
+Use this path when generated structures should go directly to DFT labeling.
+No `workflow` field is needed; include `generation` and `labeling` sections,
+then run `next`.
 
 Recommended command:
 
@@ -62,7 +77,6 @@ Supercell-only generation does not need a `perturb` section:
 
 ```yaml
 project: Te_bulk_mp
-workflow: direct-scf
 
 structures:
   include:
@@ -77,7 +91,6 @@ Minimal structure-generation and SCF setup example:
 
 ```yaml
 project: Te_surface_scf
-workflow: direct-scf
 
 structures:
   include:
@@ -119,11 +132,9 @@ jobs:
 
 ## Full Sampling and Training Workflow
 
-Use this path when generated structures first seed MD sampling:
-
-```yaml
-workflow: sampling-training
-```
+Use this path when generated structures first seed MD sampling. No `workflow`
+field is needed; include `sampling` and `sampling.selection`, and `next` will
+insert sampling and selection before SCF.
 
 Recommended command:
 
@@ -154,8 +165,6 @@ by `scf-setup`; `--stage training` submits training jobs prepared by
 Add these sections to the config:
 
 ```yaml
-workflow: sampling-training
-
 sampling:
   engine: gpumd
   output_dir: sampling

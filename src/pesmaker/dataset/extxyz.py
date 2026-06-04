@@ -23,8 +23,9 @@ from pathlib import Path
 
 from pesmaker.artifacts import _section_output_dir
 from pesmaker.config.schema import PESMakerConfig
+from pesmaker.parsers.ase import write_extxyz_many
+from pesmaker.parsers.vasp import read_outcar_frames
 from pesmaker.results import StageResult
-from pesmaker.samplers.selection import _read_trajectory_frames, _write_extxyz_many
 
 
 def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
@@ -46,8 +47,8 @@ def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
 
     frames = []
     for output in outputs:
-        frames.extend(_read_trajectory_frames(str(output)))
-    _write_extxyz_many(output_path, frames)
+        frames.extend(read_outcar_frames(output))
+    write_extxyz_many(output_path, frames)
     return StageResult(
         output_dir,
         (output_path,),

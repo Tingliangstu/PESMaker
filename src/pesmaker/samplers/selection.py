@@ -19,13 +19,13 @@
 from __future__ import annotations
 
 import json
-from glob import glob
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from pesmaker.config.schema import PESMakerConfig
+from pesmaker.parsers.ase import read_frames, write_extxyz_many
 from pesmaker.results import StageResult
 from pesmaker.samplers.gpumd import _resolve_sampling_potential_path
 from pesmaker.structures import write_structure
@@ -99,33 +99,11 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
 
 
 def _read_trajectory_frames(pattern: str):
-    try:
-        from ase.io import read
-    except ImportError as exc:
-        raise RuntimeError("Trajectory selection requires ASE") from exc
-
-    paths = [Path(path) for path in sorted(glob(pattern, recursive=True))]
-    if not paths and Path(pattern).exists():
-        paths = [Path(pattern)]
-    frames = []
-    for path in paths:
-        items = read(path, index=":")
-        if not isinstance(items, list):
-            items = [items]
-        frames.extend(items)
-    if not frames:
-        raise ValueError(f"no trajectory frames matched pattern: {pattern}")
-    return frames
+    return read_frames(pattern)
 
 
 def _write_extxyz_many(path: Path, frames) -> None:
-    try:
-        from ase.io import write
-    except ImportError as exc:
-        raise RuntimeError("Writing extxyz requires ASE") from exc
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write(path, frames, format="extxyz")
+    write_extxyz_many(path, frames)
 
 
 def _selection_features(

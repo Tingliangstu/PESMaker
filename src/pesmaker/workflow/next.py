@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
-"""Smart-next workflow execution."""
+"""Artifact-driven smart workflow execution."""
 
 from __future__ import annotations
 
@@ -36,7 +36,6 @@ from pesmaker.workflow.plan import (
     matched_outcars,
     matched_sampling_trajectories,
     outcar_pattern,
-    resolve_workflow_mode,
     sampling_manifest_path,
     sampling_trajectory_pattern,
     selected_manifest_path,
@@ -64,22 +63,34 @@ class NextEvent:
 
 @dataclass(frozen=True)
 class NextResult:
-    """Summary returned by `run_next`."""
+    """Summary returned by `run_next` or `inspect_next`."""
 
-    mode: str
+    flow: str
     status: str
     events: tuple[NextEvent, ...] = field(default_factory=tuple)
     state_path: Path | None = None
 
 
+@dataclass(frozen=True)
+class NextStep:
+    """Internal description of the next required workflow step."""
+
+    action: str
+    kind: str
+    message: str
+    stage: str | None = None
+    command: str | None = None
+
+
 def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
     """Run local stages until the next submit or external-result boundary."""
-    mode = resolve_workflow_mode(config)
     state = load_next_state(config)
     events: list[NextEvent] = []
 
     while True:
-        if not generated_manifest_path(config).exists():
+        step = determine_next_step(config, config_path, state)
+
+        if step.action == "generate":
             result = generate_structures(config)
             events.append(
                 NextEvent(
@@ -91,95 +102,175 @@ def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
             )
             continue
 
-        if mode == "sampling-training":
-            if not sampling_manifest_path(config).exists():
-                result = setup_sampling(config)
-                events.append(
-                    NextEvent(kind="run", message=result.message, result=result)
-                )
-                continue
-
-            if not dry_run_recorded(state, "sampling"):
-                event = _preview_submit(config, config_path, state, stage="sampling")
-                events.append(event)
-                return _result(config, mode, "submit-preview", events)
-
-            if not matched_sampling_trajectories(config):
-                command = submit_command_text(config_path, "sampling")
-                events.append(
-                    NextEvent(
-                        kind="wait",
-                        message=(
-                            "Waiting for sampling trajectories matching "
-                            f"{sampling_trajectory_pattern(config)}."
-                        ),
-                        command=command,
-                    )
-                )
-                return _result(config, mode, "waiting", events)
-
-            if not selected_manifest_path(config).exists():
-                result = select_sampling_frames(config)
-                events.append(
-                    NextEvent(kind="run", message=result.message, result=result)
-                )
-                continue
-
-        if not labeling_manifest_path(config).exists():
-            labeling_config = _labeling_config(config, mode)
-            result = setup_labeling(labeling_config)
+        if step.action == "setup_sampling":
+            result = setup_sampling(config)
             events.append(NextEvent(kind="run", message=result.message, result=result))
             continue
 
-        if not dry_run_recorded(state, "scf"):
-            event = _preview_submit(config, config_path, state, stage="scf")
-            events.append(event)
-            return _result(config, mode, "submit-preview", events)
+        if step.action == "select":
+            result = select_sampling_frames(config)
+            events.append(NextEvent(kind="run", message=result.message, result=result))
+            continue
 
-        if not matched_outcars(config):
-            command = submit_command_text(config_path, "scf")
-            events.append(
-                NextEvent(
-                    kind="wait",
-                    message=f"Waiting for SCF outputs matching {outcar_pattern(config)}.",
-                    command=command,
-                )
-            )
-            return _result(config, mode, "waiting", events)
+        if step.action == "setup_labeling":
+            result = setup_labeling(_labeling_config(config))
+            events.append(NextEvent(kind="run", message=result.message, result=result))
+            continue
 
-        if not dataset_path(config).exists():
+        if step.action == "collect":
             result = collect_labeled_dataset(config)
             events.append(NextEvent(kind="run", message=result.message, result=result))
-            if mode == "direct-scf":
-                return _result(config, mode, "complete", events)
             continue
 
-        if mode == "direct-scf":
-            events.append(
-                NextEvent(
-                    kind="complete",
-                    message=f"Direct SCF workflow is complete: {dataset_path(config)}",
-                )
-            )
-            return _result(config, mode, "complete", events)
-
-        if not training_submit_path(config).exists():
+        if step.action == "setup_training":
             result = setup_training(config)
             events.append(NextEvent(kind="run", message=result.message, result=result))
             continue
 
-        if not dry_run_recorded(state, "training"):
-            event = _preview_submit(config, config_path, state, stage="training")
+        if step.action == "preview_submit" and step.stage:
+            event = _preview_submit(config, config_path, state, stage=step.stage)
             events.append(event)
-            return _result(config, mode, "submit-preview", events)
+            return _result(config, step.kind, events)
 
         events.append(
             NextEvent(
-                kind="complete",
-                message="Sampling, labeling, collection, and training setup are complete.",
+                kind=step.kind,
+                message=step.message,
+                command=step.command,
             )
         )
-        return _result(config, mode, "complete", events)
+        return _result(config, step.kind, events)
+
+
+def inspect_next(config: PESMakerConfig, config_path: Path) -> NextResult:
+    """Inspect the next workflow step without writing files."""
+    state = load_next_state(config)
+    step = determine_next_step(config, config_path, state)
+    event = NextEvent(kind=step.kind, message=step.message, command=step.command)
+    return _result(config, step.kind, [event])
+
+
+def determine_next_step(
+    config: PESMakerConfig,
+    config_path: Path,
+    state: dict,
+) -> NextStep:
+    """Return the next action from config sections and artifact state."""
+    if _should_generate(config):
+        return NextStep(
+            action="generate",
+            kind="run",
+            message="Generate structures from the configured inputs.",
+        )
+
+    if _sampling_enabled(config):
+        if not sampling_manifest_path(config).exists():
+            return NextStep(
+                action="setup_sampling",
+                kind="run",
+                message="Prepare GPUMD sampling folders.",
+            )
+        if not dry_run_recorded(state, "sampling"):
+            return NextStep(
+                action="preview_submit",
+                kind="submit-preview",
+                stage="sampling",
+                command=submit_command_text(config_path, "sampling"),
+                message="Preview sampling job submission.",
+            )
+        if _selection_enabled(config):
+            if not matched_sampling_trajectories(config):
+                return NextStep(
+                    action="wait",
+                    kind="waiting",
+                    command=submit_command_text(config_path, "sampling"),
+                    message=(
+                        "Waiting for sampling trajectories matching "
+                        f"{sampling_trajectory_pattern(config)}."
+                    ),
+                )
+            if not selected_manifest_path(config).exists():
+                return NextStep(
+                    action="select",
+                    kind="run",
+                    message="Select representative frames from sampling trajectories.",
+                )
+        elif not _labeling_has_explicit_input(config):
+            return NextStep(
+                action="complete",
+                kind="complete",
+                message=(
+                    "Sampling setup is ready. Add sampling.selection or "
+                    "labeling.input_manifest/input_dir if later stages should run."
+                ),
+            )
+
+    if _labeling_enabled(config):
+        if not labeling_manifest_path(config).exists():
+            return NextStep(
+                action="setup_labeling",
+                kind="run",
+                message="Prepare VASP SCF labeling folders.",
+            )
+        if not dry_run_recorded(state, "scf"):
+            return NextStep(
+                action="preview_submit",
+                kind="submit-preview",
+                stage="scf",
+                command=submit_command_text(config_path, "scf"),
+                message="Preview SCF job submission.",
+            )
+        if not matched_outcars(config):
+            return NextStep(
+                action="wait",
+                kind="waiting",
+                command=submit_command_text(config_path, "scf"),
+                message=f"Waiting for SCF outputs matching {outcar_pattern(config)}.",
+            )
+        if not dataset_path(config).exists():
+            return NextStep(
+                action="collect",
+                kind="run",
+                message="Collect finished SCF outputs into the training dataset.",
+            )
+
+    if _training_enabled(config):
+        if not training_submit_path(config).exists():
+            return NextStep(
+                action="setup_training",
+                kind="run",
+                message="Prepare model-training inputs.",
+            )
+        if not dry_run_recorded(state, "training"):
+            return NextStep(
+                action="preview_submit",
+                kind="submit-preview",
+                stage="training",
+                command=submit_command_text(config_path, "training"),
+                message="Preview training job submission.",
+            )
+
+    return NextStep(
+        action="complete",
+        kind="complete",
+        message="No further PESMaker action is required for the current artifacts.",
+    )
+
+
+def inferred_flow(config: PESMakerConfig) -> str:
+    """Return a concise human-readable workflow inferred from config sections."""
+    stages = []
+    if config.structures:
+        stages.append("generate")
+    if _sampling_enabled(config):
+        stages.append("sampling")
+        if _selection_enabled(config):
+            stages.append("select")
+    if _labeling_enabled(config):
+        stages.extend(["scf", "collect"])
+    if _training_enabled(config):
+        stages.append("train")
+    return " -> ".join(stages) if stages else "inspect existing artifacts"
 
 
 def _preview_submit(
@@ -202,10 +293,42 @@ def _preview_submit(
     )
 
 
-def _labeling_config(config: PESMakerConfig, mode: str) -> PESMakerConfig:
-    """Default sampling-training SCF input to the selected-frame manifest."""
-    if mode != "sampling-training":
-        return config
+def _should_generate(config: PESMakerConfig) -> bool:
+    return bool(config.structures) and not generated_manifest_path(config).exists()
+
+
+def _sampling_enabled(config: PESMakerConfig) -> bool:
+    if config.workflow.mode == "direct-scf":
+        return False
+    return config.sampling.engine.strip().lower() not in {"", "none"}
+
+
+def _selection_enabled(config: PESMakerConfig) -> bool:
+    return isinstance(config.sampling.options.get("selection"), dict)
+
+
+def _labeling_enabled(config: PESMakerConfig) -> bool:
+    return config.labeling.engine.strip().lower() not in {"", "none"}
+
+
+def _training_enabled(config: PESMakerConfig) -> bool:
+    if config.workflow.mode == "direct-scf":
+        return False
+    return (
+        config.training.engine.strip().lower() not in {"", "none"}
+        and bool(config.training.options)
+    )
+
+
+def _labeling_has_explicit_input(config: PESMakerConfig) -> bool:
+    return bool(
+        config.labeling.options.get("input_manifest")
+        or config.labeling.options.get("input_dir")
+    )
+
+
+def _labeling_config(config: PESMakerConfig) -> PESMakerConfig:
+    """Prefer selected frames for SCF setup when selection has run."""
     if config.labeling.options.get("input_manifest") or config.labeling.options.get(
         "input_dir"
     ):
@@ -222,12 +345,11 @@ def _labeling_config(config: PESMakerConfig, mode: str) -> PESMakerConfig:
 
 def _result(
     config: PESMakerConfig,
-    mode: str,
     status: str,
     events: list[NextEvent],
 ) -> NextResult:
     return NextResult(
-        mode=mode,
+        flow=inferred_flow(config),
         status=status,
         events=tuple(events),
         state_path=next_state_path(config),

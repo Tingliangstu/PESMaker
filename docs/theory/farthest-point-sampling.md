@@ -27,6 +27,18 @@ where \(S\) is the set of already selected frames. This picks frames that are
 far from what has already been selected, so the final set spreads across the
 trajectory descriptor space.
 
+The method is a greedy coverage rule. Random selection can miss rare regions of
+a trajectory, especially when most MD frames stay near one basin. FPS instead
+keeps the frame that currently improves descriptor-space coverage the most.
+This makes it useful for reducing many correlated MD frames into a smaller DFT
+labeling set.
+
+FPS is only as meaningful as the descriptor. If the descriptor does not capture
+the chemistry or distortion that matters for the target potential, far-apart
+points in descriptor space may not be the most important DFT labels. For
+production runs, inspect the selected structures and the PCA plot instead of
+treating the selector as fully automatic.
+
 ## Stop Criteria
 
 PESMaker stops selection when either condition is met:

@@ -13,9 +13,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
-"""Output parsers for DFT, sampling, and training engines."""
+"""VASP output parsing helpers."""
 
-from pesmaker.parsers.ase import read_frames, write_extxyz_many
-from pesmaker.parsers.vasp import read_outcar_frames
+from __future__ import annotations
 
-__all__ = ["read_frames", "read_outcar_frames", "write_extxyz_many"]
+from pathlib import Path
+from typing import Any
+
+from pesmaker.parsers.ase import read_frames
+
+
+def read_outcar_frames(path: str | Path) -> list[Any]:
+    """Read frames from a VASP OUTCAR through ASE."""
+    return read_frames(path)

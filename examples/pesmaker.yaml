@@ -1,5 +1,4 @@
 project: Te_batch
-workflow: direct-scf
 
 structures:
   - Te-mp-19.cif

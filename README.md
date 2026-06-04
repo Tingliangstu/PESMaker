@@ -42,16 +42,11 @@ pesmaker validate run.yaml
 pesmaker next run.yaml
 ```
 
-Set the high-level path in YAML:
-
-```yaml
-workflow: direct-scf          # generated structures -> VASP labeling -> collect
-# or
-workflow: sampling-training   # generate -> GPUMD sampling -> select -> label -> train
-```
-
-`workflow: auto` is the default. It uses `sampling-training` when GPUMD sampling
-and `sampling.selection` are configured; otherwise it uses `direct-scf`.
+You do not need to write a workflow name. PESMaker infers the flow from the
+YAML sections and existing artifacts. For example, a config with
+`sampling.engine` and `sampling.selection` will prepare sampling, wait for MD
+trajectories, select frames, then continue to SCF and training if those
+sections are configured.
 
 `next` never submits jobs for real. At a sampling, SCF, or training submit
 boundary it writes a dry-run log, records the gate in
@@ -94,168 +89,18 @@ train.xyz    # collected labeled dataset
 training/    # NEP training input folder and submit script
 ```
 
-## Example Config
+## Examples
 
-Minimal direct SCF run:
+Minimal YAML examples are in the workflow manual, grouped by task type:
 
-```yaml
-project: direct_scf
-workflow: direct-scf
+- generate structures only;
+- generate and prepare VASP SCF jobs;
+- GPUMD sampling, farthest-point selection, SCF labeling, and NEP training;
+- SCF setup from existing structures;
+- collection from existing OUTCAR files;
+- training setup from an existing dataset.
 
-structures:
-  - POSCAR
-
-generation:
-  output_dir: generated
-  supercell: [3, 3, 3]
-
-labeling:
-  engine: vasp
-  output_dir: labeling
-  incar: templates/vasp/INCAR
-  command: /path/to/vasp_std
-  dataset_path: train.xyz
-
-jobs:
-  submit_command: sbatch
-  cores_cpu: 36
-```
-
-Run it with:
-
-```bash
-pesmaker validate run.yaml
-pesmaker next run.yaml
-```
-
-Minimal sampling and training run:
-
-```yaml
-project: sampling_training
-workflow: sampling-training
-
-structures:
-  - POSCAR
-
-generation:
-  output_dir: generated
-
-sampling:
-  engine: gpumd
-  output_dir: sampling
-  gpumd_dir: /path/to/GPUMD/src
-  potential: /path/to/nep.txt
-  temperatures: [300]
-  selection:
-    trajectory_pattern: sampling/**/movie.xyz
-    output_dir: selected
-    descriptor: calorine
-    potential: /path/to/nep.txt
-    max_count: 200
-
-labeling:
-  engine: vasp
-  output_dir: labeling
-  incar: templates/vasp/INCAR
-  command: /path/to/vasp_std
-  dataset_path: train.xyz
-
-training:
-  model: nep
-  output_dir: training
-  dataset: train.xyz
-
-jobs:
-  submit_command: sbatch
-  cores_cpu: 36
-```
-
-Run `pesmaker next run.yaml` repeatedly after submitted jobs produce their
-outputs. For more minimal YAML examples by task type, see
-[`docs/ACTIVE_LEARNING_WORKFLOW.md`](docs/ACTIVE_LEARNING_WORKFLOW.md).
-
-For pure supercell expansion, omit the `perturb` section. PESMaker writes one
-expanded `pristine_<supercell>.vasp` file per input structure, such as
-`pristine_3x3x3.vasp`:
-
-```yaml
-project: Te_bulk_mp
-workflow: direct-scf
-
-structures:
-  include:
-    - initial_structures/*.cif
-
-generation:
-  supercell: [3, 3, 3]
-  output_dir: generated
-```
-
-For defect variants, the pristine file also includes the variant name, for
-example `pristine_3x3x3_single_vacancy_Te_000001.vasp`.
-
-```yaml
-project: Te_Pd_rich_defect_md
-workflow: sampling-training
-
-structures:
-  include:
-    - initial_structures/*.cif
-
-generation:
-  output_dir: generated
-  tasks:
-    - name: surface_331
-      supercell: [3, 3, 1]
-      surface:
-        vacuum: 30.0
-        axis: 2
-        center: true
-        defects:
-          mode: random
-          seed: 42
-          single_vacancies:
-            elements: [Te]
-            max_count: 8
-          double_vacancies:
-            elements: [Te]
-            max_count: 8
-          line_defects:
-            elements: [Te]
-            max_count: 4
-        perturb:
-          include_pristine: true
-          pert_num: 20
-          cell_pert_fraction: 0.03
-          atom_pert_distance: 0.1
-          atom_pert_style: normal
-          seed: 42
-          format: vasp
-    - name: bulk_333
-      supercell: [3, 3, 3]
-      perturb:
-        include_pristine: true
-        pert_num: 20
-        cell_pert_fraction: 0.03
-        atom_pert_distance: 0.1
-        atom_pert_style: normal
-        seed: 42
-        format: vasp
-
-labeling:
-  engine: vasp
-  output_dir: labeling
-  input_dir: generated
-  incar: templates/vasp/INCAR
-  potcar_library: /path/to/VASP/potentials
-  command: /path/to/vasp_std
-
-jobs:
-  submit_command: sbatch
-  cores_cpu: 36
-  gpus: 0
-  sub_file: templates/sbatch/vasp_cpu_36.sh
-```
+See [`docs/ACTIVE_LEARNING_WORKFLOW.md`](docs/ACTIVE_LEARNING_WORKFLOW.md).
 
 ## Installation
 

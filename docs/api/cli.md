@@ -22,28 +22,27 @@ pesmaker validate examples/perturb.yaml
 
 ## `pesmaker next`
 
-Run the next useful workflow step from the YAML mode and current artifacts:
+Run the next useful workflow step from the YAML sections and current artifacts:
 
 ```bash
 pesmaker next examples/te_defect_md.yaml
 ```
 
-Configure the high-level path with either a string or a mapping:
-
-```yaml
-workflow: direct-scf
-```
-
-```yaml
-workflow:
-  mode: sampling-training
-```
-
-`workflow: auto` is the default. `next` runs local stages such as generation,
+No workflow name is required. `next` runs local stages such as generation,
 sampling setup, selection, SCF setup, collection, and training setup until it
 reaches a boundary. At a submit boundary it only runs a dry-run submission,
 records `.pesmaker/<project>/next_state.json`, and prints the real
 `pesmaker submit ...` command for the user to run.
+
+## `pesmaker status`
+
+Show the next useful workflow step without writing files:
+
+```bash
+pesmaker status examples/te_defect_md.yaml
+```
+
+This is useful before rerunning `next` after external jobs finish.
 
 ## `pesmaker generate`
 

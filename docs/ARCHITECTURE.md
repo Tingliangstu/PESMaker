@@ -7,8 +7,8 @@ orchestration and compatibility layer.
 ## Core objects
 
 - `PESMakerConfig`: validated project configuration.
-- `WorkflowConfig`: high-level `next` mode, either `auto`, `direct-scf`, or
-  `sampling-training`.
+- `WorkflowConfig`: optional compatibility override for `next`; normal configs
+  omit it and let artifacts plus YAML sections determine the flow.
 - `StageResult`: small return object for setup, submit, collect, and training
   stages.
 - JSON Lines manifests: persistent file records for generated structures,
@@ -20,8 +20,10 @@ orchestration and compatibility layer.
   perturbations, generated-structure manifests, and generation summaries.
 - `pesmaker.samplers.gpumd`: GPUMD sampling folders, `run.in`, potential copy,
   and sampling submit scripts.
-- `pesmaker.samplers.selection`: trajectory reading, descriptors, farthest
-  point selection, and diagnostic plots.
+- `pesmaker.samplers.selection`: descriptors, farthest point selection, and
+  diagnostic plots.
+- `pesmaker.parsers.ase`: ASE-backed frame reading and extxyz writing.
+- `pesmaker.parsers.vasp`: VASP output readers used by collection.
 - `pesmaker.labelers.vasp`: VASP SCF folders, POSCAR normalization, INCAR,
   POTCAR assembly, and SCF warnings.
 - `pesmaker.jobs.resources`: CPU/GPU and VASP parallel-resource decisions.
@@ -30,8 +32,8 @@ orchestration and compatibility layer.
   files.
 - `pesmaker.dataset.extxyz`: labeled-output collection into extxyz datasets.
 - `pesmaker.trainers.nep`: NEP and generic training input setup.
-- `pesmaker.workflow.next`: smart-next state machine.
-- `pesmaker.workflow.plan`: workflow mode and artifact checks.
+- `pesmaker.workflow.next`: artifact-driven smart-next state machine.
+- `pesmaker.workflow.plan`: artifact path and file-presence checks.
 - `pesmaker.workflow.state`: `.pesmaker/<project>/next_state.json`.
 
 `pesmaker.workflow.stages` and `pesmaker.workflow.generate` remain

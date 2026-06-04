@@ -31,9 +31,10 @@ pesmaker validate run.yaml
 pesmaker next run.yaml
 ```
 
-Set `workflow: direct-scf`, `workflow: sampling-training`, or leave the
-default `workflow: auto` in the YAML. `next` prepares local stages and stops at
-dry-run submission or external-output wait points.
+Do not write a workflow name for normal runs. `next` infers the flow from YAML
+sections such as `sampling`, `sampling.selection`, `labeling`, and `training`.
+It prepares local stages and stops at dry-run submission or external-output
+wait points.
 
 Manual stage commands remain available for advanced runs:
 

@@ -16,6 +16,7 @@ without rerunning the whole pipeline.
 | `pesmaker init` | Write a starter YAML file | `pesmaker.yaml` or a chosen path |
 | `pesmaker validate` | Check YAML syntax and schema | terminal validation result |
 | `pesmaker next` | Run the next local step until submit preview, wait, or completion | stage outputs plus `.pesmaker/<project>/next_state.json` |
+| `pesmaker status` | Show the next step without writing files | terminal status report |
 | `pesmaker generate` | Build supercells, surfaces, defects, and optional perturbations | `generated/` and `manifest.jsonl` |
 | `pesmaker sample-setup` | Prepare MD sampling jobs | `sampling/` |
 | `pesmaker select` | Select representative MD frames | `selected/` |
@@ -33,21 +34,33 @@ pesmaker validate run.yaml
 pesmaker next run.yaml
 ```
 
-Select the high-level path in YAML:
+You do not need to choose a workflow name. `next` reads the YAML sections and
+the files already on disk:
 
-```yaml
-workflow: direct-scf
+- `generation` + `labeling` means generate structures, prepare SCF folders,
+  wait for `OUTCAR`, then collect the dataset.
+- `sampling.engine` + `sampling.selection` means insert GPUMD sampling and
+  farthest-point frame selection before SCF.
+- `training` with a dataset means prepare training inputs after collection.
+
+Check the next action without writing anything:
+
+```bash
+pesmaker status run.yaml
 ```
 
-or:
+In day-to-day use, the loop is:
 
-```yaml
-workflow: sampling-training
-```
+1. Put the desired sections in `run.yaml`.
+2. Run `pesmaker validate run.yaml`.
+3. Run `pesmaker next run.yaml`.
+4. If `next` prints `Submit jobs`, inspect the dry-run log and run that exact
+   submit command.
+5. When the scheduler jobs finish, run `pesmaker next run.yaml` again.
 
-`workflow: auto` is the default. It chooses `sampling-training` when
-`sampling.engine` is not `none` and `sampling.selection` is configured;
-otherwise it uses `direct-scf`.
+Advanced compatibility note: `workflow: direct-scf` is still accepted when you
+want to force `next` to skip sampling/training sections, but ordinary configs
+should omit `workflow`.
 
 `next` advances through local work such as generation, setup, selection,
 collection, and training input preparation. It does not submit jobs for real.
@@ -109,7 +122,6 @@ A full config can contain these sections:
 
 ```yaml
 project: Te_Pd_rich_defect_md
-workflow: sampling-training
 
 structures:
   include:
@@ -181,7 +193,6 @@ Use this when generated candidates should go directly to DFT labeling.
 
 ```yaml
 project: direct_scf
-workflow: direct-scf
 
 structures:
   include:
@@ -221,7 +232,6 @@ with VASP, and a NEP training folder is prepared.
 
 ```yaml
 project: active_learning
-workflow: sampling-training
 
 structures:
   - POSCAR
@@ -280,8 +290,8 @@ pesmaker next run.yaml                  # after OUTCAR exists: collect, train-se
 pesmaker submit run.yaml --stage training
 ```
 
-If `labeling.input_manifest` is omitted in `sampling-training`, `pesmaker next`
-uses `selected/manifest.jsonl` after selection.
+If `labeling.input_manifest` is omitted and selection has run, `pesmaker next`
+uses `selected/manifest.jsonl` for SCF setup.
 
 ### VASP SCF Setup from Existing Structures
 
@@ -395,18 +405,21 @@ Run:
 pesmaker next run.yaml
 ```
 
-`next` inspects the configured `workflow` mode and existing artifacts, then
-runs local stages until it reaches one of three states:
+`next` inspects configured sections and existing artifacts, then runs local
+stages until it reaches one of three states:
 
 - `submit-preview`: a dry-run submission log was written and the real submit
   command was printed;
 - `waiting`: external job outputs are needed, such as `movie.xyz` or `OUTCAR`;
-- `complete`: all local work for the selected workflow path is done.
+- `complete`: all local work implied by the current config and artifacts is
+  done.
 
-For `direct-scf`, `next` advances through generation, SCF setup, SCF dry-run
-submission, waiting for OUTCAR files, and collection. For `sampling-training`,
-it also includes GPUMD sampling setup, waiting for MD trajectories, frame
-selection, training setup, and training dry-run submission.
+When the config has no sampling section, `next` advances through generation,
+SCF setup, SCF dry-run submission, waiting for OUTCAR files, and collection.
+When `sampling.engine` and `sampling.selection` are configured, it also
+prepares GPUMD sampling, waits for MD trajectories, and selects representative
+frames before SCF. When training is configured and the dataset exists, it
+prepares training inputs and writes a training dry-run submission.
 
 ## `generate`: Build Structures
 

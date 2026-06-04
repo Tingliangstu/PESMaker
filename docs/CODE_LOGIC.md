@@ -34,12 +34,13 @@ flowchart TD
     D --> F["GenerationConfig"]
     D --> G["EngineConfig: sampling/labeling/training/jobs"]
     D --> H["DatasetConfig"]
-    D --> I["WorkflowConfig"]
+    D --> I["WorkflowConfig (optional override)"]
 ```
 
-`WorkflowConfig.mode` accepts `auto`, `direct-scf`, and `sampling-training`.
-`auto` resolves to `sampling-training` when sampling and selection are
-configured; otherwise it resolves to `direct-scf`.
+Normal user configs omit `workflow`. `pesmaker next` infers the flow from
+configured sections and existing files. `WorkflowConfig.mode` still accepts
+`auto`, `direct-scf`, and `sampling-training` for older configs and advanced
+overrides; `direct-scf` forces `next` to skip sampling and training sections.
 
 ## Module Dependencies
 
@@ -58,10 +59,12 @@ flowchart LR
     Gen --> Structures["pesmaker.structures"]
     Gpumd --> JobsScripts["pesmaker.jobs.scripts"]
     Select --> Gpumd
+    Select --> ParsersAse["pesmaker.parsers.ase"]
     Vasp --> JobsResources["pesmaker.jobs.resources"]
     Vasp --> JobsScripts
     Submit --> Artifacts["pesmaker.artifacts"]
-    Data --> Select
+    Data --> ParsersAse
+    Data --> ParsersVasp["pesmaker.parsers.vasp"]
     Train --> JobsScripts
     Next --> Gen
     Next --> Gpumd
@@ -76,41 +79,46 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A["pesmaker next run.yaml"] --> B["resolve workflow mode"]
-    B --> C{"generated/manifest.jsonl exists?"}
-    C -->|no| D["generate structures"]
+    A["pesmaker next run.yaml"] --> B["inspect config sections and artifacts"]
+    B --> C{"structures configured and generated/manifest.jsonl missing?"}
+    C -->|yes| D["generate structures"]
     D --> C
-    C -->|yes| E{"sampling-training?"}
+    C -->|no| E{"sampling enabled?"}
     E -->|yes| F{"sampling_manifest exists?"}
     F -->|no| G["setup GPUMD sampling"]
     G --> F
     F -->|yes| H{"sampling dry-run recorded?"}
     H -->|no| I["submit --stage sampling --dry-run; record state"]
-    H -->|yes| J{"movie.xyz exists?"}
-    J -->|no| K["wait and print sampling submit command"]
-    J -->|yes| L{"selected manifest exists?"}
-    L -->|no| M["select representative frames"]
-    M --> L
-    E -->|no| N["SCF path"]
-    L -->|yes| N
-    N --> O{"labeling_manifest exists?"}
-    O -->|no| P["setup VASP SCF folders"]
-    P --> O
-    O -->|yes| Q{"SCF dry-run recorded?"}
-    Q -->|no| R["submit --dry-run; record state"]
-    Q -->|yes| S{"OUTCAR files exist?"}
-    S -->|no| T["wait and print SCF submit command"]
-    S -->|yes| U{"dataset exists?"}
-    U -->|no| V["collect labeled dataset"]
-    V --> U
-    U -->|yes| W{"training path?"}
-    W -->|no| X["complete"]
-    W -->|yes| Y{"training submit.sh exists?"}
-    Y -->|no| Z["setup training"]
-    Z --> Y
-    Y -->|yes| AA{"training dry-run recorded?"}
-    AA -->|no| AB["submit --stage training --dry-run; record state"]
-    AA -->|yes| X
+    H -->|yes| J{"selection configured?"}
+    J -->|yes| K{"movie.xyz exists?"}
+    K -->|no| L["wait and print sampling submit command"]
+    K -->|yes| M{"selected manifest exists?"}
+    M -->|no| N["select representative frames"]
+    N --> M
+    J -->|no| O["continue only if explicit labeling input exists"]
+    E -->|no| P["SCF path"]
+    M -->|yes| P
+    O --> P
+    P --> Q{"labeling enabled?"}
+    Q -->|no| DONE["complete"]
+    Q -->|yes| R{"labeling_manifest exists?"}
+    R -->|no| S["setup VASP SCF folders"]
+    S --> R
+    R -->|yes| T{"SCF dry-run recorded?"}
+    T -->|no| U["submit --dry-run; record state"]
+    T -->|yes| V{"OUTCAR files exist?"}
+    V -->|no| W["wait and print SCF submit command"]
+    V -->|yes| X{"dataset exists?"}
+    X -->|no| Y["collect labeled dataset"]
+    Y --> X
+    X -->|yes| Z{"training enabled?"}
+    Z -->|no| DONE
+    Z -->|yes| AA{"training submit.sh exists?"}
+    AA -->|no| AB["setup training"]
+    AB --> AA
+    AA -->|yes| AC{"training dry-run recorded?"}
+    AC -->|no| AD["submit --stage training --dry-run; record state"]
+    AC -->|yes| DONE
 ```
 
 ## Compatibility

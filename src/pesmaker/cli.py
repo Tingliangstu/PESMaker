@@ -35,7 +35,7 @@ from pesmaker.results import StageResult
 from pesmaker.samplers.gpumd import setup_sampling
 from pesmaker.samplers.selection import select_sampling_frames
 from pesmaker.trainers.nep import setup_training
-from pesmaker.workflow.next import NextResult, run_next
+from pesmaker.workflow.next import NextResult, inspect_next, run_next
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,6 +72,13 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     _add_config_argument(next_parser)
+
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show the next workflow step without changing files.",
+        description="Inspect current artifacts and print the next PESMaker action.",
+    )
+    _add_config_argument(status_parser)
 
     generate_parser = subparsers.add_parser(
         "generate",
@@ -172,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
             _print_next_result(run_next(config, args.config))
             return 0
 
+        if args.command == "status":
+            _print_next_result(inspect_next(config, args.config))
+            return 0
+
         if args.command == "sample-setup":
             _print_stage_result(setup_sampling(config))
             return 0
@@ -259,7 +270,6 @@ def _write_starter_config(path: Path) -> int:
         return 1
 
     template = """project: example_project
-workflow: auto
 
 structures:
   - POSCAR
@@ -440,14 +450,17 @@ def _print_submit_result(
 
 def _print_next_result(result: NextResult) -> None:
     """Print a concise summary for `pesmaker next`."""
-    print(f"Workflow mode    : {result.mode}")
+    print(f"Inferred flow    : {result.flow}")
     print(f"Status           : {result.status}")
     if result.state_path is not None:
         print(f"State            : {result.state_path}")
     print()
     for event in result.events:
         if event.kind == "submit-preview":
-            print("Submission preview complete.")
+            if event.log_path is None:
+                print("Next action      : preview submission")
+            else:
+                print("Submission preview complete.")
             print(f"Stage            : {_event_stage(event)}")
             if event.log_path is not None:
                 print(f"Log              : {event.log_path}")
@@ -455,13 +468,17 @@ def _print_next_result(result: NextResult) -> None:
                 print(f"Submit jobs      : {event.command}")
             print()
             continue
-        if event.kind == "wait":
+        if event.kind in {"wait", "waiting"}:
+            print("Next action      : wait for external outputs")
             print(event.message)
             if event.command:
                 print(f"Submit jobs      : {event.command}")
             print()
             continue
-        print(event.message)
+        if event.kind == "complete":
+            print(f"Complete         : {event.message}")
+        else:
+            print(f"Next action      : {event.message}")
         if event.result is not None:
             print(f"Output directory : {event.result.output_dir}")
         print()
