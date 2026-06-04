@@ -176,11 +176,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "next":
-            _print_next_result(run_next(config, args.config))
+            _print_next_result(run_next(config, args.config), config_path=args.config)
             return 0
 
         if args.command == "status":
-            _print_next_result(inspect_next(config, args.config))
+            _print_next_result(
+                inspect_next(config, args.config), config_path=args.config
+            )
             return 0
 
         if args.command == "sample-setup":
@@ -448,37 +450,94 @@ def _print_submit_result(
     print()
 
 
-def _print_next_result(result: NextResult) -> None:
+def _print_next_result(result: NextResult, *, config_path: Path) -> None:
     """Print a concise summary for `pesmaker next`."""
+    print("Smart next")
     print(f"Inferred flow    : {result.flow}")
     print(f"Status           : {result.status}")
     if result.state_path is not None:
         print(f"State            : {result.state_path}")
     print()
+
+    run_events = [event for event in result.events if event.kind == "run"]
+    boundary_events = [event for event in result.events if event.kind != "run"]
+
+    if run_events:
+        print("Work done this run:")
+        for event in run_events:
+            print(f"  - {event.message}")
+            if event.result is not None:
+                print(f"    Output: {event.result.output_dir}")
+        print()
+
+    if not boundary_events:
+        print("What you should do next:")
+        print(f"  - Run again to continue: pesmaker next {config_path}")
+        print()
+        return
+
+    if all(event.kind == "next-action" for event in boundary_events):
+        for event in boundary_events:
+            print(f"Next action      : {event.message}")
+            print()
+            print("What you should do next:")
+            print(f"  - Run: pesmaker next {config_path}")
+            if event.command:
+                print(f"  - Related submit command: {event.command}")
+            print()
+        return
+
+    print("Manual stage commands are optional. `next` already runs local PESMaker")
+    print("stages such as generate, sample-setup, select, scf-setup, collect, and")
+    print("train-setup whenever their inputs are ready.")
+    print()
+
+    print("Stopped because:")
     for event in result.events:
+        if event.kind == "run":
+            continue
         if event.kind == "submit-preview":
             if event.log_path is None:
-                print("Next action      : preview submission")
+                print("  - A submission preview is the next required step.")
             else:
                 print("Submission preview complete.")
-            print(f"Stage            : {_event_stage(event)}")
+            stage = _event_stage(event)
+            print(f"Stage            : {stage}")
             if event.log_path is not None:
-                print(f"Log              : {event.log_path}")
-            if event.command:
-                print(f"Submit jobs      : {event.command}")
+                print(f"Dry-run log      : {event.log_path}")
             print()
+            print("What you should do next:")
+            if event.log_path is not None:
+                print(f"  1. Review the dry-run log: {event.log_path}")
+            if event.command:
+                print(f"  2. Submit the prepared jobs: {event.command}")
+            print(f"  3. After those jobs finish, run: pesmaker next {config_path}")
+            print(f"Submit jobs      : {event.command}")
             continue
         if event.kind in {"wait", "waiting"}:
-            print("Next action      : wait for external outputs")
-            print(event.message)
-            if event.command:
-                print(f"Submit jobs      : {event.command}")
+            print("  - PESMaker is waiting for external job outputs.")
+            print(f"Waiting for       : {event.message}")
             print()
+            print("What you should do next:")
+            if event.command:
+                print(f"  1. If the jobs were not submitted yet, run: {event.command}")
+                print("  2. Wait for the scheduler jobs to finish.")
+                print(f"  3. Run again: pesmaker next {config_path}")
+                print(f"Submit jobs      : {event.command}")
+            else:
+                print("  1. Wait until the required files exist.")
+                print(f"  2. Run again: pesmaker next {config_path}")
             continue
         if event.kind == "complete":
-            print(f"Complete         : {event.message}")
+            print(f"Complete          : {event.message}")
+            print()
+            print("What you should do next:")
+            print("  - Inspect the generated outputs and archive this run if needed.")
         else:
             print(f"Next action      : {event.message}")
+            print()
+            print("What you should do next:")
+            print(f"  - Run: pesmaker next {config_path}")
         if event.result is not None:
             print(f"Output directory : {event.result.output_dir}")
         print()

@@ -14,10 +14,25 @@ theme:
 nav:
   - Home: index.md
   - Installation: installation.md
-  - Usage:
-      - Quick Start: usage.md
-      - Active Learning Workflow: ACTIVE_LEARNING_WORKFLOW.md
-      - CLI: api/cli.md
+  - Quick Start: usage.md
+  - Workflow Guide: ACTIVE_LEARNING_WORKFLOW.md
+  - Commands:
+      - Overview: commands/index.md
+      - init: commands/init.md
+      - validate: commands/validate.md
+      - next: commands/next.md
+      - status: commands/status.md
+      - generate: commands/generate.md
+      - sample-setup: commands/sample-setup.md
+      - select: commands/select.md
+      - scf-setup: commands/scf-setup.md
+      - submit: commands/submit.md
+      - collect: commands/collect.md
+      - train-setup: commands/train-setup.md
+  - Examples:
+      - Minimal YAML: examples/minimal-yaml.md
+  - Reference:
+      - CLI Index: api/cli.md
   - Theory:
       - Structure Perturbation: theory/perturbation.md
       - Farthest Point Sampling: theory/farthest-point-sampling.md

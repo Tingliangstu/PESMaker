@@ -146,8 +146,8 @@ def inspect_next(config: PESMakerConfig, config_path: Path) -> NextResult:
     """Inspect the next workflow step without writing files."""
     state = load_next_state(config)
     step = determine_next_step(config, config_path, state)
-    event = NextEvent(kind=step.kind, message=step.message, command=step.command)
-    return _result(config, step.kind, [event])
+    event = NextEvent(kind="next-action", message=step.message, command=step.command)
+    return _result(config, "status", [event])
 
 
 def determine_next_step(

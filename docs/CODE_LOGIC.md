@@ -14,6 +14,7 @@ flowchart TD
     E -->|"init"| F["write starter YAML"]
     E -->|"validate"| G["load_config(path)"]
     E -->|"next"| N["workflow.next.run_next(config, path)"]
+    E -->|"status"| STAT["workflow.next.inspect_next(config, path)"]
     E -->|"generate"| GEN["generators.structures.generate_structures"]
     E -->|"sample-setup"| SAMP["samplers.gpumd.setup_sampling"]
     E -->|"select"| SEL["samplers.selection.select_sampling_frames"]

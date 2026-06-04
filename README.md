@@ -91,16 +91,9 @@ training/    # NEP training input folder and submit script
 
 ## Examples
 
-Minimal YAML examples are in the workflow manual, grouped by task type:
+Minimal YAML examples are grouped by task type in the documentation:
 
-- generate structures only;
-- generate and prepare VASP SCF jobs;
-- GPUMD sampling, farthest-point selection, SCF labeling, and NEP training;
-- SCF setup from existing structures;
-- collection from existing OUTCAR files;
-- training setup from an existing dataset.
-
-See [`docs/ACTIVE_LEARNING_WORKFLOW.md`](docs/ACTIVE_LEARNING_WORKFLOW.md).
+See [`docs/examples/minimal-yaml.md`](docs/examples/minimal-yaml.md).
 
 ## Installation
 
@@ -138,7 +131,10 @@ Minimum runtime dependencies are Python 3.10+, ASE, NumPy, and PyYAML.
 
 ## Documentation
 
-The full manual is in [`docs/ACTIVE_LEARNING_WORKFLOW.md`](docs/ACTIVE_LEARNING_WORKFLOW.md).
+Start with [`docs/usage.md`](docs/usage.md). Command pages are under
+[`docs/commands/`](docs/commands/), and minimal YAML examples are in
+[`docs/examples/minimal-yaml.md`](docs/examples/minimal-yaml.md).
+
 The MkDocs site can be served locally with:
 
 ```bash

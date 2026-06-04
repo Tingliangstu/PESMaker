@@ -1,54 +1,61 @@
-# PESMaker
+# PESMaker Manual
 
-PESMaker is a lightweight Python workflow package for building
-application-oriented datasets and machine-learned interatomic potentials from
-user-provided atomistic structures.
-
-It supports a staged workflow:
-
-```text
-initial structures
-  -> supercells, surfaces, defects, optional perturbations
-  -> optional GPUMD sampling and frame selection
-  -> VASP SCF labeling setup and submission
-  -> extxyz dataset collection
-  -> NEP training setup
-```
+PESMaker builds machine-learning potential datasets from structures you already
+care about: bulk phases, surfaces, defects, interfaces, and sampled MD frames.
 
 ## Start Here
 
-For the complete workflow, read the
-[Active Learning Workflow](ACTIVE_LEARNING_WORKFLOW.md) manual.
-
-For a short command overview, see [Usage](usage.md).
-
-## Main Command Flow
-
-Recommended smart-next flow:
+Most users should run:
 
 ```bash
 pesmaker validate run.yaml
 pesmaker next run.yaml
 ```
 
-Do not write a workflow name for normal runs. `next` infers the flow from YAML
-sections such as `sampling`, `sampling.selection`, `labeling`, and `training`.
-It prepares local stages and stops at dry-run submission or external-output
-wait points.
+`next` is the workflow driver. It runs local PESMaker stages when they are
+ready, stops before real scheduler submission, and prints exactly what you
+should do next.
 
-Manual stage commands remain available for advanced runs:
+You do not need to remember the full stage chain for normal use.
+
+## Read These First
+
+- [Quick Start](usage.md): the shortest practical usage loop.
+- [Workflow Guide](ACTIVE_LEARNING_WORKFLOW.md): what `next` does and why it
+  stops.
+- [Command Manual](commands/index.md): one page per command.
+- [Minimal YAML Examples](examples/minimal-yaml.md): small configs by task
+  type.
+
+## Normal Flow
+
+```text
+input structures
+  -> generated structures
+  -> optional GPUMD sampling
+  -> optional frame selection
+  -> VASP SCF setup and submission
+  -> extxyz dataset collection
+  -> optional NEP training setup
+```
+
+`next` decides which part of this flow is active by reading the YAML sections
+and checking files such as `generated/manifest.jsonl`, `movie.xyz`, `OUTCAR`,
+`train.xyz`, and `training/submit.sh`.
+
+## Manual Flow
+
+Manual commands are still available:
 
 ```bash
 pesmaker generate run.yaml
 pesmaker sample-setup run.yaml
-pesmaker submit run.yaml --stage sampling   # submit MD sampling jobs
 pesmaker select run.yaml
 pesmaker scf-setup run.yaml
-pesmaker submit run.yaml                    # submit SCF/VASP jobs
+pesmaker submit run.yaml
 pesmaker collect run.yaml
 pesmaker train-setup run.yaml
-pesmaker submit run.yaml --stage training   # submit NEP training jobs
 ```
 
-PESMaker is designed to keep every stage inspectable through ordinary folders,
-manifests, and scheduler scripts.
+Use them when you want to debug one stage. Use `next` when you want the simpler
+workflow.
