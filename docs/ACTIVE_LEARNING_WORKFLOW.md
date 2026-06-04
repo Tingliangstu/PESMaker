@@ -15,6 +15,7 @@ without rerunning the whole pipeline.
 | --- | --- | --- |
 | `pesmaker init` | Write a starter YAML file | `pesmaker.yaml` or a chosen path |
 | `pesmaker validate` | Check YAML syntax and schema | terminal validation result |
+| `pesmaker next` | Run the next local step until submit preview, wait, or completion | stage outputs plus `.pesmaker/<project>/next_state.json` |
 | `pesmaker generate` | Build supercells, surfaces, defects, and optional perturbations | `generated/` and `manifest.jsonl` |
 | `pesmaker sample-setup` | Prepare MD sampling jobs | `sampling/` |
 | `pesmaker select` | Select representative MD frames | `selected/` |
@@ -24,6 +25,40 @@ without rerunning the whole pipeline.
 | `pesmaker train-setup` | Prepare model training inputs | `training/` |
 
 ## Common Workflow Paths
+
+The recommended user-facing loop is:
+
+```bash
+pesmaker validate run.yaml
+pesmaker next run.yaml
+```
+
+Select the high-level path in YAML:
+
+```yaml
+workflow: direct-scf
+```
+
+or:
+
+```yaml
+workflow: sampling-training
+```
+
+`workflow: auto` is the default. It chooses `sampling-training` when
+`sampling.engine` is not `none` and `sampling.selection` is configured;
+otherwise it uses `direct-scf`.
+
+`next` advances through local work such as generation, setup, selection,
+collection, and training input preparation. It does not submit jobs for real.
+When a sampling, SCF, or training submit step is reached, `next` runs the
+corresponding `submit --dry-run`, records that gate in
+`.pesmaker/<project>/next_state.json`, and prints the exact submit command.
+Run `pesmaker next run.yaml` again after the external jobs have produced their
+outputs.
+
+Manual/advanced stage commands are still available when you want explicit
+control over each step.
 
 Use the direct SCF path when generated structures should go straight to VASP
 labeling:
@@ -74,6 +109,7 @@ A full config can contain these sections:
 
 ```yaml
 project: Te_Pd_rich_defect_md
+workflow: sampling-training
 
 structures:
   include:
@@ -109,6 +145,224 @@ Important conventions:
 - Do not repeat the same YAML key in one mapping. PESMaker rejects duplicate
   keys because silent overwrites are dangerous in production runs.
 
+## Minimal YAML by Task Type
+
+These examples are intentionally small. Replace paths such as `POSCAR`,
+`initial_structures/*.cif`, `/path/to/vasp_std`, and `/path/to/GPUMD/src` with
+your local files and executables.
+
+### Generate Structures Only
+
+Use this when you only want supercells, surfaces, defects, or perturbations.
+
+```yaml
+project: generate_only
+
+structures:
+  - POSCAR
+
+generation:
+  output_dir: generated
+  supercell: [3, 3, 3]
+```
+
+Run:
+
+```bash
+pesmaker validate run.yaml
+pesmaker generate run.yaml
+```
+
+Inspect `generated/manifest.jsonl` and `generated/generation_summary.txt`.
+
+### Direct Generate to VASP SCF
+
+Use this when generated candidates should go directly to DFT labeling.
+
+```yaml
+project: direct_scf
+workflow: direct-scf
+
+structures:
+  include:
+    - initial_structures/*.cif
+
+generation:
+  output_dir: generated
+  supercell: [3, 3, 3]
+
+labeling:
+  engine: vasp
+  output_dir: labeling
+  incar: templates/vasp/INCAR
+  potcar_library: /path/to/VASP/potentials
+  command: /path/to/vasp_std
+  dataset_path: train.xyz
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+  sub_file: templates/sbatch/vasp_cpu_36.sh
+```
+
+Run:
+
+```bash
+pesmaker validate run.yaml
+pesmaker next run.yaml      # generate, prepare SCF, write dry-run submission
+pesmaker submit run.yaml    # submit after inspecting the dry-run log
+pesmaker next run.yaml      # run again after OUTCAR files exist; collects train.xyz
+```
+
+### Sampling, Selection, SCF, and Training
+
+Use this when generated structures seed GPUMD MD, selected frames are labeled
+with VASP, and a NEP training folder is prepared.
+
+```yaml
+project: active_learning
+workflow: sampling-training
+
+structures:
+  - POSCAR
+
+generation:
+  output_dir: generated
+  supercell: [3, 3, 3]
+
+sampling:
+  engine: gpumd
+  output_dir: sampling
+  gpumd_dir: /path/to/GPUMD/src
+  potential: /path/to/nep.txt
+  temperatures: [300, 600]
+  run_steps: 300000
+  selection:
+    trajectory_pattern: sampling/**/movie.xyz
+    output_dir: selected
+    descriptor: calorine
+    potential: /path/to/nep.txt
+    min_distance: 0.2
+    max_count: 200
+
+labeling:
+  engine: vasp
+  output_dir: labeling
+  incar: templates/vasp/INCAR
+  potcar_library: /path/to/VASP/potentials
+  command: /path/to/vasp_std
+  dataset_path: train.xyz
+
+training:
+  model: nep
+  output_dir: training
+  dataset: train.xyz
+  command: nep
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+  sub_file:
+    sampling: templates/sbatch/gpumd.sh
+    labeling: templates/sbatch/vasp_cpu_36.sh
+    training: templates/sbatch/nep.sh
+```
+
+Run:
+
+```bash
+pesmaker validate run.yaml
+pesmaker next run.yaml                  # generate, sample-setup, sampling dry-run
+pesmaker submit run.yaml --stage sampling
+pesmaker next run.yaml                  # after movie.xyz exists: select, SCF setup, SCF dry-run
+pesmaker submit run.yaml
+pesmaker next run.yaml                  # after OUTCAR exists: collect, train-setup, training dry-run
+pesmaker submit run.yaml --stage training
+```
+
+If `labeling.input_manifest` is omitted in `sampling-training`, `pesmaker next`
+uses `selected/manifest.jsonl` after selection.
+
+### VASP SCF Setup from Existing Structures
+
+Use this when structures already exist and you only want SCF folders.
+
+```yaml
+project: scf_from_existing
+
+labeling:
+  engine: vasp
+  input_dir: generated
+  output_dir: labeling
+  incar: templates/vasp/INCAR
+  potcar_library: /path/to/VASP/potentials
+  command: /path/to/vasp_std
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+  sub_file: templates/sbatch/vasp_cpu_36.sh
+```
+
+Run:
+
+```bash
+pesmaker validate run.yaml
+pesmaker scf-setup run.yaml
+pesmaker submit run.yaml --dry-run
+pesmaker submit run.yaml
+```
+
+### Collect Existing VASP OUTCAR Files
+
+Use this when SCF jobs are already finished and you only need an extxyz
+training set.
+
+```yaml
+project: collect_existing
+
+labeling:
+  outcar_pattern: labeling/**/OUTCAR
+  dataset_path: train.xyz
+```
+
+Run:
+
+```bash
+pesmaker validate run.yaml
+pesmaker collect run.yaml
+```
+
+### Prepare Training from an Existing Dataset
+
+Use this when `train.xyz` already exists and you only want training inputs and a
+submission script.
+
+```yaml
+project: train_existing
+
+training:
+  model: nep
+  output_dir: training
+  dataset: train.xyz
+  command: nep
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+  sub_file:
+    training: templates/sbatch/nep.sh
+```
+
+Run:
+
+```bash
+pesmaker validate run.yaml
+pesmaker train-setup run.yaml
+pesmaker submit run.yaml --stage training --dry-run
+pesmaker submit run.yaml --stage training
+```
+
 ## `init`: Create a Starter Config
 
 Run:
@@ -132,6 +386,27 @@ pesmaker validate run.yaml
 `validate` checks that the YAML can be parsed and that top-level sections have
 valid shapes. It is cheap and should be run before expensive generation,
 sampling, or SCF setup.
+
+## `next`: Run the Smart Workflow Step
+
+Run:
+
+```bash
+pesmaker next run.yaml
+```
+
+`next` inspects the configured `workflow` mode and existing artifacts, then
+runs local stages until it reaches one of three states:
+
+- `submit-preview`: a dry-run submission log was written and the real submit
+  command was printed;
+- `waiting`: external job outputs are needed, such as `movie.xyz` or `OUTCAR`;
+- `complete`: all local work for the selected workflow path is done.
+
+For `direct-scf`, `next` advances through generation, SCF setup, SCF dry-run
+submission, waiting for OUTCAR files, and collection. For `sampling-training`,
+it also includes GPUMD sampling setup, waiting for MD trajectories, frame
+selection, training setup, and training dry-run submission.
 
 ## `generate`: Build Structures
 

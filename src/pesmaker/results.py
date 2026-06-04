@@ -13,17 +13,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
-"""Backward-compatible structure generation imports."""
+
+"""Common result objects returned by PESMaker stages."""
 
 from __future__ import annotations
 
-from importlib import import_module
+from dataclasses import dataclass, field
+from pathlib import Path
 
-_module = import_module("pesmaker.generators.structures")
-for _name in dir(_module):
-    if not _name.startswith("__"):
-        globals()[_name] = getattr(_module, _name)
 
-__all__ = sorted(
-    name for name in globals() if not name.startswith("__") and name != "_module"
-)
+@dataclass(frozen=True)
+class StageResult:
+    """Summary for a prepared or collected workflow stage."""
+
+    output_dir: Path
+    files: tuple[Path, ...]
+    message: str
+    warnings: tuple[str, ...] = field(default_factory=tuple)

@@ -23,9 +23,32 @@ Validate before running expensive stages:
 pesmaker validate run.yaml
 ```
 
+Run the smart workflow driver:
+
+```bash
+pesmaker next run.yaml
+```
+
+`next` runs local setup stages until it reaches a submit preview, waits for
+external outputs, or completes the workflow. It never submits jobs for real; it
+writes dry-run logs and prints the matching `pesmaker submit ...` command.
+
 ## Direct Generate to SCF Workflow
 
 Use this path when generated structures should go directly to DFT labeling:
+
+```yaml
+workflow: direct-scf
+```
+
+Recommended command:
+
+```bash
+pesmaker validate run.yaml
+pesmaker next run.yaml
+```
+
+Manual stage commands:
 
 ```bash
 pesmaker generate run.yaml
@@ -39,6 +62,7 @@ Supercell-only generation does not need a `perturb` section:
 
 ```yaml
 project: Te_bulk_mp
+workflow: direct-scf
 
 structures:
   include:
@@ -53,6 +77,7 @@ Minimal structure-generation and SCF setup example:
 
 ```yaml
 project: Te_surface_scf
+workflow: direct-scf
 
 structures:
   include:
@@ -96,6 +121,19 @@ jobs:
 
 Use this path when generated structures first seed MD sampling:
 
+```yaml
+workflow: sampling-training
+```
+
+Recommended command:
+
+```bash
+pesmaker validate run.yaml
+pesmaker next run.yaml
+```
+
+Manual stage commands:
+
 ```bash
 pesmaker generate run.yaml
 pesmaker sample-setup run.yaml
@@ -116,6 +154,8 @@ by `scf-setup`; `--stage training` submits training jobs prepared by
 Add these sections to the config:
 
 ```yaml
+workflow: sampling-training
+
 sampling:
   engine: gpumd
   output_dir: sampling

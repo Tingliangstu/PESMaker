@@ -20,6 +20,7 @@ nav:
       - CLI: api/cli.md
   - Theory:
       - Structure Perturbation: theory/perturbation.md
+      - Farthest Point Sampling: theory/farthest-point-sampling.md
   - Development:
       - Architecture: ARCHITECTURE.md
       - Code Logic: CODE_LOGIC.md

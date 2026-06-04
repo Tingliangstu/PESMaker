@@ -1,4 +1,5 @@
 project: Te_Pd_rich_defect_md
+workflow: sampling-training
 
 structures:
   include:

@@ -33,39 +33,57 @@ reactions.
 
 ## Workflow
 
-Direct generation and DFT labeling. Use this when generated structures should
-go straight to VASP SCF labeling:
+For most runs, validate the YAML and then let `next` advance the workflow until
+it reaches a submit preview, waits for external results, or finishes the local
+steps:
 
 ```bash
-pesmaker validate run.yaml           # check YAML syntax and required fields
-pesmaker generate run.yaml           # build supercells, surfaces, defects, and optional perturbations
-pesmaker scf-setup run.yaml          # prepare VASP SCF folders with POSCAR/INCAR/submit.sh
-pesmaker submit run.yaml --dry-run   # preview SCF/VASP submission commands
-pesmaker submit run.yaml             # submit prepared SCF/VASP jobs
-pesmaker collect run.yaml            # collect finished SCF outputs into a training dataset
+pesmaker validate run.yaml
+pesmaker next run.yaml
 ```
 
-Full sampling, labeling, and training loop. Use this when generated structures
-first seed MD sampling before DFT labeling:
+Set the high-level path in YAML:
+
+```yaml
+workflow: direct-scf          # generated structures -> VASP labeling -> collect
+# or
+workflow: sampling-training   # generate -> GPUMD sampling -> select -> label -> train
+```
+
+`workflow: auto` is the default. It uses `sampling-training` when GPUMD sampling
+and `sampling.selection` are configured; otherwise it uses `direct-scf`.
+
+`next` never submits jobs for real. At a sampling, SCF, or training submit
+boundary it writes a dry-run log, records the gate in
+`.pesmaker/<project>/next_state.json`, and prints the command to submit
+manually.
+
+Manual direct generation and DFT labeling:
 
 ```bash
-pesmaker validate run.yaml                  # check YAML syntax and required fields
-pesmaker generate run.yaml                  # build initial structures for sampling
-pesmaker sample-setup run.yaml              # prepare GPUMD MD folders and submit.sh files
-pesmaker submit run.yaml --stage sampling   # submit prepared MD sampling jobs
-pesmaker select run.yaml                    # select representative frames from MD trajectories
-pesmaker scf-setup run.yaml                 # prepare VASP SCF folders for selected structures
-pesmaker submit run.yaml                    # submit prepared SCF/VASP jobs
-pesmaker collect run.yaml                   # collect finished SCF outputs into a training dataset
-pesmaker train-setup run.yaml               # prepare NEP training input files and submit.sh
-pesmaker submit run.yaml --stage training   # submit prepared NEP training jobs
+pesmaker generate run.yaml
+pesmaker scf-setup run.yaml
+pesmaker submit run.yaml --dry-run
+pesmaker submit run.yaml
+pesmaker collect run.yaml
 ```
 
-`submit` always submits `submit.sh` files that were prepared by an earlier
-setup command. Without `--stage`, it submits the SCF labeling stage by default.
-Use `--stage sampling` for MD jobs and `--stage training` for training jobs.
-Each stage writes normal files and folders that can be inspected, edited, and
-rerun independently.
+Manual sampling, labeling, and training loop:
+
+```bash
+pesmaker generate run.yaml
+pesmaker sample-setup run.yaml
+pesmaker submit run.yaml --stage sampling
+pesmaker select run.yaml
+pesmaker scf-setup run.yaml
+pesmaker submit run.yaml
+pesmaker collect run.yaml
+pesmaker train-setup run.yaml
+pesmaker submit run.yaml --stage training
+```
+
+`submit` always submits `submit.sh` files prepared by an earlier setup command.
+Without `--stage`, it submits the SCF labeling stage by default.
 
 ```text
 generated/   # supercells, surfaces, defects, optional perturbations
@@ -78,12 +96,91 @@ training/    # NEP training input folder and submit script
 
 ## Example Config
 
+Minimal direct SCF run:
+
+```yaml
+project: direct_scf
+workflow: direct-scf
+
+structures:
+  - POSCAR
+
+generation:
+  output_dir: generated
+  supercell: [3, 3, 3]
+
+labeling:
+  engine: vasp
+  output_dir: labeling
+  incar: templates/vasp/INCAR
+  command: /path/to/vasp_std
+  dataset_path: train.xyz
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+```
+
+Run it with:
+
+```bash
+pesmaker validate run.yaml
+pesmaker next run.yaml
+```
+
+Minimal sampling and training run:
+
+```yaml
+project: sampling_training
+workflow: sampling-training
+
+structures:
+  - POSCAR
+
+generation:
+  output_dir: generated
+
+sampling:
+  engine: gpumd
+  output_dir: sampling
+  gpumd_dir: /path/to/GPUMD/src
+  potential: /path/to/nep.txt
+  temperatures: [300]
+  selection:
+    trajectory_pattern: sampling/**/movie.xyz
+    output_dir: selected
+    descriptor: calorine
+    potential: /path/to/nep.txt
+    max_count: 200
+
+labeling:
+  engine: vasp
+  output_dir: labeling
+  incar: templates/vasp/INCAR
+  command: /path/to/vasp_std
+  dataset_path: train.xyz
+
+training:
+  model: nep
+  output_dir: training
+  dataset: train.xyz
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+```
+
+Run `pesmaker next run.yaml` repeatedly after submitted jobs produce their
+outputs. For more minimal YAML examples by task type, see
+[`docs/ACTIVE_LEARNING_WORKFLOW.md`](docs/ACTIVE_LEARNING_WORKFLOW.md).
+
 For pure supercell expansion, omit the `perturb` section. PESMaker writes one
 expanded `pristine_<supercell>.vasp` file per input structure, such as
 `pristine_3x3x3.vasp`:
 
 ```yaml
 project: Te_bulk_mp
+workflow: direct-scf
 
 structures:
   include:
@@ -99,6 +196,7 @@ example `pristine_3x3x3_single_vacancy_Te_000001.vasp`.
 
 ```yaml
 project: Te_Pd_rich_defect_md
+workflow: sampling-training
 
 structures:
   include:

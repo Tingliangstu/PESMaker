@@ -236,6 +236,33 @@ class DatasetConfig:
         return cls(format=str(data.get("format", "extxyz")), split=split_tuple)
 
 
+WORKFLOW_MODES = {"auto", "direct-scf", "sampling-training"}
+
+
+@dataclass(frozen=True)
+class WorkflowConfig:
+    """High-level workflow mode used by `pesmaker next`.
+
+    Attributes:
+        mode: Smart-next mode. `auto` infers a mode from configured engines,
+            `direct-scf` goes from generated structures directly to SCF
+            labeling, and `sampling-training` includes sampling, selection,
+            labeling, collection, and training setup.
+    """
+
+    mode: str = "auto"
+
+    @classmethod
+    def from_value(cls, data: Any) -> "WorkflowConfig":
+        """Parse the optional top-level `workflow` config value."""
+        if data is None:
+            return cls()
+        if isinstance(data, str):
+            return cls(mode=_normalize_workflow_mode(data))
+        mapping = _require_mapping(data, "workflow")
+        return cls(mode=_normalize_workflow_mode(str(mapping.get("mode", "auto"))))
+
+
 @dataclass(frozen=True)
 class PESMakerConfig:
     """Top-level validated PESMaker configuration.
@@ -250,6 +277,7 @@ class PESMakerConfig:
         dataset: Dataset export configuration.
         training: Potential training engine configuration.
         jobs: Cluster submission and machine-specific template options.
+        workflow: High-level smart-next workflow mode.
     """
 
     project: str
@@ -268,6 +296,7 @@ class PESMakerConfig:
     jobs: EngineConfig = field(
         default_factory=lambda: EngineConfig(engine="local", options={})
     )
+    workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "PESMakerConfig":
@@ -320,6 +349,7 @@ class PESMakerConfig:
                 default_engine="local",
                 alias_engine_key="machine",
             ),
+            workflow=WorkflowConfig.from_value(data.get("workflow")),
         )
 
 
@@ -453,6 +483,14 @@ def _safe_generation_task_name(name: str) -> str:
     )
     safe = safe.strip("_")
     return safe or "task"
+
+
+def _normalize_workflow_mode(value: str) -> str:
+    mode = value.strip().lower().replace("_", "-")
+    if mode not in WORKFLOW_MODES:
+        allowed = ", ".join(sorted(WORKFLOW_MODES))
+        raise ValueError(f"workflow.mode must be one of: {allowed}")
+    return mode
 
 
 def _require_mapping(value: Any, name: str) -> dict[str, Any]:

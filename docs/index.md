@@ -24,17 +24,18 @@ For a short command overview, see [Usage](usage.md).
 
 ## Main Command Flow
 
-Direct generation and SCF labeling:
+Recommended smart-next flow:
 
 ```bash
 pesmaker validate run.yaml
-pesmaker generate run.yaml
-pesmaker scf-setup run.yaml
-pesmaker submit run.yaml             # submit SCF/VASP jobs
-pesmaker collect run.yaml
+pesmaker next run.yaml
 ```
 
-Full sampling, labeling, and training loop:
+Set `workflow: direct-scf`, `workflow: sampling-training`, or leave the
+default `workflow: auto` in the YAML. `next` prepares local stages and stops at
+dry-run submission or external-output wait points.
+
+Manual stage commands remain available for advanced runs:
 
 ```bash
 pesmaker generate run.yaml

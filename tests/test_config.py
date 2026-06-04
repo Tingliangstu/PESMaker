@@ -32,6 +32,44 @@ def test_config_from_mapping_minimal():
     assert len(config.structures) == 1
     assert config.labeling.engine == "vasp"
     assert config.training.engine == "nep"
+    assert config.workflow.mode == "auto"
+
+
+def test_workflow_accepts_string_and_mapping_modes():
+    """The smart-next workflow mode should accept concise YAML forms."""
+    direct = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "workflow": "direct-scf",
+            "structures": ["POSCAR"],
+        }
+    )
+    sampling = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "workflow": {"mode": "sampling_training"},
+            "structures": ["POSCAR"],
+        }
+    )
+
+    assert direct.workflow.mode == "direct-scf"
+    assert sampling.workflow.mode == "sampling-training"
+
+
+def test_workflow_rejects_unknown_mode():
+    """Typos in workflow.mode should fail during validation."""
+    try:
+        PESMakerConfig.from_mapping(
+            {
+                "project": "demo",
+                "workflow": "full-loop",
+                "structures": ["POSCAR"],
+            }
+        )
+    except ValueError as exc:
+        assert "workflow.mode must be one of" in str(exc)
+    else:
+        raise AssertionError("unknown workflow modes should fail")
 
 
 def test_config_from_mapping_allows_stage_only_config():
@@ -126,9 +164,7 @@ def test_generation_accepts_surface_defects_and_job_templates():
             "generation": {
                 "supercell": [3, 3, 1],
                 "surface": {"vacuum": 30, "axis": 2},
-                "defects": {
-                    "single_vacancies": {"elements": ["Te"], "max_count": 2}
-                },
+                "defects": {"single_vacancies": {"elements": ["Te"], "max_count": 2}},
             },
             "jobs": {
                 "machine": "cluster-a",
@@ -259,7 +295,9 @@ generation:
 def test_non_yaml_configs_are_not_supported(tmp_path):
     """PESMaker should keep the public config surface to YAML only."""
     config_path = tmp_path / "run.json"
-    config_path.write_text('{"project": "demo", "structures": ["POSCAR"]}\n', encoding="utf-8")
+    config_path.write_text(
+        '{"project": "demo", "structures": ["POSCAR"]}\n', encoding="utf-8"
+    )
 
     try:
         load_config(config_path)

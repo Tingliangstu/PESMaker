@@ -1,4 +1,5 @@
 project: Te_mp_19_test
+workflow: direct-scf
 
 structures:
   - Te-mp-19.cif

@@ -23,20 +23,19 @@ from pathlib import Path
 
 from pesmaker import __contact__, __version__
 from pesmaker.config.io import load_config
-from pesmaker.workflow.generate import (
+from pesmaker.dataset.extxyz import collect_labeled_dataset
+from pesmaker.generators.structures import (
     GenerateResult,
     format_generate_summary,
     generate_structures,
 )
-from pesmaker.workflow.stages import (
-    StageResult,
-    collect_labeled_dataset,
-    select_sampling_frames,
-    setup_labeling,
-    setup_sampling,
-    setup_training,
-    submit_jobs,
-)
+from pesmaker.jobs.submit import submit_jobs
+from pesmaker.labelers.vasp import setup_labeling
+from pesmaker.results import StageResult
+from pesmaker.samplers.gpumd import setup_sampling
+from pesmaker.samplers.selection import select_sampling_frames
+from pesmaker.trainers.nep import setup_training
+from pesmaker.workflow.next import NextResult, run_next
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,6 +62,16 @@ def main(argv: list[str] | None = None) -> int:
         description="Check config syntax and required fields.",
     )
     _add_config_argument(validate_parser)
+
+    next_parser = subparsers.add_parser(
+        "next",
+        help="Run the next needed workflow step.",
+        description=(
+            "Run local stages until PESMaker reaches a submission preview, "
+            "external-result wait, or workflow completion."
+        ),
+    )
+    _add_config_argument(next_parser)
 
     generate_parser = subparsers.add_parser(
         "generate",
@@ -159,6 +168,10 @@ def main(argv: list[str] | None = None) -> int:
             _print_generate_summary(result)
             return 0
 
+        if args.command == "next":
+            _print_next_result(run_next(config, args.config))
+            return 0
+
         if args.command == "sample-setup":
             _print_stage_result(setup_sampling(config))
             return 0
@@ -188,7 +201,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
     except (OSError, ValueError) as exc:
-        print(_format_cli_error(args.command, args.config, config, exc), file=sys.stderr)
+        print(
+            _format_cli_error(args.command, args.config, config, exc), file=sys.stderr
+        )
         return 2
 
     parser.error(f"unknown command: {args.command}")
@@ -244,6 +259,7 @@ def _write_starter_config(path: Path) -> int:
         return 1
 
     template = """project: example_project
+workflow: auto
 
 structures:
   - POSCAR
@@ -420,6 +436,43 @@ def _print_submit_result(
         else:
             print(f"  - Review scheduler output in {log_path}")
     print()
+
+
+def _print_next_result(result: NextResult) -> None:
+    """Print a concise summary for `pesmaker next`."""
+    print(f"Workflow mode    : {result.mode}")
+    print(f"Status           : {result.status}")
+    if result.state_path is not None:
+        print(f"State            : {result.state_path}")
+    print()
+    for event in result.events:
+        if event.kind == "submit-preview":
+            print("Submission preview complete.")
+            print(f"Stage            : {_event_stage(event)}")
+            if event.log_path is not None:
+                print(f"Log              : {event.log_path}")
+            if event.command:
+                print(f"Submit jobs      : {event.command}")
+            print()
+            continue
+        if event.kind == "wait":
+            print(event.message)
+            if event.command:
+                print(f"Submit jobs      : {event.command}")
+            print()
+            continue
+        print(event.message)
+        if event.result is not None:
+            print(f"Output directory : {event.result.output_dir}")
+        print()
+
+
+def _event_stage(event) -> str:
+    if event.command and "--stage sampling" in event.command:
+        return "sampling"
+    if event.command and "--stage training" in event.command:
+        return "training"
+    return "scf"
 
 
 def _submit_command(config_path: Path, stage: str) -> str:
