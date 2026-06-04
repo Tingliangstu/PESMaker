@@ -157,6 +157,12 @@ jobs:
     training: templates/sbatch/nep.sh
 ```
 
+`sampling` is the canonical section name. PESMaker also accepts `MD_sampling`
+and `md_sampling` as aliases for the same section. For the shortest FPS setup,
+omit `selection.min_distance`; the default is `0.0`, so selection is controlled
+by `selection.max_count` unless duplicate descriptor vectors leave no farther
+frame to add.
+
 ## Common Outputs
 
 ```text

@@ -1,0 +1,20 @@
+project: bulk_Te
+
+structures:
+  - Te-mp-19.cif
+
+generation:
+  supercell: [4, 4, 4]
+  output_dir: generated
+
+MD_sampling:
+  engine: gpumd
+  output_dir: sampling
+  gpumd_dir: /home/tingliang/software/GPUMD/GPUMD-master-26-05-2026/src
+  temperatures: ["300-1200"]
+  run_steps: 3000000
+  ensemble_mode: auto
+  selection:
+    trajectory_pattern: sampling/**/movie.xyz
+    output_dir: selected
+    max_count: 200

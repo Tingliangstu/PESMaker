@@ -81,6 +81,42 @@ def test_training_model_alias_selects_engine():
     assert config.training.options == {"device": "cuda"}
 
 
+def test_md_sampling_alias_selects_sampling_section():
+    """The user-facing `MD_sampling` section should configure sampling."""
+    config = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "structures": ["POSCAR"],
+            "MD_sampling": {
+                "engine": "gpumd",
+                "output_dir": "sampling",
+                "selection": {"max_count": 200},
+            },
+        }
+    )
+
+    assert config.sampling.engine == "gpumd"
+    assert config.sampling.options["output_dir"] == "sampling"
+    assert config.sampling.options["selection"]["max_count"] == 200
+
+
+def test_sampling_alias_conflicts_are_rejected():
+    """Configs should not define the same stage with two section names."""
+    try:
+        PESMakerConfig.from_mapping(
+            {
+                "project": "demo",
+                "structures": ["POSCAR"],
+                "sampling": {"engine": "gpumd"},
+                "MD_sampling": {"engine": "gpumd"},
+            }
+        )
+    except ValueError as exc:
+        assert "use only one of these config sections" in str(exc)
+    else:
+        raise AssertionError("duplicate sampling section aliases should fail")
+
+
 def test_generation_accepts_surface_defects_and_job_templates():
     """Extended workflow sections should remain structured config options."""
     config = PESMakerConfig.from_mapping(

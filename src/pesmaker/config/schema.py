@@ -138,6 +138,7 @@ class GenerationConfig:
         data = data or {}
         tasks = _parse_generation_tasks(data)
         first_task = tasks[0]
+
         return cls(
             supercell=first_task.supercell,
             output_dir=Path(str(data["output_dir"]))
@@ -286,6 +287,11 @@ class PESMakerConfig:
             raise ValueError("config requires 'project'")
 
         structures = _parse_structures(data.get("structures"), required=False)
+        sampling = _optional_alias_mapping(
+            data,
+            "sampling",
+            aliases=("MD_sampling", "md_sampling"),
+        )
 
         return cls(
             project=str(project),
@@ -294,7 +300,7 @@ class PESMakerConfig:
                 _optional_mapping(data.get("generation"), "generation")
             ),
             sampling=EngineConfig.from_mapping(
-                _optional_mapping(data.get("sampling"), "sampling"),
+                sampling,
                 default_engine="none",
             ),
             labeling=EngineConfig.from_mapping(
@@ -333,6 +339,24 @@ def _optional_mapping(value: Any, name: str) -> dict[str, Any] | None:
     if value is None:
         return None
     return _require_mapping(value, name)
+
+
+def _optional_alias_mapping(
+    data: dict[str, Any],
+    canonical: str,
+    *,
+    aliases: tuple[str, ...],
+) -> dict[str, Any] | None:
+    """Return a config section while accepting a small set of aliases."""
+    keys = (canonical, *aliases)
+    present = [key for key in keys if data.get(key) is not None]
+    if not present:
+        return None
+    if len(present) > 1:
+        names = ", ".join(keys)
+        raise ValueError(f"use only one of these config sections: {names}")
+    key = present[0]
+    return _optional_mapping(data.get(key), key)
 
 
 def _nested_generation_options(
