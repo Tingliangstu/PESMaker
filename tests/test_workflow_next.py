@@ -55,12 +55,19 @@ jobs:
     state_path = tmp_path / ".pesmaker" / "direct_next" / "next_state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert "scf" in state["dry_runs"]
+    assert "Plan before execution" in output
+    assert "Start with       : Generate structures from the configured inputs." in output
+    assert "Submit behavior  : dry-run only" in output
+    assert output.index("Plan before execution") < output.index("Work done this run:")
     assert "Inferred flow    : generate -> scf -> collect" in output
     assert "Submission preview complete." in output
     assert f"Submit jobs      : pesmaker submit {config_path}" in output
+    assert "pesmaker generate" not in output
 
     assert main(["next", str(config_path)]) == 0
     output = capsys.readouterr().out
+    assert "Plan before execution" in output
+    assert "No local stage will run now." in output
     assert "Waiting for SCF outputs matching" in output
     assert "Submission preview complete." not in output
 
@@ -106,6 +113,8 @@ jobs:
     state_path = tmp_path / ".pesmaker" / "sampling_next" / "next_state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert "sampling" in state["dry_runs"]
+    assert "Plan before execution" in output
+    assert "Submit behavior  : dry-run only" in output
     assert "Inferred flow    : generate -> sampling -> select -> scf -> collect" in output
     assert "Submit jobs      : pesmaker submit" in output
     assert "--stage sampling" in output
@@ -164,6 +173,7 @@ labeling:
 
     assert "Inferred flow    : generate -> scf -> collect" in output
     assert "Next action      : Generate structures" in output
+    assert "Plan before execution" not in output
     assert not (tmp_path / "generated").exists()
     assert not (tmp_path / ".pesmaker").exists()
 
@@ -250,8 +260,34 @@ jobs:
     assert (tmp_path / "training" / "submit.sh").exists()
     assert "Collected finished SCF outputs." in output
     assert "Prepared training inputs." in output
+    assert "Plan before execution" in output
     assert "Stage            : training" in output
     assert f"Submit jobs      : pesmaker submit {config_path} --stage training" in output
+
+
+def test_next_reports_complete_without_running_when_no_task_exists(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """A config with no enabled stages should complete without writing state."""
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(
+        """project: complete_next
+labeling:
+  engine: none
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["next", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Plan before execution" in output
+    assert "No PESMaker task needs to run now." in output
+    assert "Complete          : No further PESMaker action is required" in output
+    assert not (tmp_path / ".pesmaker").exists()
 
 
 def test_old_workflow_stage_imports_still_work():

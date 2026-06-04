@@ -176,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "next":
+            preflight = inspect_next(config, args.config)
+            _print_next_preflight(preflight, config_path=args.config)
             _print_next_result(run_next(config, args.config), config_path=args.config)
             return 0
 
@@ -476,7 +478,7 @@ def _print_next_result(result: NextResult, *, config_path: Path) -> None:
         print()
         return
 
-    if all(event.kind == "next-action" for event in boundary_events):
+    if all(event.kind.startswith("next-action") for event in boundary_events):
         for event in boundary_events:
             print(f"Next action      : {event.message}")
             print()
@@ -541,6 +543,58 @@ def _print_next_result(result: NextResult, *, config_path: Path) -> None:
         if event.result is not None:
             print(f"Output directory : {event.result.output_dir}")
         print()
+
+
+def _print_next_preflight(result: NextResult, *, config_path: Path) -> None:
+    """Print the action plan before `pesmaker next` writes files."""
+    event = result.events[0] if result.events else None
+    step_kind = _next_action_kind(event)
+    print("Plan before execution")
+    print(f"Inferred flow    : {result.flow}")
+    print()
+
+    if event is None:
+        print("PESMaker did not find a next action.")
+        print()
+        return
+
+    if step_kind == "run":
+        print(f"Start with       : {event.message}")
+        print(
+            "Then             : continue through any later local PESMaker "
+            "stages whose inputs are ready"
+        )
+        print(
+            "Stop rule        : stop before real scheduler submission, or "
+            "when external outputs are missing"
+        )
+        print("Submit behavior  : dry-run only; PESMaker will print the submit command")
+    elif step_kind == "submit-preview":
+        print(f"Start with       : {event.message}")
+        print("Stop rule        : stop before real scheduler submission")
+        if event.command:
+            print(f"Submit command   : {event.command}")
+    elif step_kind == "waiting":
+        print("No local stage will run now.")
+        print(f"Waiting for      : {event.message}")
+        if event.command:
+            print(f"Submit command   : {event.command}")
+    elif step_kind == "complete":
+        print("No PESMaker task needs to run now.")
+        print(f"Reason           : {event.message}")
+    else:
+        print(f"Start with       : {event.message}")
+        print("Stop rule        : stop before real scheduler submission")
+    print()
+
+
+def _next_action_kind(event) -> str:
+    if event is None:
+        return ""
+    prefix = "next-action:"
+    if isinstance(event.kind, str) and event.kind.startswith(prefix):
+        return event.kind[len(prefix) :]
+    return str(event.kind)
 
 
 def _event_stage(event) -> str:

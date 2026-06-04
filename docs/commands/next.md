@@ -36,7 +36,17 @@ action. `next` only previews submissions and prints the command.
 
 ## What It Prints
 
-`next` prints three useful blocks.
+`next` prints a plan before it writes files:
+
+```text
+Plan before execution
+Start with       : Generate structures from the configured inputs.
+Then             : continue through any later local PESMaker stages whose inputs are ready
+Stop rule        : stop before real scheduler submission, or when external outputs are missing
+Submit behavior  : dry-run only; PESMaker will print the submit command
+```
+
+After the run, it prints what actually happened:
 
 ```text
 Work done this run:
@@ -61,6 +71,14 @@ What you should do next:
 
 This is the important part. Run the command printed there.
 
+If no task exists, `next` says:
+
+```text
+No PESMaker task needs to run now.
+```
+
+and exits without writing `.pesmaker/` state.
+
 ## Direct SCF Example
 
 With `generation` and `labeling` sections, the first `next` run will usually:
@@ -68,6 +86,9 @@ With `generation` and `labeling` sections, the first `next` run will usually:
 ```text
 generate -> scf-setup -> submit --dry-run
 ```
+
+Before doing that work, it prints the plan. Then it executes the local stages
+and stops at the SCF submission preview.
 
 Then it prints something like:
 
@@ -96,6 +117,9 @@ will usually:
 ```text
 generate -> sample-setup -> submit --stage sampling --dry-run
 ```
+
+Before doing that work, it prints the plan. Then it executes the local stages
+and stops at the sampling submission preview.
 
 Then it prints:
 
