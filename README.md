@@ -39,73 +39,28 @@ reactions.
 git clone https://github.com/Tingliangstu/PESMaker.git
 cd PESMaker
 python -m pip install -e .
+pesmaker --help
 ```
 
-For development and documentation:
-
-```bash
-python -m pip install -e ".[dev,docs]"
-```
-
-For Calorine NEP descriptor-based frame selection:
+If you use Calorine descriptor selection:
 
 ```bash
 python -m pip install -e ".[selection]"
 ```
 
-Check the command-line interface:
-
-```bash
-pesmaker --help
-```
-
-On Windows, if `pesmaker` is not on `PATH`, run it through Python:
-
-```powershell
-python -m pesmaker --help
-```
-
-Minimum runtime dependencies are Python 3.10+, ASE, NumPy, and PyYAML.
-
 ## Updating an Existing Checkout
-
-If you already have the repository, for example:
 
 ```bash
 cd ~/software/PESMaker
-```
-
-quickly update local `main` to the latest GitHub `main` with:
-
-```bash
 git switch main
-git fetch origin
 git pull --ff-only origin main
 python -m pip install -e .
 ```
 
-For a developer checkout with docs and tests:
-
-```bash
-git switch main
-git fetch origin
-git pull --ff-only origin main
-python -m pip install -e ".[dev,docs]"
-python -m pytest -q
-```
-
-If Git says local files would be overwritten, inspect them first:
+If you keep local edits, check them first:
 
 ```bash
 git status
-```
-
-Commit your work, or temporarily save it with:
-
-```bash
-git stash push -m "work before updating main"
-git pull --ff-only origin main
-git stash pop
 ```
 
 ## Workflow
@@ -177,12 +132,6 @@ See [`docs/examples/minimal-yaml.md`](docs/examples/minimal-yaml.md).
 Start with [`docs/usage.md`](docs/usage.md). Command pages are under
 [`docs/commands/`](docs/commands/), and minimal YAML examples are in
 [`docs/examples/minimal-yaml.md`](docs/examples/minimal-yaml.md).
-
-The MkDocs site can be served locally with:
-
-```bash
-mkdocs serve
-```
 
 The intended GitHub Pages URL is:
 

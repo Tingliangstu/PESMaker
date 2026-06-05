@@ -11,55 +11,30 @@ Install PESMaker in editable mode:
 
 ```bash
 python -m pip install -e .
+pesmaker --help
 ```
 
-For development, install test and lint tools:
+If you use Calorine descriptor selection:
 
 ```bash
-python -m pip install -e ".[dev]"
-```
-
-For building the documentation locally:
-
-```bash
-python -m pip install -e ".[docs]"
-mkdocs serve
+python -m pip install -e ".[selection]"
 ```
 
 ## Update an Existing Checkout
 
-If the repository already exists locally:
+If the repository already exists locally, update it with:
 
 ```bash
 cd ~/software/PESMaker
 git switch main
-git fetch origin
 git pull --ff-only origin main
 python -m pip install -e .
 ```
 
-For a developer checkout with tests and documentation tools:
-
-```bash
-git switch main
-git fetch origin
-git pull --ff-only origin main
-python -m pip install -e ".[dev,docs]"
-python -m pytest -q
-```
-
-If Git refuses to pull because local files changed, inspect them first:
+If you keep local edits, check them first:
 
 ```bash
 git status
-```
-
-Then commit the local work or temporarily stash it:
-
-```bash
-git stash push -m "work before updating main"
-git pull --ff-only origin main
-git stash pop
 ```
 
 ## Dependencies
