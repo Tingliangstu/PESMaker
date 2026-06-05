@@ -38,29 +38,36 @@ reactions.
 ```bash
 git clone https://github.com/Tingliangstu/PESMaker.git
 cd PESMaker
-python -m pip install -e .
+python -m pip install .
 pesmaker --help
 ```
 
-If you use Calorine descriptor selection:
-
-```bash
-python -m pip install -e ".[selection]"
-```
+No internet: copy or unzip the PESMaker source folder, then run the last two
+commands inside it.
 
 ## Updating an Existing Checkout
+
+If you are already inside the PESMaker repository on `main`:
+
+```bash
+git pull --ff-only
+python -m pip install .
+```
+
+If you are not sure where you are:
 
 ```bash
 cd ~/software/PESMaker
 git switch main
-git pull --ff-only origin main
-python -m pip install -e .
+git pull --ff-only
+python -m pip install .
 ```
 
-If you keep local edits, check them first:
+No internet: copy or unzip a newer PESMaker source folder, then reinstall:
 
 ```bash
-git status
+cd /path/to/PESMaker
+python -m pip install .
 ```
 
 ## Workflow
