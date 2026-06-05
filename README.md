@@ -1,3 +1,5 @@
+![PESMaker potential energy surface banner](docs/assets/pesmaker-banner.svg)
+
 # PESMaker
 
 PESMaker, short for **Potential Energy Surface Maker**, is a lightweight
@@ -30,6 +32,81 @@ PESMaker is user-structure-driven rather than random-search-first. The intended
 use case is targeted dataset construction for batteries, solid electrolytes,
 thermal transport, alloys, 2D materials, defects, surfaces, catalysis, and
 reactions.
+
+## Installation
+
+```bash
+git clone https://github.com/Tingliangstu/PESMaker.git
+cd PESMaker
+python -m pip install -e .
+```
+
+For development and documentation:
+
+```bash
+python -m pip install -e ".[dev,docs]"
+```
+
+For Calorine NEP descriptor-based frame selection:
+
+```bash
+python -m pip install -e ".[selection]"
+```
+
+Check the command-line interface:
+
+```bash
+pesmaker --help
+```
+
+On Windows, if `pesmaker` is not on `PATH`, run it through Python:
+
+```powershell
+python -m pesmaker --help
+```
+
+Minimum runtime dependencies are Python 3.10+, ASE, NumPy, and PyYAML.
+
+## Updating an Existing Checkout
+
+If you already have the repository, for example:
+
+```bash
+cd ~/software/PESMaker
+```
+
+quickly update local `main` to the latest GitHub `main` with:
+
+```bash
+git switch main
+git fetch origin
+git pull --ff-only origin main
+python -m pip install -e .
+```
+
+For a developer checkout with docs and tests:
+
+```bash
+git switch main
+git fetch origin
+git pull --ff-only origin main
+python -m pip install -e ".[dev,docs]"
+python -m pytest -q
+```
+
+If Git says local files would be overwritten, inspect them first:
+
+```bash
+git status
+```
+
+Commit your work, or temporarily save it with:
+
+```bash
+git stash push -m "work before updating main"
+git pull --ff-only origin main
+git stash pop
+```
 
 ## Workflow
 
@@ -94,40 +171,6 @@ training/    # NEP training input folder and submit script
 Minimal YAML examples are grouped by task type in the documentation:
 
 See [`docs/examples/minimal-yaml.md`](docs/examples/minimal-yaml.md).
-
-## Installation
-
-```bash
-git clone https://github.com/Tingliangstu/PESMaker.git
-cd PESMaker
-python -m pip install -e .
-```
-
-For development and documentation:
-
-```bash
-python -m pip install -e ".[dev,docs]"
-```
-
-For Calorine NEP descriptor-based frame selection:
-
-```bash
-python -m pip install -e ".[selection]"
-```
-
-Check the command-line interface:
-
-```bash
-pesmaker --help
-```
-
-On Windows, if `pesmaker` is not on `PATH`, run it through Python:
-
-```powershell
-python -m pesmaker --help
-```
-
-Minimum runtime dependencies are Python 3.10+, ASE, NumPy, and PyYAML.
 
 ## Documentation
 
