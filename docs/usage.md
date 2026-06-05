@@ -37,6 +37,10 @@ You do not need to run `generate`, `sample-setup`, `select`, `scf-setup`,
 `collect`, or `train-setup` one by one. `next` runs those local stages when
 their inputs are ready.
 
+Before it writes files, `next` prints `Plan before execution`. Read that block
+if you want to see what PESMaker is about to do. It still stops before any real
+cluster submission.
+
 ## 4. Follow the Printed Next Step
 
 When jobs need to be submitted, `next` prints a block like:
@@ -52,6 +56,9 @@ Do exactly that.
 
 PESMaker does not submit jobs automatically. It only previews submission and
 prints the real submit command.
+
+If there is no next task, `next` says that no PESMaker task needs to run now
+and exits without doing extra work.
 
 ## 5. Repeat After External Jobs Finish
 

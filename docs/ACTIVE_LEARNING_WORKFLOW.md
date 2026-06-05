@@ -20,6 +20,10 @@ You normally do not run every stage command by hand. `next` runs local PESMaker
 stages for you and stops only when an external scheduler job must be submitted
 or finished.
 
+Before `next` writes files, it prints `Plan before execution`. This tells you
+the first local step it will start with, that it will continue through later
+ready local stages, and that it will stop before real scheduler submission.
+
 ## What `next` Does
 
 `next` checks two things:
@@ -41,6 +45,7 @@ Training configured   -> prepare training folder and print submit command
 
 If everything local is ready, one `next` run may perform several stages. If an
 external result is missing, `next` waits and tells you what file it needs.
+If no stage is needed, `next` reports that no PESMaker task needs to run now.
 
 ## Direct SCF Flow
 
