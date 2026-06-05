@@ -17,6 +17,26 @@ pesmaker --help
 No internet: copy or unzip the PESMaker source folder, then run those two
 commands inside it.
 
+## Quick Test
+
+After a fresh install or update, use a new empty folder and run:
+
+```bash
+mkdir pesmaker-check
+cd pesmaker-check
+pesmaker init run.yaml
+pesmaker validate run.yaml
+```
+
+The final line should look like:
+
+```text
+OK: run.yaml describes project 'example_project'.
+```
+
+This is only a small command-line and YAML validation check. It does not run
+VASP, GPUMD, NEP, or any scheduler command.
+
 ## Update an Existing Checkout
 
 If you are already inside the PESMaker repository on `main`:
