@@ -45,22 +45,33 @@
   <circle cx="1370" cy="92" r="190" fill="#dff7ff" opacity="0.68"/>
   <circle cx="182" cy="438" r="230" fill="#eef3ff" opacity="0.9"/>
 
-  <g transform="translate(82 92)">
-    <text x="0" y="0" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="92" font-weight="850" fill="url(#titleBlue)">PESMaker</text>
-    <text x="4" y="56" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="32" font-weight="650" fill="#17335f">Potential Energy Surface Maker</text>
-    <text x="4" y="116" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="27" fill="#2e466b">From structures to DFT-labeled MLIP data.</text>
+  <g transform="translate(82 100)">
+    <text x="0" y="0" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="112" font-weight="850" fill="url(#titleBlue)">PESMaker</text>
+    <text x="4" y="66" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="40" font-weight="650" fill="#17335f">Potential Energy Surface Maker</text>
+    <text x="4" y="126" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="31" fill="#2e466b">From structures to DFT-labeled MLIP data.</text>
 
-    <g transform="translate(6 188)" opacity="0.98">
-      <circle cx="18" cy="18" r="15" fill="#1769d8"/>
-      <circle cx="82" cy="18" r="15" fill="#ff7a2f"/>
-      <circle cx="146" cy="18" r="15" fill="#22a75a"/>
-      <path d="M35 18 H65 M99 18 H129" stroke="#17335f" stroke-width="7" stroke-linecap="round"/>
-      <path d="M6 74 H220" stroke="#17335f" stroke-width="6" stroke-linecap="round" opacity="0.14"/>
-      <path d="M6 74 C58 30 108 104 164 58 C196 32 232 38 262 18" fill="none" stroke="#1477e8" stroke-width="7" stroke-linecap="round"/>
+    <g transform="translate(2 186)" opacity="0.98">
+      <rect x="0" y="0" width="142" height="58" rx="18" fill="#ffffff" stroke="#b9d3ff" stroke-width="3"/>
+      <text x="71" y="37" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="23" font-weight="750" fill="#17335f">Structures</text>
+      <path d="M158 29 H196" stroke="#17335f" stroke-width="6" stroke-linecap="round"/>
+      <path d="M196 29 l-16 -12 v24 z" fill="#17335f"/>
+
+      <rect x="214" y="0" width="106" height="58" rx="18" fill="#e9f8ff" stroke="#62c7ef" stroke-width="3"/>
+      <text x="267" y="37" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="23" font-weight="800" fill="#13639a">next</text>
+      <path d="M336 29 H374" stroke="#17335f" stroke-width="6" stroke-linecap="round"/>
+      <path d="M374 29 l-16 -12 v24 z" fill="#17335f"/>
+
+      <rect x="392" y="0" width="96" height="58" rx="18" fill="#fff3df" stroke="#ffb154" stroke-width="3"/>
+      <text x="440" y="37" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="23" font-weight="750" fill="#8f3c11">DFT</text>
+      <path d="M504 29 H542" stroke="#17335f" stroke-width="6" stroke-linecap="round"/>
+      <path d="M542 29 l-16 -12 v24 z" fill="#17335f"/>
+
+      <rect x="560" y="0" width="126" height="58" rx="18" fill="#eefbea" stroke="#84d66f" stroke-width="3"/>
+      <text x="623" y="37" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="23" font-weight="750" fill="#27723e">Dataset</text>
     </g>
   </g>
 
-  <g transform="translate(575 76)" filter="url(#surfaceShadow)">
+  <g transform="translate(650 76)" filter="url(#surfaceShadow)">
     <path d="M58 310 C120 252 170 342 240 286 C306 234 358 154 430 202 C494 244 548 246 620 176 C682 116 746 152 828 92 L828 356 C768 418 696 388 628 430 C548 480 488 414 424 430 C354 448 306 514 236 458 C166 402 110 482 58 418 Z" fill="url(#surface)"/>
     <path d="M58 310 C120 252 170 342 240 286 C306 234 358 154 430 202 C494 244 548 246 620 176 C682 116 746 152 828 92" fill="none" stroke="#17335f" stroke-width="6" stroke-linecap="round"/>
     <path d="M98 352 C154 304 204 378 270 332 C336 286 382 226 452 254 C516 280 568 284 646 228 C706 184 756 196 810 152" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.64"/>
@@ -79,7 +90,7 @@
     </g>
   </g>
 
-  <g transform="translate(1005 278)" filter="url(#softShadow)">
+  <g transform="translate(1080 278)" filter="url(#softShadow)">
     <circle cx="0" cy="0" r="54" fill="#ffffff" stroke="#172a60" stroke-width="5"/>
     <circle cx="0" cy="0" r="34" fill="#dff9ff" stroke="#188fd0" stroke-width="5"/>
     <circle cx="0" cy="0" r="10" fill="#ff3b2f"/>
