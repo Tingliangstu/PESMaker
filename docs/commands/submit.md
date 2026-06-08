@@ -91,6 +91,23 @@ For GPUMD sampling, PESMaker does not rewrite CPU resource directives in the
 provided sampling submit template. Keep GPU, partition, time, and any other
 cluster-specific settings in `templates/sbatch/gpumd.sh`.
 
+For local server runs without a scheduler, use `nohup`:
+
+```yaml
+jobs:
+  submit_command: nohup
+  sub_file: gpumd.sh
+```
+
+PESMaker renders `gpumd.sh` into each job directory as `submit.sh`, then runs:
+
+```bash
+nohup bash submit.sh > out 2>&1 &
+```
+
+The process runs in the background and writes its output to `out` inside that
+job directory.
+
 ## Important Rule
 
 Submit from PESMaker with `pesmaker submit ...`, or manually submit from inside

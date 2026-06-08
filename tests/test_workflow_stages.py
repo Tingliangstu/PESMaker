@@ -18,6 +18,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 
 import numpy as np
 
@@ -925,6 +927,84 @@ jobs:
     assert result.message == "Would submit 1 scf job(s)"
     log = tmp_path / "labeling" / "scf_submitted_jobs.txt"
     assert "DRY-RUN" in log.read_text(encoding="utf-8")
+
+
+def test_submit_jobs_nohup_uses_bash_and_out_log(tmp_path):
+    """Local nohup submission should launch submit.sh with bash and out log."""
+    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    workdir.mkdir(parents=True)
+    (workdir / "submit.sh").write_text("#!/bin/bash\ngpumd\n", encoding="utf-8")
+    (tmp_path / "sampling" / "sampling_manifest.jsonl").write_text(
+        json.dumps({"index": 0, "workdir": str(workdir)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: nohup_submit
+sampling:
+  engine: gpumd
+  output_dir: {(tmp_path / 'sampling').as_posix()}
+jobs:
+  submit_command: nohup
+""",
+        encoding="utf-8",
+    )
+
+    result = submit_jobs(load_config(config_path), stage="sampling", dry_run=True)
+
+    assert result.message == "Would submit 1 sampling job(s)"
+    log = tmp_path / "sampling" / "sampling_submitted_jobs.txt"
+    log_text = log.read_text(encoding="utf-8")
+    assert "DRY-RUN" in log_text
+    assert f"cd {workdir}" in log_text
+    assert "nohup bash submit.sh > out 2>&1 &" in log_text
+
+
+def test_submit_jobs_nohup_starts_background_process(tmp_path, monkeypatch):
+    """Real nohup submission should start a detached process and return."""
+    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    workdir.mkdir(parents=True)
+    (workdir / "submit.sh").write_text("#!/bin/bash\ngpumd\n", encoding="utf-8")
+    (tmp_path / "sampling" / "sampling_manifest.jsonl").write_text(
+        json.dumps({"index": 0, "workdir": str(workdir)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: nohup_submit
+sampling:
+  engine: gpumd
+  output_dir: {(tmp_path / 'sampling').as_posix()}
+jobs:
+  submit_command: nohup
+""",
+        encoding="utf-8",
+    )
+    calls = []
+
+    class FakeProcess:
+        pid = 12345
+
+    def fake_popen(command, **kwargs):
+        calls.append((command, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr("pesmaker.jobs.submit.subprocess.Popen", fake_popen)
+
+    result = submit_jobs(load_config(config_path), stage="sampling", dry_run=False)
+
+    assert result.message == "Submitted 1 sampling job(s)"
+    assert calls
+    command, kwargs = calls[0]
+    assert command == ["nohup", "bash", "submit.sh"]
+    assert kwargs["cwd"] == workdir
+    assert kwargs["stderr"] == subprocess.STDOUT
+    assert kwargs["start_new_session"] is True
+    assert Path(kwargs["stdout"].name) == workdir / "out"
+    log_text = (tmp_path / "sampling" / "sampling_submitted_jobs.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "started PID 12345; log: out" in log_text
 
 
 def test_cli_submit_dry_run_prints_clear_summary(tmp_path, capsys):
