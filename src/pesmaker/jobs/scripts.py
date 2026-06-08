@@ -74,8 +74,11 @@ def _write_submit_script(
             engine=engine,
             resources=resources,
         )
-    path = workdir / "submit.sh"
+    path = _submit_script_path(workdir, template_path, stage=stage, engine=engine)
     path.write_text(text, encoding="utf-8")
+    compatibility_path = workdir / "submit.sh"
+    if path != compatibility_path:
+        compatibility_path.write_text(text, encoding="utf-8")
     return path
 
 
@@ -100,6 +103,18 @@ def _job_template_path(config: PESMakerConfig, stage: str) -> Path | None:
 def _preserve_user_submit_template(stage: str, engine: str) -> bool:
     """Return true when PESMaker should not rewrite scheduler resources."""
     return stage == "sampling" and engine.lower() == "gpumd"
+
+
+def _submit_script_path(
+    workdir: Path,
+    template_path: Path | None,
+    *,
+    stage: str,
+    engine: str,
+) -> Path:
+    if template_path is not None and _preserve_user_submit_template(stage, engine):
+        return workdir / template_path.name
+    return workdir / "submit.sh"
 
 
 def _stage_template_value(templates: dict[str, Any], stage: str) -> Any:

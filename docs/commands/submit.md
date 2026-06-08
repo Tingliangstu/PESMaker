@@ -1,6 +1,6 @@
 # `pesmaker submit`
 
-`submit` submits prepared `submit.sh` files.
+`submit` submits prepared stage scripts.
 
 It does not create structures or setup folders. Run setup first, or let
 [`next`](next.md) prepare the folders.
@@ -91,7 +91,23 @@ For GPUMD sampling, PESMaker does not rewrite CPU resource directives in the
 provided sampling submit template. Keep GPU, partition, time, and any other
 cluster-specific settings in `templates/sbatch/gpumd.sh`.
 
-For local server runs without a scheduler, use `nohup`:
+For local server runs without a scheduler, use `bash` when you want the command
+to run in the foreground:
+
+```yaml
+jobs:
+  submit_command: bash
+  sub_file: gpumd.sh
+```
+
+For GPUMD sampling, PESMaker renders `gpumd.sh` into each job directory and
+runs:
+
+```bash
+bash gpumd.sh
+```
+
+Use `nohup` when you want the local job to continue in the background:
 
 ```yaml
 jobs:
@@ -99,10 +115,10 @@ jobs:
   sub_file: gpumd.sh
 ```
 
-PESMaker renders `gpumd.sh` into each job directory as `submit.sh`, then runs:
+PESMaker then runs:
 
 ```bash
-nohup bash submit.sh > out 2>&1 &
+nohup bash gpumd.sh > out 2>&1 &
 ```
 
 The process runs in the background and writes its output to `out` inside that

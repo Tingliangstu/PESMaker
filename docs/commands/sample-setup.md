@@ -42,6 +42,10 @@ template is provided, the generated `submit.sh` simply runs the resolved GPUMD
 command, such as `/path/to/GPUMD/src/gpumd`. Put GPU, partition, and walltime
 requests directly in `templates/sbatch/gpumd.sh`.
 
+When a GPUMD sampling template is named `gpumd.sh`, PESMaker also writes
+`gpumd.sh` in each MD job directory so local submission can run
+`bash gpumd.sh`. A `submit.sh` compatibility copy is kept for older workflows.
+
 ## Temperature Jobs And Movie Paths
 
 Use one temperature ramp when you want a single MD job that heats or cools:

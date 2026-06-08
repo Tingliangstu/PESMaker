@@ -1226,7 +1226,9 @@ jobs:
     assert main(["sample-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "sampling" / "md_000000_temp_300K"
-    submit = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert (workdir / "gpumd.sh").exists()
+    assert (workdir / "submit.sh").exists()
+    submit = (workdir / "gpumd.sh").read_text(encoding="utf-8")
     assert "#SBATCH --job-name=user_gpumd" in submit
     assert "#SBATCH --ntasks=1" in submit
     assert "#SBATCH --gres=gpu:1" in submit
@@ -1234,6 +1236,67 @@ jobs:
     assert "#SBATCH --gres=gpu:4" not in submit
     assert f'cd "{workdir}"' in submit
     assert "/opt/gpumd/gpumd" in submit
+    manifest = json.loads(
+        (tmp_path / "sampling" / "sampling_manifest.jsonl").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["submit_script"] == str(workdir / "gpumd.sh")
+
+
+def test_submit_jobs_bash_uses_rendered_gpumd_template_name(tmp_path):
+    """Local bash submission should run the rendered GPUMD template by name."""
+    from ase import Atoms
+    from ase.io import write
+
+    structure_path = tmp_path / "structure.xyz"
+    write(
+        structure_path,
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[3, 3, 20], pbc=True),
+        format="extxyz",
+    )
+    generated_dir = tmp_path / "generated"
+    generated_dir.mkdir()
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(structure_path)}) + "\n",
+        encoding="utf-8",
+    )
+    gpumd_template = tmp_path / "gpumd.sh"
+    gpumd_template.write_text(
+        """#!/bin/bash
+{command}
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: bash_gpumd_template
+generation:
+  output_dir: {generated_dir.as_posix()}
+sampling:
+  engine: gpumd
+  output_dir: {(tmp_path / 'sampling').as_posix()}
+  command: /opt/gpumd/gpumd
+  temperature: 300
+jobs:
+  submit_command: bash
+  sub_file: {gpumd_template.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["sample-setup", str(config_path)]) == 0
+    result = submit_jobs(load_config(config_path), stage="sampling", dry_run=True)
+
+    assert result.message == "Would submit 1 sampling job(s)"
+    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    assert (workdir / "gpumd.sh").exists()
+    assert (workdir / "submit.sh").exists()
+    log = tmp_path / "sampling" / "sampling_submitted_jobs.txt"
+    assert f"DRY-RUN (cd {workdir} && bash gpumd.sh)" in log.read_text(
+        encoding="utf-8"
+    )
+    assert "bash submit.sh" not in log.read_text(encoding="utf-8")
 
 
 def test_sampling_setup_writes_temperature_ramp(tmp_path):

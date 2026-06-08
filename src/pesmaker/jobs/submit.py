@@ -36,7 +36,7 @@ def submit_jobs(
     """Submit prepared stage jobs with the configured scheduler command."""
     submit_scripts = _stage_submit_scripts(config, stage)
     if not submit_scripts:
-        raise ValueError(f"no submit.sh scripts found for stage: {stage}")
+        raise ValueError(f"no submit scripts found for stage: {stage}")
 
     submit_command = str(config.jobs.options.get("submit_command", "sbatch"))
     output_dir = _stage_output_dir(config, stage)
@@ -101,6 +101,12 @@ def _stage_submit_scripts(config: PESMakerConfig, stage: str) -> list[Path]:
     if manifest_path.exists():
         scripts = []
         for record in _read_manifest(manifest_path):
+            submit_script = record.get("submit_script")
+            if submit_script:
+                script = Path(str(submit_script))
+                if script.exists():
+                    scripts.append(script)
+                    continue
             workdir = record.get("workdir")
             if workdir:
                 script = Path(str(workdir)) / "submit.sh"

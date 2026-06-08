@@ -145,6 +145,7 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
                             "temperature_end": condition.end,
                             "workdir": str(stage_dir),
                             "run_in": str(run_in_path),
+                            "submit_script": str(submit_path),
                         }
                     )
                     + "\n"
