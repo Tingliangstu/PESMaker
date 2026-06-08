@@ -254,6 +254,12 @@ def _format_cli_error(
     exc: OSError | ValueError,
 ) -> str:
     """Format user-facing command errors without exposing a traceback."""
+    if isinstance(exc, FileNotFoundError):
+        missing = exc.filename or (exc.args[0] if exc.args else config_path)
+        if config is None:
+            return f"Error: config file does not exist: {config_path}"
+        return f"Error: file does not exist: {missing}"
+
     message = str(exc)
     if (
         command == "generate"
