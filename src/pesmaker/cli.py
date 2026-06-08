@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
@@ -230,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
                 config_path=args.config,
                 stage=args.stage,
                 dry_run=args.dry_run,
+                submit_command=str(config.jobs.options.get("submit_command", "sbatch")),
             )
             return 0
     except (OSError, ValueError) as exc:
@@ -452,6 +454,7 @@ def _print_submit_result(
     config_path: Path,
     stage: str,
     dry_run: bool,
+    submit_command: str = "sbatch",
 ) -> None:
     """Print a concise summary for submitted or previewed jobs."""
     log_path = result.files[0] if result.files else result.output_dir
@@ -471,7 +474,7 @@ def _print_submit_result(
         print(f"  - {submit_action_label(stage)}: {_submit_command(config_path, stage)}")
     else:
         print("Next steps:")
-        print("  - Check queue: squeue")
+        print(f"  - {_submit_check_step(submit_command)}")
         if stage == "scf":
             print(f"  - Collect finished results: pesmaker collect {config_path}")
             print(
@@ -481,6 +484,12 @@ def _print_submit_result(
         else:
             print(f"  - Review scheduler output in {log_path}")
     print()
+
+
+def _submit_check_step(submit_command: str) -> str:
+    if shlex.split(submit_command) == ["nohup"]:
+        return "Check GPU process: nvidia-smi"
+    return "Check queue: squeue"
 
 
 def _submit_command(config_path: Path, stage: str) -> str:

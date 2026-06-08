@@ -122,7 +122,8 @@ nohup bash gpumd.sh > out 2>&1 &
 ```
 
 The process runs in the background and writes its output to `out` inside that
-job directory.
+job directory. After `nohup` submission, check the local GPU process with
+`nvidia-smi` instead of `squeue`.
 
 ## Important Rule
 

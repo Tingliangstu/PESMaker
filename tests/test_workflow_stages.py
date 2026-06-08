@@ -1065,6 +1065,32 @@ def test_cli_submit_prints_collect_next_step(tmp_path, capsys):
     assert "--stage scf" not in output
 
 
+def test_cli_submit_nohup_prints_nvidia_smi_next_step(tmp_path, capsys):
+    """Local nohup submission output should point to GPU process checks."""
+    log = tmp_path / "sampling" / "sampling_submitted_jobs.txt"
+    log.parent.mkdir()
+    result = StageResult(
+        output_dir=tmp_path / "sampling",
+        files=(log,),
+        message="Submitted 1 sampling job(s)",
+    )
+    config_path = tmp_path / "run.yaml"
+
+    _print_submit_result(
+        result,
+        config_path=config_path,
+        stage="sampling",
+        dry_run=False,
+        submit_command="nohup",
+    )
+    output = capsys.readouterr().out
+
+    assert "Job submission complete." in output
+    assert "Jobs submitted  : 1" in output
+    assert "Check GPU process: nvidia-smi" in output
+    assert "Check queue: squeue" not in output
+
+
 def test_sampling_setup_writes_temperature_jobs(tmp_path):
     """GPUMD setup should expand a temperature list into independent jobs."""
     from ase import Atoms
