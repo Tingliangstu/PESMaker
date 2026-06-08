@@ -44,19 +44,11 @@ def submit_jobs(
     submitted_log = output_dir / f"{stage}_submitted_jobs.txt"
     lines: list[str] = []
     for script in submit_scripts:
-        command = [*shlex.split(submit_command), script.name]
-        display = f"(cd {script.parent} && {' '.join(command)})"
+        display = _submit_display(submit_command, script)
         if dry_run:
             lines.append(f"DRY-RUN {display}")
             continue
-        result = subprocess.run(
-            command,
-            cwd=script.parent,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        message = result.stdout.strip() or result.stderr.strip()
+        message = _run_submit_command(submit_command, script)
         lines.append(f"{script.parent}: {message}")
     submitted_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
     action = "Would submit" if dry_run else "Submitted"
@@ -65,6 +57,41 @@ def submit_jobs(
         (submitted_log,),
         f"{action} {len(submit_scripts)} {stage} job(s)",
     )
+
+
+def _submit_display(submit_command: str, script: Path) -> str:
+    if _is_nohup_submit(submit_command):
+        return f"(cd {script.parent} && nohup bash {script.name} > out 2>&1 &)"
+    command = [*shlex.split(submit_command), script.name]
+    return f"(cd {script.parent} && {' '.join(command)})"
+
+
+def _run_submit_command(submit_command: str, script: Path) -> str:
+    if _is_nohup_submit(submit_command):
+        log_path = script.parent / "out"
+        with log_path.open("ab") as output:
+            process = subprocess.Popen(
+                ["nohup", "bash", script.name],
+                cwd=script.parent,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        return f"started PID {process.pid}; log: {log_path.name}"
+
+    command = [*shlex.split(submit_command), script.name]
+    result = subprocess.run(
+        command,
+        cwd=script.parent,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() or result.stderr.strip()
+
+
+def _is_nohup_submit(submit_command: str) -> bool:
+    return shlex.split(submit_command) == ["nohup"]
 
 
 def _stage_submit_scripts(config: PESMakerConfig, stage: str) -> list[Path]:
