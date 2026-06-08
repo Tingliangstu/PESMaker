@@ -36,6 +36,19 @@ def test_cli_help_shows_simple_public_commands(capsys):
     assert "Prepare SCF calculation job folders" in output
 
 
+def test_cli_missing_config_names_the_missing_file(tmp_path, capsys):
+    """Missing YAML paths should produce a clear user-facing error."""
+    config_path = tmp_path / "run.yaml"
+
+    exit_code = main(["next", str(config_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "Potential Energy Surface Maker" in captured.out
+    assert f"Error: config file does not exist: {config_path}" in captured.err
+    assert captured.err.strip() != f"Error: {config_path}"
+
+
 def test_cli_generate_writes_structures(tmp_path, capsys):
     """The generate command should write perturbed structures and a manifest.
 
