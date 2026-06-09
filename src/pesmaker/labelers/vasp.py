@@ -247,9 +247,11 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
     with manifest_path.open("w", encoding="utf-8") as manifest:
         for index, record in enumerate(records):
             source_path = Path(record["path"])
+            source_atoms = _load_labeling_source(record, source_path)
+            naming_source_path = _labeling_naming_source_path(record, source_path)
             calc_dir = _labeling_workdir(
                 output_dir,
-                source_path,
+                naming_source_path,
                 index=index,
                 naming=str(
                     config.labeling.options.get("workdir_naming", "source_tree")
@@ -259,7 +261,7 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
             )
             calc_dir.mkdir(parents=True, exist_ok=True)
             poscar_path = calc_dir / "POSCAR"
-            warning = _write_labeling_poscar(source_path, poscar_path)
+            warning = _write_labeling_poscar(source_path, poscar_path, source_atoms)
             if warning:
                 warnings.append(warning)
             atom_count = _labeling_atom_count(record, poscar_path)
@@ -275,6 +277,8 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
                 config.labeling.options,
                 source_path,
                 calc_dir,
+                source_atoms=source_atoms,
+                frame_index=record.get("frame_index"),
             )
             incar_path = calc_dir / "INCAR"
             incar = _prepare_labeling_incar(incar_template, resources)
@@ -319,6 +323,8 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
                 "input_mode",
                 "input_relative_path",
                 "source_record_index",
+                "frame_index",
+                "source_frame",
             ):
                 if key in record:
                     record_data[key] = record[key]
@@ -394,9 +400,22 @@ def _safe_path_part(value: str) -> str:
     return safe.strip("_") or "structure"
 
 
-def _write_labeling_poscar(source_path: Path, poscar_path: Path) -> str | None:
+def _load_labeling_source(record: dict[str, Any], source_path: Path):
+    frame_index = record.get("frame_index")
+    if frame_index is not None:
+        return load_structure(source_path, index=int(frame_index))
+    return load_structure(source_path)
+
+
+def _labeling_naming_source_path(record: dict[str, Any], source_path: Path) -> Path:
+    frame_index = record.get("frame_index")
+    if frame_index is None:
+        return source_path
+    return source_path.with_name(f"{source_path.stem}_{int(frame_index):06d}.xyz")
+
+
+def _write_labeling_poscar(source_path: Path, poscar_path: Path, atoms) -> str | None:
     needs_normalization = _vasp_species_block_has_repeated_symbols(source_path)
-    atoms = load_structure(source_path)
     write_structure(atoms, poscar_path, fmt="vasp")
     if needs_normalization:
         return (
@@ -432,10 +451,18 @@ def _copy_labeling_source_backup(
     options: dict[str, Any],
     source_path: Path,
     calc_dir: Path,
+    *,
+    source_atoms=None,
+    frame_index: Any = None,
 ) -> Path | None:
     if not bool(options.get("backup_source", True)):
         return None
     suffix = str(options.get("backup_suffix", f"{source_path.suffix}-bak"))
+    if frame_index is not None:
+        backup_name = f"{source_path.stem}_{int(frame_index):06d}{suffix}"
+        backup_path = calc_dir / backup_name
+        write_structure(source_atoms, backup_path, fmt="extxyz")
+        return backup_path
     backup_name = f"{source_path.stem}{suffix}"
     backup_path = calc_dir / backup_name
     shutil.copy2(source_path, backup_path)

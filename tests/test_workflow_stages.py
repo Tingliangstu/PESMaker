@@ -1604,6 +1604,7 @@ sampling:
     assert (selected_dir / "selected.xyz").exists()
     assert (selected_dir / "selection_features.npy").exists()
     assert (selected_dir / "fps_selection.png").exists()
+    assert list(selected_dir.glob("selected_*.xyz")) == []
     assert "Selected 2 of 3 MD frame(s)" in output
     assert "Selection stopped because remaining frames are closer" in output
     assert "edit your YAML under sampling.selection" in output
@@ -1615,7 +1616,80 @@ sampling:
         ).splitlines()
     ]
     assert len(records) == 2
+    assert {record["path"] for record in records} == {str(selected_dir / "selected.xyz")}
+    assert [record["frame_index"] for record in records] == [0, 1]
+    assert [record["source_frame"] for record in records] == [0, 2]
     assert {record["descriptor"] for record in records} == {"simple"}
+
+
+def test_scf_setup_reads_selected_frames_from_combined_xyz(tmp_path, monkeypatch):
+    """SCF setup should split selected.xyz frames using manifest frame_index."""
+    from ase import Atoms
+    from ase.io import write
+
+    selected_dir = tmp_path / "selected"
+    selected_dir.mkdir()
+    selected_xyz = selected_dir / "selected.xyz"
+    frames = [
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+        Atoms("Te", positions=[(2.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+    ]
+    write(selected_xyz, frames, format="extxyz")
+    (selected_dir / "manifest.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "index": 0,
+                        "source_frame": 3,
+                        "frame_index": 0,
+                        "path": str(selected_xyz),
+                        "atom_count": 1,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "index": 1,
+                        "source_frame": 7,
+                        "frame_index": 1,
+                        "path": str(selected_xyz),
+                        "atom_count": 1,
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: selected_labeling
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  input_manifest: {(selected_dir / 'manifest.jsonl').as_posix()}
+jobs:
+  cores_cpu: 1
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    poscar_0 = tmp_path / "labeling" / "selected_000000" / "POSCAR"
+    poscar_1 = tmp_path / "labeling" / "selected_000001" / "POSCAR"
+    from ase.io import read
+
+    assert read(poscar_0).get_positions()[0, 0] == 0.0
+    assert read(poscar_1).get_positions()[0, 0] == 2.0
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "labeling" / "labeling_manifest.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert [record["frame_index"] for record in records] == [0, 1]
+    assert [record["source_frame"] for record in records] == [3, 7]
 
 
 def test_select_can_use_calorine_nep_descriptors(tmp_path, monkeypatch):

@@ -28,7 +28,6 @@ from pesmaker.config.schema import PESMakerConfig
 from pesmaker.parsers.ase import read_frames, write_extxyz_many
 from pesmaker.results import StageResult
 from pesmaker.samplers.gpumd import _resolve_sampling_potential_path
-from pesmaker.structures import write_structure
 
 
 def select_sampling_frames(config: PESMakerConfig) -> StageResult:
@@ -67,28 +66,26 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
     )
     selected_path = output_dir / "selected.xyz"
     _write_extxyz_many(selected_path, selected)
-    selected_files = []
     manifest_path = output_dir / "manifest.jsonl"
     with manifest_path.open("w", encoding="utf-8") as manifest:
         for index, (frame_index, atoms, distance) in enumerate(
             zip(selected_indices, selected, selection_distances)
         ):
-            frame_path = output_dir / f"selected_{index:06d}.xyz"
-            write_structure(atoms, frame_path, fmt="extxyz")
-            selected_files.append(frame_path)
             manifest.write(
                 json.dumps(
                     {
                         "index": index,
                         "source_frame": frame_index,
-                        "path": str(frame_path),
+                        "frame_index": index,
+                        "path": str(selected_path),
+                        "atom_count": len(atoms),
                         "descriptor": descriptor_backend,
                         "selection_distance": distance,
                     }
                 )
                 + "\n"
             )
-    files = [selected_path, features_path, *selected_files, manifest_path]
+    files = [selected_path, features_path, manifest_path]
     if plot_path is not None:
         files.append(plot_path)
     return StageResult(
@@ -124,12 +121,13 @@ def _selection_limit_warnings(
     if selected_count >= total_count:
         return []
     if max_count is not None and selected_count >= max_count:
+        suggested_max_count = max(max_count * 2, 1)
         return [
             (
                 "Selection stopped at "
                 f"sampling.selection.max_count={max_count}. To keep more "
                 "structures, edit your YAML under sampling.selection: "
-                f"max_count: {max_count * 2} or another larger value."
+                f"max_count: {suggested_max_count} or another larger value."
             )
         ]
     if min_distance <= 0:
@@ -280,30 +278,62 @@ def _write_selection_plot(
             "Selection plotting requires matplotlib. Install it with "
             "`python -m pip install matplotlib` or set sampling.selection.plot: false."
         ) from exc
+    _apply_plot_style()
 
     points = _pca_2d(features)
     plot_path = Path(str(options.get("plot_path", output_dir / "fps_selection.png")))
     plot_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, (ax_points, ax_distances) = plt.subplots(1, 2, figsize=(11, 4.5))
-    ax_points.scatter(points[:, 0], points[:, 1], s=18, c="#9aa0a6", label="all frames")
+    fig, (ax_points, ax_distances) = plt.subplots(1, 2, figsize=(11.5, 4.8))
+    ax_points.scatter(
+        points[:, 0],
+        points[:, 1],
+        s=26,
+        c="#9aa3ad",
+        alpha=0.55,
+        linewidths=0,
+        label="all frames",
+    )
     if selected_indices:
         selected_points = points[selected_indices]
         ax_points.scatter(
             selected_points[:, 0],
             selected_points[:, 1],
-            s=42,
+            s=13,
             c="#d62728",
+            alpha=0.9,
+            linewidths=0,
             label="selected",
         )
-        for order, (x_value, y_value) in enumerate(selected_points[:50]):
-            ax_points.annotate(str(order), (x_value, y_value), fontsize=7)
+        if bool(options.get("annotate", False)):
+            for order, (x_value, y_value) in enumerate(selected_points[:50]):
+                ax_points.annotate(str(order), (x_value, y_value), fontsize=7)
     ax_points.set_title("FPS selection in descriptor PCA space")
     ax_points.set_xlabel("PC1")
     ax_points.set_ylabel("PC2")
-    ax_points.legend(frameon=False)
+    ax_points.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncol=2,
+        borderaxespad=0.0,
+        handletextpad=0.4,
+        columnspacing=1.0,
+    )
 
-    ax_distances.plot(range(len(selection_distances)), selection_distances, marker="o")
+    ax_distances.plot(
+        range(len(selection_distances)),
+        selection_distances,
+        color="#2b7bbb",
+        linewidth=1.6,
+    )
+    ax_distances.scatter(
+        range(len(selection_distances)),
+        selection_distances,
+        s=13,
+        color="#2b7bbb",
+        linewidths=0,
+    )
     ax_distances.set_title("Distance when selected")
     ax_distances.set_xlabel("Selection order")
     ax_distances.set_ylabel("Nearest-selected distance")
@@ -312,6 +342,30 @@ def _write_selection_plot(
     fig.savefig(plot_path, dpi=180)
     plt.close(fig)
     return plot_path
+
+
+def _apply_plot_style() -> None:
+    try:
+        import seaborn as sns
+    except ImportError:
+        import matplotlib.pyplot as plt
+
+        plt.style.use("seaborn-v0_8-whitegrid")
+        return
+
+    sns.set_theme(
+        style="whitegrid",
+        context="notebook",
+        font_scale=1.08,
+        rc={
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "grid.color": "#e3e7eb",
+            "grid.linewidth": 0.8,
+        },
+    )
 
 
 def _pca_2d(features: np.ndarray) -> np.ndarray:

@@ -55,13 +55,26 @@ For production selection, use Calorine NEP descriptors.
 ```text
 selected/
   selected.xyz
-  selected_000000.xyz
   manifest.jsonl
   selection_features.npy
   fps_selection.png
 ```
 
-Use `selected/manifest.jsonl` as the SCF input manifest.
+`selected.xyz` is the combined extxyz file containing all selected frames.
+PESMaker no longer writes one `selected_000000.xyz` file per frame. SCF setup
+uses `selected/manifest.jsonl` to split frames from `selected.xyz` when it
+prepares single-point job folders.
+
+`selection_features.npy` is a NumPy array with shape
+`(number_of_md_frames, descriptor_dimension)`. Row `i` is the descriptor vector
+used for MD frame `i` before FPS selection. It is useful for debugging and
+post-analysis: you can reload it with `numpy.load`, reproduce descriptor-space
+PCA plots, compare different `min_distance` values, or check whether your
+descriptor separates different trajectory regions.
+
+`fps_selection.png` is the diagnostic plot. PESMaker uses a seaborn-styled
+plot: all MD frames are shown as light points, while selected frames are drawn
+smaller on top so you can see how they sit inside the full cloud.
 
 ## Next Step
 

@@ -90,3 +90,17 @@ pesmaker select run.yaml
 The output `selected/fps_selection.png` shows a PCA projection of all frames and
 selected frames. Use it as a sanity check: selected frames should be spread over
 the cloud rather than concentrated in one small region.
+
+PESMaker also writes `selected/selection_features.npy`. This file stores the
+actual descriptor matrix used by FPS before PCA:
+
+```text
+shape = (number_of_md_frames, descriptor_dimension)
+```
+
+It is not a structure file and does not go into VASP. It is for diagnostics and
+reproducibility: reload it with `numpy.load`, rerun PCA or clustering, compare
+different selection thresholds, and check whether the descriptor space separates
+physically distinct MD regions. The selected structures themselves are stored in
+the combined `selected/selected.xyz`; the manifest records which frames were
+kept and lets later SCF setup split them into single-point jobs.

@@ -20,11 +20,12 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def load_structure(path: str | Path):
+def load_structure(path: str | Path, *, index: int | str | None = None):
     """Read one atomistic structure from any ASE-readable file.
 
     Args:
         path: File path accepted by ASE, such as CIF, POSCAR, VASP, or extxyz.
+        index: Optional ASE frame index for multi-frame files.
 
     Returns:
         An ASE `Atoms` object.
@@ -39,7 +40,9 @@ def load_structure(path: str | Path):
         message = "Structure IO requires ASE. Install pesmaker with: pip install -e .[atomistic]"
         raise RuntimeError(message) from exc
 
-    return read(Path(path))
+    if index is None:
+        return read(Path(path))
+    return read(Path(path), index=index)
 
 
 def write_structure(atoms, path: str | Path, *, fmt: str | None = None) -> None:
