@@ -88,6 +88,10 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
 
     records = _load_input_records(config, config.sampling.options)
     conditions = _sampling_conditions(config.sampling.options)
+    if _preserve_sampling_run_in(config.sampling.options) and not config.sampling.options.get(
+        "run_in"
+    ):
+        raise ValueError("sampling.run_in is required when preserve_run_in is true")
     run_template = _read_optional_file(
         config.sampling.options.get("run_in"),
         default=DEFAULT_GPUMD_RUN_IN,
@@ -235,6 +239,8 @@ def _render_sampling_run_in(
     *,
     potential_name: str | None = None,
 ) -> tuple[str, tuple[str, ...]]:
+    if _preserve_sampling_run_in(options):
+        return _ensure_trailing_newline(template), ()
     potential = potential_name or str(options.get("potential", "nep89_20250409.txt"))
     ensemble = _sampling_ensemble_line(options, condition, atoms)
     explicit_run_steps = _has_explicit_sampling_run_steps(options)
@@ -574,3 +580,33 @@ def _sampling_command(config: PESMakerConfig) -> str:
             return str(gpumd_dir / "gpumd")
         return "gpumd"
     return str(config.sampling.options.get("command", config.sampling.engine))
+
+
+def _preserve_sampling_run_in(options: dict[str, Any]) -> bool:
+    """Return true when a user-provided run input should be copied verbatim."""
+    for key in ("preserve_run_in", "keep_run_in", "copy_run_in"):
+        if _sampling_bool_option(options.get(key), default=False):
+            return True
+    if "rewrite_run_in" in options:
+        return not _sampling_bool_option(options.get("rewrite_run_in"), default=True)
+    if "render_run_in" in options:
+        return not _sampling_bool_option(options.get("render_run_in"), default=True)
+    return False
+
+
+def _sampling_bool_option(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return bool(value)
+
+
+def _ensure_trailing_newline(text: str) -> str:
+    return text if text.endswith("\n") else f"{text}\n"

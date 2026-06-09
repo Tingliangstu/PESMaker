@@ -1580,6 +1580,106 @@ jobs:
     assert "unfix        NVT" in run_in
 
 
+def test_mace_sampling_can_preserve_user_run_in_verbatim(tmp_path):
+    """Users can opt out of all MACE run input rewriting."""
+    from ase import Atoms
+    from ase.io import write
+
+    structure_path = tmp_path / "structure.xyz"
+    write(
+        structure_path,
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[5.0, 5.0, 5.0], pbc=True),
+        format="extxyz",
+    )
+    generated_dir = tmp_path / "generated"
+    generated_dir.mkdir()
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(structure_path)}) + "\n",
+        encoding="utf-8",
+    )
+    run_template = tmp_path / "in.run_mace_npt"
+    literal_text = """read_data old.data
+pair_style mliap unified old.model 0
+pair_coeff * * Mn Cr Fe
+velocity all create 300 123456
+fix NVT all nvt temp 300 300 ${Tdamp}
+"""
+    run_template.write_text(literal_text, encoding="utf-8")
+    lammps_template = tmp_path / "run.sh"
+    lammps_template.write_text("#!/bin/bash\n/path/to/lmp -in in.run_mace_npt\n")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: mace_preserve
+generation:
+  output_dir: {generated_dir.as_posix()}
+sampling:
+  engine: mace
+  output_dir: {(tmp_path / 'sampling').as_posix()}
+  potential: /models/new.model
+  run_in: {run_template.as_posix()}
+  preserve_run_in: true
+  temperature: 300-900
+jobs:
+  sub_file: {lammps_template.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["sample-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "sampling" / "md_000000_ramp_300K_to_900K"
+    assert (workdir / "data.in").exists()
+    assert (workdir / "in.run_mace_npt").read_text(encoding="utf-8") == literal_text
+
+
+def test_gpumd_sampling_can_preserve_user_run_in_verbatim(tmp_path):
+    """Users can opt out of all GPUMD run.in rewriting."""
+    from ase import Atoms
+    from ase.io import write
+
+    structure_path = tmp_path / "structure.xyz"
+    write(
+        structure_path,
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[5.0, 5.0, 5.0], pbc=True),
+        format="extxyz",
+    )
+    generated_dir = tmp_path / "generated"
+    generated_dir.mkdir()
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(structure_path)}) + "\n",
+        encoding="utf-8",
+    )
+    run_template = tmp_path / "run.in"
+    literal_text = """potential old_nep.txt
+velocity 100
+ensemble nvt 100 100 100
+run 42
+"""
+    run_template.write_text(literal_text, encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: gpumd_preserve
+generation:
+  output_dir: {generated_dir.as_posix()}
+sampling:
+  engine: gpumd
+  output_dir: {(tmp_path / 'sampling').as_posix()}
+  potential: new_nep.txt
+  run_in: {run_template.as_posix()}
+  preserve_run_in: true
+  temperature: 300-900
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["sample-setup", str(config_path)]) == 0
+
+    run_in = (
+        tmp_path / "sampling" / "md_000000_ramp_300K_to_900K" / "run.in"
+    ).read_text(encoding="utf-8")
+    assert run_in == literal_text
+
+
 def test_sampling_setup_writes_temperature_ramp(tmp_path):
     """A temperature range should produce one ramp MD job."""
     from ase import Atoms

@@ -187,6 +187,9 @@ sampling:
   output_dir: sampling
   potential: /path/to/mace-omat-0-small.model-mliap_lammps.pt
   run_in: templates/lammps/in.run_mace_npt
+  # Set true if your LAMMPS input is fully configured and should be copied
+  # without PESMaker placeholder replacement or automatic MACE/NPT edits.
+  # preserve_run_in: true
   temperature: "300-1200"
   selection:
     trajectory_pattern: sampling/**/*.lammpstrj
@@ -224,6 +227,11 @@ mpirun -np 1 /path/to/lmp -k on g 1 -sf kk -pk kokkos newton on neigh half -in i
 The LAMMPS input template controls NPT/NVT, D3, dump frequency, thermo
 frequency, and run length. PESMaker only fills `{data_file}`, `{potential}`,
 `{elements}`, `{temperature_start}`, `{temperature_end}`, and `{trajectory}`.
+The recommended workflow is to write and test `templates/lammps/in.run_mace_npt`
+yourself for your LAMMPS/MACE build, then let PESMaker render that proven input
+for every generated structure.
+Set `sampling.preserve_run_in: true` if that proven input should be copied
+verbatim.
 See [`sample-setup`](../commands/sample-setup.md#lammps-mace-sampling) for
 complete MACE templates and links to the MACE/LAMMPS references.
 

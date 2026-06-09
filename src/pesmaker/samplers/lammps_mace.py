@@ -29,7 +29,9 @@ from pesmaker.jobs.scripts import _write_submit_script
 from pesmaker.results import StageResult
 from pesmaker.samplers.gpumd import (
     SamplingCondition,
+    _ensure_trailing_newline,
     _format_temperature,
+    _preserve_sampling_run_in,
     _sampling_ensemble_mode,
     _sampling_conditions,
     _two_dimensional_axis,
@@ -89,6 +91,8 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
 
     records = _load_input_records(config, options)
     conditions = _sampling_conditions(options)
+    if _preserve_sampling_run_in(options) and not options.get("run_in"):
+        raise ValueError("sampling.run_in is required when preserve_run_in is true")
     run_template = _mace_run_template(options)
     run_in_name = _mace_run_in_name(options)
     potential = _mace_potential(options)
@@ -210,6 +214,8 @@ def _render_mace_run_in(
     mode: str,
     trajectory: str,
 ) -> str:
+    if _preserve_sampling_run_in(options):
+        return _ensure_trailing_newline(template)
     values = {
         "data_file": data_file,
         "potential": potential,
