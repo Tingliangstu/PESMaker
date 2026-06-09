@@ -57,7 +57,7 @@ jobs:
     assert "scf" in state["dry_runs"]
     assert "Potential Energy Surface Maker" in output
     assert "Next flow" in output
-    assert "Flow             : generate -> scf -> collect" in output
+    assert "Flow             : generate -> SCF-labeling -> dataset-collect" in output
     assert "Current          : SCF submission preview" in output
     assert "Work done:" in output
     assert "Structure generation complete." in output
@@ -71,7 +71,7 @@ jobs:
     assert main(["next", str(config_path), "--verbose"]) == 0
     output = capsys.readouterr().out
     assert "Plan before execution" in output
-    assert "Inferred flow    : generate -> scf -> collect" in output
+    assert "Inferred flow    : generate -> SCF-labeling -> dataset-collect" in output
     assert "Smart next" in output
     assert "Status           : waiting" in output
     assert "State            :" in output
@@ -122,8 +122,11 @@ jobs:
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert "sampling" in state["dry_runs"]
     assert "Next flow" in output
-    assert "Flow             : generate -> sampling -> select -> scf -> collect" in output
-    assert "Current          : sampling submission preview" in output
+    assert (
+        "Flow             : generate -> MD-sampling -> FPS-select -> "
+        "SCF-labeling -> dataset-collect"
+    ) in output
+    assert "Current          : MD-sampling submission preview" in output
     assert "Work done:" in output
     assert "Plan before execution" not in output
     assert "Inferred flow" not in output
@@ -133,7 +136,7 @@ jobs:
 
     assert main(["next", str(config_path)]) == 0
     output = capsys.readouterr().out
-    assert "Current          : waiting for sampling outputs" in output
+    assert "Current          : waiting for MD-sampling outputs" in output
     assert "Waiting:" in output
     assert "GPUMD movie.xyz files are not ready." in output
     assert "--stage sampling" in output
@@ -220,7 +223,10 @@ jobs:
     assert (tmp_path / "selected" / "manifest.jsonl").exists()
     assert followup.exists()
     assert not (tmp_path / "labeling" / "labeling_manifest.jsonl").exists()
-    assert "Flow             : generate -> sampling -> select -> config-needed" in output
+    assert (
+        "Flow             : generate -> MD-sampling -> FPS-select -> "
+        "SCF-config-needed"
+    ) in output
     assert "Current          : waiting for SCF settings" in output
     assert "Selected 2 of 2 MD frame(s)" in output
     assert f"Template written : {followup}" in output
@@ -259,7 +265,7 @@ generation:
     assert not (tmp_path / "labeling" / "labeling_manifest.jsonl").exists()
     assert not (tmp_path / ".pesmaker").exists()
     assert "Next flow" in output
-    assert "Flow             : generate -> config-needed" in output
+    assert "Flow             : generate -> SCF-config-needed" in output
     assert "Current          : waiting for SCF settings" in output
     assert "Work done:" in output
     assert "Plan before execution" not in output
@@ -306,7 +312,7 @@ labeling:
     assert main(["status", str(config_path)]) == 0
     output = capsys.readouterr().out
 
-    assert "Inferred flow    : generate -> scf -> collect" in output
+    assert "Inferred flow    : generate -> SCF-labeling -> dataset-collect" in output
     assert "Next action      : Generate structures" in output
     assert "Plan before execution" not in output
     assert not (tmp_path / "generated").exists()

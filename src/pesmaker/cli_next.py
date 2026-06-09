@@ -339,7 +339,7 @@ def _current_next_label(event: NextEvent | None, status: str) -> str:
 
 def _stage_display(stage: str) -> str:
     if stage == "sampling":
-        return "sampling"
+        return "MD-sampling"
     if stage == "training":
         return "training"
     return "SCF"

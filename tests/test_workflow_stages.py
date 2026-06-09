@@ -1605,8 +1605,9 @@ sampling:
     assert (selected_dir / "selection_features.npy").exists()
     assert (selected_dir / "fps_selection.png").exists()
     assert "Selected 2 of 3 MD frame(s)" in output
-    assert "lower sampling.selection.min_distance" in output
-    assert "increase sampling.selection.max_count" in output
+    assert "Selection stopped because remaining frames are closer" in output
+    assert "edit your YAML under sampling.selection" in output
+    assert "min_distance: 0.1 and max_count: 200" in output
     records = [
         json.loads(line)
         for line in (selected_dir / "manifest.jsonl").read_text(

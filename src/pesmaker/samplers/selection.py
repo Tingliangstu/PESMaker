@@ -123,18 +123,23 @@ def _selection_limit_warnings(
 ) -> list[str]:
     if selected_count >= total_count:
         return []
-    limit_names = []
-    if min_distance > 0:
-        limit_names.append("sampling.selection.min_distance")
-    if max_count is not None:
-        limit_names.append("sampling.selection.max_count")
-    if not limit_names:
+    if max_count is not None and selected_count >= max_count:
+        return [
+            (
+                "Selection stopped at "
+                f"sampling.selection.max_count={max_count}. To keep more "
+                "structures, edit your YAML under sampling.selection: "
+                f"max_count: {max_count * 2} or another larger value."
+            )
+        ]
+    if min_distance <= 0:
         return []
     return [
         (
-            f"Selected {selected_count} of {total_count} MD frame(s); "
-            "lower sampling.selection.min_distance or increase "
-            "sampling.selection.max_count to keep more structures."
+            "Selection stopped because remaining frames are closer than "
+            f"min_distance={min_distance:g}. To keep more structures, edit "
+            "your YAML under sampling.selection: "
+            "min_distance: 0.1 and max_count: 200."
         )
     ]
 

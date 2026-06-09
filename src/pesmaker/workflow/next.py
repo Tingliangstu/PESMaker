@@ -199,7 +199,7 @@ def determine_next_step(
             return NextStep(
                 action="setup_sampling",
                 kind="run",
-                message="Prepare GPUMD sampling folders.",
+                message="Prepare MD-sampling folders.",
             )
         if not dry_run_recorded(state, "sampling"):
             return NextStep(
@@ -207,7 +207,7 @@ def determine_next_step(
                 kind="submit-preview",
                 stage="sampling",
                 command=submit_command_text(config_path, "sampling"),
-                message="Preview sampling job submission.",
+                message="Preview MD-sampling job submission.",
             )
         if _selection_enabled(config):
             if not matched_sampling_trajectories(config):
@@ -216,7 +216,7 @@ def determine_next_step(
                     kind="waiting",
                     command=submit_command_text(config_path, "sampling"),
                     message=(
-                        "Waiting for sampling trajectories matching "
+                        "Waiting for MD-sampling trajectories matching "
                         f"{sampling_trajectory_pattern(config)}."
                     ),
                 )
@@ -294,11 +294,11 @@ def inferred_flow(config: PESMakerConfig) -> str:
     if config.structures:
         stages.append("generate")
     if _sampling_enabled(config):
-        stages.append("sampling")
+        stages.append("MD-sampling")
         if _selection_enabled(config):
-            stages.append("select")
+            stages.append("FPS-select")
     if _labeling_enabled(config):
-        stages.extend(["scf", "collect"])
+        stages.extend(["SCF-labeling", "dataset-collect"])
     if _training_enabled(config):
         stages.append("train")
     if (
@@ -307,7 +307,7 @@ def inferred_flow(config: PESMakerConfig) -> str:
         and not _training_enabled(config)
         and (not _sampling_enabled(config) or _selection_enabled(config))
     ):
-        stages.append("config-needed")
+        stages.append("SCF-config-needed")
     return " -> ".join(stages) if stages else "inspect existing artifacts"
 
 
