@@ -47,7 +47,13 @@ def print_next_concise(result: NextResult, *, config_path: Path) -> None:
 
     for event in boundary_events:
         if event.kind == "submit-preview":
-            _print_submit_preview(event, config_path=config_path)
+            _print_submit_preview(
+                event,
+                config_path=config_path,
+                show_output_dir=not _run_events_include_output_dir(
+                    run_events, event
+                ),
+            )
             continue
         if event.kind == "config-needed":
             _print_config_needed(event, config_path=config_path)
@@ -256,6 +262,19 @@ def _print_run_event(event: NextEvent) -> None:
         _print_result_warnings(event.result)
 
 
+def _run_events_include_output_dir(
+    run_events: list[NextEvent],
+    boundary_event: NextEvent,
+) -> bool:
+    if boundary_event.result is None:
+        return False
+    return any(
+        event.result is not None
+        and event.result.output_dir == boundary_event.result.output_dir
+        for event in run_events
+    )
+
+
 def _print_result_warnings(result, *, prefix: str = "") -> None:
     for warning in result.warnings[:5]:
         print(f"{prefix}Warning        : {warning}")
@@ -264,9 +283,14 @@ def _print_result_warnings(result, *, prefix: str = "") -> None:
         print(f"{prefix}Warning        : ... {omitted} more warning(s)")
 
 
-def _print_submit_preview(event: NextEvent, *, config_path: Path) -> None:
+def _print_submit_preview(
+    event: NextEvent,
+    *,
+    config_path: Path,
+    show_output_dir: bool = True,
+) -> None:
     stage = _event_stage(event)
-    if event.result is not None:
+    if show_output_dir and event.result is not None:
         print(f"Output directory : {event.result.output_dir}")
     if event.log_path is not None:
         print(f"Dry-run log      : {event.log_path}")

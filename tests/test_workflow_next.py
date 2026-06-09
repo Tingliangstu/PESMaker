@@ -133,6 +133,7 @@ jobs:
     assert "Submit sampling jobs" in output
     assert "pesmaker submit" in output
     assert "--stage sampling" in output
+    assert output.count("Output directory : sampling") == 1
 
     assert main(["next", str(config_path)]) == 0
     output = capsys.readouterr().out
@@ -231,6 +232,7 @@ jobs:
     assert "Current          : MD-sampling submission preview" in output
     assert "Submit sampling jobs" in output
     assert "--stage sampling" in output
+    assert output.count("Output directory : sampling") == 1
 
 
 def test_next_sampling_selection_without_labeling_writes_scf_template(

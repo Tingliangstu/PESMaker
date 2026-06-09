@@ -1406,9 +1406,9 @@ jobs:
     assert "# Te" in data_in
     assert "# Pd" in data_in
     assert "variable Tdamp equal ${ts}*100" in run_in
-    assert f"pair_style mliap unified {model.resolve()} 0" in run_in
-    assert "pair_coeff * * Te Pd" in run_in
-    assert "dump_modify myDump sort id element Te Pd" in run_in
+    assert f"pair_style    mliap unified {model.resolve()} 0" in run_in
+    assert "pair_coeff    * * Te Pd" in run_in
+    assert "dump_modify  myDump  sort  id  element  Te Pd" in run_in
     assert "mace.lammpstrj" in run_in
     assert "#SBATCH --job-name=user_lammps" in submit
     assert "#SBATCH --ntasks=1" in submit
@@ -1491,8 +1491,93 @@ jobs:
         tmp_path / "sampling" / "md_000000_temp_300K" / "in.run_mace_d3"
     ).read_text(encoding="utf-8")
     assert "mliap unified /models/mace-omat-0-small.model-mliap_lammps.pt 0" in run_in
-    assert "pair_coeff * * mliap Te" in run_in
-    assert "pair_coeff * * dispersion/d3 Te" in run_in
+    assert "pair_coeff    * * mliap Te" in run_in
+    assert "pair_coeff    * * dispersion/d3 Te" in run_in
+
+
+def test_mace_sampling_rewrites_common_literal_lammps_template(tmp_path):
+    """Existing MACE/LAMMPS inputs should be adjusted even without placeholders."""
+    from ase import Atoms
+    from ase.io import write
+
+    structure_path = tmp_path / "structure.xyz"
+    write(
+        structure_path,
+        Atoms(
+            symbols=["Te", "Pd", "Te"],
+            positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            cell=[5.0, 5.0, 5.0],
+            pbc=True,
+        ),
+        format="extxyz",
+    )
+    generated_dir = tmp_path / "generated"
+    generated_dir.mkdir()
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(structure_path)}) + "\n",
+        encoding="utf-8",
+    )
+    model = tmp_path / "mace-omat-0-small.model-mliap_lammps.pt"
+    model.write_text("fake model\n", encoding="utf-8")
+    run_template = tmp_path / "in.run_mace_npt"
+    run_template.write_text(
+        """units metal
+variable      T          equal  300
+variable      Tdamp      equal ${ts}*100
+variable      Pdamp      equal ${ts}*1000
+variable      P_0        equal 0.0
+read_data     old.data
+pair_style    hybrid/overlay &
+              mliap unified ../foundation-model/mace-omat-0-small.model-mliap_lammps.pt 0 &
+              dispersion/d3 bj pbe 12.0 6.0
+pair_coeff    * * mliap &
+              Mn Cr Fe Co Ni Cu Ag
+pair_coeff    * * dispersion/d3 &
+              Mn Cr Fe Co Ni Cu Ag
+dump_modify  myDump  sort id  element  Mn Cr Fe Co Ni Cu Ag
+velocity     all create  ${T} 123456  mom  yes  rot  yes  dist  gaussian
+fix          NVT all nvt temp ${T} ${T} ${Tdamp}
+unfix        NVT
+""",
+        encoding="utf-8",
+    )
+    lammps_template = tmp_path / "run.sh"
+    lammps_template.write_text("#!/bin/bash\n/path/to/lmp -in in.run_mace_npt\n")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: mace_literal
+generation:
+  output_dir: {generated_dir.as_posix()}
+sampling:
+  engine: mace
+  output_dir: {(tmp_path / 'sampling').as_posix()}
+  potential: {model.as_posix()}
+  run_in: {run_template.as_posix()}
+  temperature: 300-900
+jobs:
+  submit_command: nohup
+  sub_file: {lammps_template.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["sample-setup", str(config_path)]) == 0
+
+    run_in = (
+        tmp_path / "sampling" / "md_000000_ramp_300K_to_900K" / "in.run_mace_npt"
+    ).read_text(encoding="utf-8")
+    assert "variable      T          equal  300" in run_in
+    assert "variable      Tstart     equal  300" in run_in
+    assert "variable      Tstop      equal  900" in run_in
+    assert "read_data     data.in" in run_in
+    assert f"mliap unified {model.resolve()} 0 &" in run_in
+    assert "pair_coeff    * * mliap Te Pd" in run_in
+    assert "pair_coeff    * * dispersion/d3 Te Pd" in run_in
+    assert "dump_modify  myDump  sort  id  element  Te Pd" in run_in
+    assert "velocity  all  create  ${Tstart}" in run_in
+    assert "fix          NVT all npt temp ${Tstart} ${Tstop} ${Tdamp}" in run_in
+    assert "all nvt" not in run_in
+    assert "unfix        NVT" in run_in
 
 
 def test_sampling_setup_writes_temperature_ramp(tmp_path):
