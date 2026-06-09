@@ -1611,7 +1611,7 @@ sampling:
     assert "Selected 2 of 3 MD frame(s)" in output
     assert "Selection stopped because remaining frames are closer" in output
     assert "edit your YAML under sampling.selection" in output
-    assert "min_distance: 0.1 and max_count: 200" in output
+    assert "min_distance: 0.12" in output
     records = [
         json.loads(line)
         for line in (selected_dir / "manifest.jsonl").read_text(
@@ -1623,6 +1623,13 @@ sampling:
     assert [record["frame_index"] for record in records] == [0, 1]
     assert [record["source_frame"] for record in records] == [0, 2]
     assert {record["descriptor"] for record in records} == {"simple"}
+
+
+def test_selection_warning_suggests_lower_min_distance():
+    """Min-distance warnings should suggest a smaller threshold."""
+    from pesmaker.samplers.selection import _suggest_lower_min_distance
+
+    assert _suggest_lower_min_distance(0.005) == "0.003"
 
 
 def test_scf_setup_reads_selected_frames_from_combined_xyz(tmp_path, monkeypatch):

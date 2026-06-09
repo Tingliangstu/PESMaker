@@ -136,10 +136,14 @@ def _selection_limit_warnings(
         (
             "Selection stopped because remaining frames are closer than "
             f"min_distance={min_distance:g}. To keep more structures, edit "
-            "your YAML under sampling.selection: "
-            "min_distance: 0.1 and max_count: 200."
+            "your YAML under sampling.selection and lower this threshold, "
+            f"for example: min_distance: {_suggest_lower_min_distance(min_distance)}."
         )
     ]
+
+
+def _suggest_lower_min_distance(min_distance: float) -> str:
+    return f"{min_distance * 0.6:.3g}"
 
 
 def _selection_features(
@@ -349,6 +353,8 @@ def _write_selection_plot(
     for ax in (ax_points, ax_distances):
         ax.grid(False)
         ax.tick_params(axis="both", which="both", direction="out")
+        for spine in ax.spines.values():
+            spine.set_visible(True)
 
     fig.tight_layout()
     fig.savefig(plot_path, dpi=int(options.get("plot_dpi", 600)))
@@ -370,8 +376,8 @@ def _apply_plot_style() -> None:
         context="notebook",
         font_scale=1.08,
         rc={
-            "axes.spines.top": False,
-            "axes.spines.right": False,
+            "axes.spines.top": True,
+            "axes.spines.right": True,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
             "axes.grid": False,
