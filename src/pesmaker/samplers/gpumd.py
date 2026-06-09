@@ -164,7 +164,7 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
     return StageResult(
         output_dir,
         tuple(files),
-        f"Prepared {job_count} MD job(s)",
+        f"Prepared {job_count} GPUMD-MD job(s)",
         warnings=tuple(warnings),
     )
 

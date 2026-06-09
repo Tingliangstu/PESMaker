@@ -128,6 +128,7 @@ jobs:
     ) in output
     assert "Current          : MD-sampling submission preview" in output
     assert "Work done:" in output
+    assert "Prepared 1 GPUMD-MD job(s)" in output
     assert "Plan before execution" not in output
     assert "Inferred flow" not in output
     assert "Submit sampling jobs" in output
@@ -230,6 +231,7 @@ jobs:
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert "sampling" in state["dry_runs"]
     assert "Current          : MD-sampling submission preview" in output
+    assert "Prepared 1 MACE job(s)" in output
     assert "Submit sampling jobs" in output
     assert "--stage sampling" in output
     assert output.count("Output directory : sampling") == 1

@@ -167,7 +167,7 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
     return StageResult(
         output_dir,
         tuple(files),
-        f"Prepared {job_count} MACE sampling job(s)",
+        f"Prepared {job_count} MACE job(s)",
     )
 
 
