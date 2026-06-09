@@ -62,6 +62,13 @@ small set of placeholders in your LAMMPS input, and copies your `lammps.sh`
 submit script into every job folder. The LAMMPS command and MD physics remain
 in your files.
 
+Recommended workflow: write and test your own LAMMPS `run_in` for the target
+machine and material first, then let PESMaker render it for each generated
+structure. This keeps MACE model settings, D3, NPT/NVT choices, dump cadence,
+thermo output, timestep, and total run length under your direct control.
+PESMaker's job is to supply the generated `data.in`, the correct element order,
+the selected MACE model path, and temperature values.
+
 ```yaml
 project: mace_sampling
 
@@ -94,6 +101,11 @@ export MACE_TIME=true
 mpirun -np 1 /path/to/lmp -k on g 1 -sf kk -pk kokkos newton on neigh half -in in.run_mace_npt
 ```
 
+Before using `pesmaker next`, it is a good idea to run one rendered sampling
+folder manually with `bash lammps.sh` or the exact LAMMPS command from the
+script. This catches LAMMPS build, Kokkos, GPU, MACE model, and D3 availability
+issues before submitting a batch of jobs.
+
 For MACE sampling templates, the recommended style is to use placeholders.
 PESMaker replaces these placeholders:
 
@@ -110,7 +122,8 @@ LAMMPS variables such as `${Tstart}`, `${Pdamp}`, and `${dt_dump}` are left
 untouched.
 
 If you use an older literal LAMMPS input without placeholders, PESMaker also
-adjusts common MACE lines conservatively:
+adjusts common MACE lines conservatively. Treat this as a compatibility helper
+for existing scripts, not the preferred interface:
 
 - `read_data` is changed to the generated `data.in`.
 - `mliap unified ... 0` is changed to `sampling.potential`.
