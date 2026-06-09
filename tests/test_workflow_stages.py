@@ -1604,6 +1604,9 @@ sampling:
     assert (selected_dir / "selected.xyz").exists()
     assert (selected_dir / "selection_features.npy").exists()
     assert (selected_dir / "fps_selection.png").exists()
+    from PIL import Image
+
+    assert Image.open(selected_dir / "fps_selection.png").info["dpi"][0] >= 590
     assert list(selected_dir.glob("selected_*.xyz")) == []
     assert "Selected 2 of 3 MD frame(s)" in output
     assert "Selection stopped because remaining frames are closer" in output

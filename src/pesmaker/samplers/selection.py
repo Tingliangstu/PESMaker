@@ -288,9 +288,9 @@ def _write_selection_plot(
     ax_points.scatter(
         points[:, 0],
         points[:, 1],
-        s=26,
+        s=float(options.get("all_marker_size", 18)),
         c="#9aa3ad",
-        alpha=0.55,
+        alpha=float(options.get("all_alpha", 0.5)),
         linewidths=0,
         label="all frames",
     )
@@ -299,15 +299,23 @@ def _write_selection_plot(
         ax_points.scatter(
             selected_points[:, 0],
             selected_points[:, 1],
-            s=13,
+            s=float(options.get("selected_marker_size", 11)),
             c="#d62728",
-            alpha=0.9,
+            alpha=float(options.get("selected_alpha", 0.72)),
             linewidths=0,
             label="selected",
         )
-        if bool(options.get("annotate", False)):
+        if bool(options.get("annotate", True)):
             for order, (x_value, y_value) in enumerate(selected_points[:50]):
-                ax_points.annotate(str(order), (x_value, y_value), fontsize=7)
+                ax_points.annotate(
+                    str(order),
+                    (x_value, y_value),
+                    xytext=(3, 3),
+                    textcoords="offset points",
+                    fontsize=float(options.get("annotate_fontsize", 6.5)),
+                    color="#4d4d4d",
+                    alpha=0.85,
+                )
     ax_points.set_title("FPS selection in descriptor PCA space")
     ax_points.set_xlabel("PC1")
     ax_points.set_ylabel("PC2")
@@ -330,7 +338,7 @@ def _write_selection_plot(
     ax_distances.scatter(
         range(len(selection_distances)),
         selection_distances,
-        s=13,
+        s=10,
         color="#2b7bbb",
         linewidths=0,
     )
@@ -338,8 +346,12 @@ def _write_selection_plot(
     ax_distances.set_xlabel("Selection order")
     ax_distances.set_ylabel("Nearest-selected distance")
 
+    for ax in (ax_points, ax_distances):
+        ax.grid(False)
+        ax.tick_params(axis="both", which="both", direction="out")
+
     fig.tight_layout()
-    fig.savefig(plot_path, dpi=180)
+    fig.savefig(plot_path, dpi=int(options.get("plot_dpi", 600)))
     plt.close(fig)
     return plot_path
 
@@ -350,11 +362,11 @@ def _apply_plot_style() -> None:
     except ImportError:
         import matplotlib.pyplot as plt
 
-        plt.style.use("seaborn-v0_8-whitegrid")
+        plt.style.use("seaborn-v0_8-ticks")
         return
 
     sns.set_theme(
-        style="whitegrid",
+        style="ticks",
         context="notebook",
         font_scale=1.08,
         rc={
@@ -362,8 +374,7 @@ def _apply_plot_style() -> None:
             "axes.spines.right": False,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
-            "grid.color": "#e3e7eb",
-            "grid.linewidth": 0.8,
+            "axes.grid": False,
         },
     )
 
