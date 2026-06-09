@@ -1568,7 +1568,7 @@ sampling:
     assert "run            12345" in run_in
 
 
-def test_select_uses_farthest_point_sampling(tmp_path, monkeypatch):
+def test_select_uses_farthest_point_sampling(tmp_path, monkeypatch, capsys):
     """Selection should write a compact extxyz file and manifest."""
     from ase import Atoms
     from ase.io import write
@@ -1599,10 +1599,14 @@ sampling:
     monkeypatch.chdir(tmp_path)
 
     assert main(["select", str(config_path)]) == 0
+    output = capsys.readouterr().out
 
     assert (selected_dir / "selected.xyz").exists()
     assert (selected_dir / "selection_features.npy").exists()
     assert (selected_dir / "fps_selection.png").exists()
+    assert "Selected 2 of 3 MD frame(s)" in output
+    assert "lower sampling.selection.min_distance" in output
+    assert "increase sampling.selection.max_count" in output
     records = [
         json.loads(line)
         for line in (selected_dir / "manifest.jsonl").read_text(

@@ -301,7 +301,12 @@ def inferred_flow(config: PESMakerConfig) -> str:
         stages.extend(["scf", "collect"])
     if _training_enabled(config):
         stages.append("train")
-    if config.structures and len(stages) == 1:
+    if (
+        config.structures
+        and not _labeling_enabled(config)
+        and not _training_enabled(config)
+        and (not _sampling_enabled(config) or _selection_enabled(config))
+    ):
         stages.append("config-needed")
     return " -> ".join(stages) if stages else "inspect existing artifacts"
 
@@ -331,13 +336,21 @@ def _should_generate(config: PESMakerConfig) -> bool:
 
 
 def _needs_next_config(config: PESMakerConfig) -> bool:
-    return (
+    generation_only = (
         bool(config.structures)
         and generated_manifest_path(config).exists()
         and not _sampling_enabled(config)
         and not _labeling_enabled(config)
         and not _training_enabled(config)
     )
+    selected_without_labeling = (
+        _sampling_enabled(config)
+        and _selection_enabled(config)
+        and selected_manifest_path(config).exists()
+        and not _labeling_enabled(config)
+        and not _training_enabled(config)
+    )
+    return generation_only or selected_without_labeling
 
 
 def _sampling_enabled(config: PESMakerConfig) -> bool:
@@ -377,13 +390,13 @@ def _next_config_template_path(config_path: Path) -> Path:
 def _write_next_config_template(config: PESMakerConfig, path: Path) -> bool:
     if path.exists():
         return False
-    input_dir = generated_manifest_path(config).parent.as_posix()
+    input_line = _next_config_input_line(config)
     text = f"""project: {config.project}
 
 labeling:
   engine: vasp
   output_dir: run_vasp_scf
-  input_dir: {input_dir}
+  {input_line}
   incar: /path/to/INCAR
   potcar_library: /path/to/VASP/potentials
   command: /path/to/vasp_std
@@ -397,6 +410,13 @@ jobs:
 """
     path.write_text(text, encoding="utf-8")
     return True
+
+
+def _next_config_input_line(config: PESMakerConfig) -> str:
+    manifest = selected_manifest_path(config)
+    if manifest.exists():
+        return f"input_manifest: {manifest.as_posix()}"
+    return f"input_dir: {generated_manifest_path(config).parent.as_posix()}"
 
 
 def _labeling_has_explicit_input(config: PESMakerConfig) -> bool:

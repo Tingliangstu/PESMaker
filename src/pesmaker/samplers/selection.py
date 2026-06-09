@@ -95,6 +95,14 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
         output_dir,
         tuple(files),
         f"Selected {len(selected)} of {len(frames)} MD frame(s)",
+        warnings=tuple(
+            _selection_limit_warnings(
+                selected_count=len(selected),
+                total_count=len(frames),
+                min_distance=min_distance,
+                max_count=max_count,
+            )
+        ),
     )
 
 
@@ -104,6 +112,31 @@ def _read_trajectory_frames(pattern: str):
 
 def _write_extxyz_many(path: Path, frames) -> None:
     write_extxyz_many(path, frames)
+
+
+def _selection_limit_warnings(
+    *,
+    selected_count: int,
+    total_count: int,
+    min_distance: float,
+    max_count: int | None,
+) -> list[str]:
+    if selected_count >= total_count:
+        return []
+    limit_names = []
+    if min_distance > 0:
+        limit_names.append("sampling.selection.min_distance")
+    if max_count is not None:
+        limit_names.append("sampling.selection.max_count")
+    if not limit_names:
+        return []
+    return [
+        (
+            f"Selected {selected_count} of {total_count} MD frame(s); "
+            "lower sampling.selection.min_distance or increase "
+            "sampling.selection.max_count to keep more structures."
+        )
+    ]
 
 
 def _selection_features(

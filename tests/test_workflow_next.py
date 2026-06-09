@@ -166,6 +166,70 @@ jobs:
     assert "pesmaker submit" in output
 
 
+def test_next_sampling_selection_without_labeling_writes_scf_template(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Selected MD frames should lead to a follow-up SCF config template."""
+    structure = _write_structure(tmp_path)
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(
+        f"""project: selected_needs_scf
+structures:
+  - {structure.as_posix()}
+generation:
+  output_dir: generated
+sampling:
+  engine: gpumd
+  output_dir: sampling
+  temperatures: [300]
+  selection:
+    trajectory_pattern: sampling/**/movie.xyz
+    output_dir: selected
+    descriptor: simple
+    min_distance: 0.2
+jobs:
+  submit_command: sbatch
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["next", str(config_path)]) == 0
+    capsys.readouterr()
+
+    from ase import Atoms
+    from ase.io import write
+
+    movie = tmp_path / "sampling" / "md_000000_temp_300K" / "movie.xyz"
+    write(
+        movie,
+        [
+            Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[3, 3, 20], pbc=True),
+            Atoms("Te", positions=[(1.0, 0.0, 0.0)], cell=[3, 3, 20], pbc=True),
+        ],
+        format="extxyz",
+    )
+
+    assert main(["next", str(config_path)]) == 0
+    output = capsys.readouterr().out
+    followup = tmp_path / "run.next.yaml"
+    followup_text = followup.read_text(encoding="utf-8")
+
+    assert (tmp_path / "selected" / "manifest.jsonl").exists()
+    assert followup.exists()
+    assert not (tmp_path / "labeling" / "labeling_manifest.jsonl").exists()
+    assert "Flow             : generate -> sampling -> select -> config-needed" in output
+    assert "Current          : waiting for SCF settings" in output
+    assert "Selected 2 of 2 MD frame(s)" in output
+    assert f"Template written : {followup}" in output
+    assert "input_manifest: selected/manifest.jsonl" in followup_text
+    assert "input_dir: generated" not in followup_text
+    assert f"Run: pesmaker validate {followup}" in output
+    assert f"Run: pesmaker next {followup}" in output
+
+
 def test_next_generation_only_writes_followup_scf_template(
     tmp_path,
     monkeypatch,
