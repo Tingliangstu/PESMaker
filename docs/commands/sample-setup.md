@@ -94,7 +94,8 @@ export MACE_TIME=true
 mpirun -np 1 /path/to/lmp -k on g 1 -sf kk -pk kokkos newton on neigh half -in in.run_mace_npt
 ```
 
-For MACE sampling templates, PESMaker replaces only these placeholders:
+For MACE sampling templates, the recommended style is to use placeholders.
+PESMaker replaces these placeholders:
 
 | Placeholder | Meaning |
 | --- | --- |
@@ -107,6 +108,24 @@ For MACE sampling templates, PESMaker replaces only these placeholders:
 
 LAMMPS variables such as `${Tstart}`, `${Pdamp}`, and `${dt_dump}` are left
 untouched.
+
+If you use an older literal LAMMPS input without placeholders, PESMaker also
+adjusts common MACE lines conservatively:
+
+- `read_data` is changed to the generated `data.in`.
+- `mliap unified ... 0` is changed to `sampling.potential`.
+- `pair_coeff` and `dump_modify ... element ...` element lists are changed to
+  the element order in `data.in`.
+- `variable T`, `variable Tstart`, and `variable Tstop` are changed from
+  `sampling.temperature`.
+- `fix ... nvt ...` or `fix ... npt ...` is changed to an NPT fix using the
+  original fix ID, so a later `unfix` line remains valid.
+  PESMaker uses the same cell-shape detection as GPUMD setup: 3D orthogonal
+  uses `x/y/z`, 3D triclinic uses `x/y/z/xy/xz/yz`, and 2D cells use the two
+  in-plane lengths plus the in-plane tilt term.
+
+For anything outside those common lines, PESMaker keeps the user input as
+written.
 
 ### MACE input without D3
 
