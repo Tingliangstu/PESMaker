@@ -37,104 +37,22 @@ reactions.
 
 PESMaker requires Python 3.10 or newer.
 
-### Install From PyPI
-
-After the first PESMaker release is published to PyPI, install the stable
-package with:
-
 ```bash
 python -m pip install pesmaker
 pesmaker --help
 ```
 
-Install an optional descriptor backend when needed:
-
-```bash
-# GPUMD trajectories: Calorine NEP descriptors
-python -m pip install "pesmaker[selection]"
-
-# MACE trajectories: MACECalculator descriptors
-python -m pip install "pesmaker[mace]"
-
-# Both descriptor backends
-python -m pip install "pesmaker[selection,mace]"
-```
-
-### Install The Latest GitHub Version
-
-This works before the first PyPI release and installs the current `main`
-branch:
-
-```bash
-python -m pip install "git+https://github.com/Tingliangstu/PESMaker.git@main"
-pesmaker --help
-```
-
-Optional extras also work with the GitHub URL:
-
-```bash
-python -m pip install "pesmaker[mace] @ git+https://github.com/Tingliangstu/PESMaker.git@main"
-```
-
-### Install From A Source Checkout
-
-Use this method for development or offline installation:
-
-```bash
-git clone https://github.com/Tingliangstu/PESMaker.git
-cd PESMaker
-python -m pip install .
-pesmaker --help
-```
-
-No internet: copy or unzip the PESMaker source folder, enter that folder, then
-run `python -m pip install .`.
-
-Installation test:
-
-```bash
-python -m pytest
-```
-
-This runs the test files in `tests/` and checks that the installed Python
-package, config parser, structure tools, CLI functions, and workflow logic work.
-If `pytest` is not installed, install the small test dependency once:
-
-```bash
-python -m pip install ".[dev]"
-python -m pytest
-```
-
-## Updating an Existing Checkout
-
-For a PyPI installation:
+Upgrade:
 
 ```bash
 python -m pip install --upgrade pesmaker
 ```
 
-For a source checkout on `main`:
-
-```bash
-git pull --ff-only
-python -m pip install .
-```
-
-If you are not sure where you are:
-
-```bash
-cd ~/software/PESMaker
-git switch main
-git pull --ff-only
-python -m pip install .
-```
-
-No internet: copy or unzip a newer PESMaker source folder, then reinstall:
-
-```bash
-cd /path/to/PESMaker
-python -m pip install .
-```
+Optional GPUMD/NEP and MACE descriptor dependencies are only needed for the
+corresponding FPS workflow. See the
+[installation manual](https://Tingliangstu.github.io/PESMaker/installation/),
+[Calorine documentation](https://calorine.materialsmodeling.org/installation/),
+and [MACE installation guide](https://mace-docs.readthedocs.io/en/latest/installation.html).
 
 ## Workflow
 
