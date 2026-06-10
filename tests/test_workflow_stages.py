@@ -2057,8 +2057,10 @@ jobs:
     assert [record["source_frame"] for record in records] == [3, 7]
 
 
-def test_select_can_use_calorine_nep_descriptors(tmp_path, monkeypatch):
-    """Calorine NEP descriptors should feed farthest point sampling."""
+def test_gpumd_select_uses_calorine_nep_descriptors_by_default(
+    tmp_path, monkeypatch, capsys
+):
+    """GPUMD selection should use its NEP potential without a descriptor key."""
     import sys
     import types
 
@@ -2095,7 +2097,6 @@ sampling:
   selection:
     trajectory_pattern: {trajectory.as_posix()}
     output_dir: {selected_dir.as_posix()}
-    descriptor: calorine
     min_distance: 0.2
     max_count: 2
 """,
@@ -2103,10 +2104,12 @@ sampling:
     )
 
     assert main(["select", str(config_path)]) == 0
+    output = capsys.readouterr().out
 
     features = np.load(selected_dir / "selection_features.npy")
     assert features.shape == (3, 2)
     assert (selected_dir / "fps_selection.png").exists()
+    assert "using NEP descriptors calculated from the GPUMD potential" in output
     records = [
         json.loads(line)
         for line in (selected_dir / "manifest.jsonl").read_text(
@@ -2115,3 +2118,100 @@ sampling:
     ]
     assert [record["source_frame"] for record in records] == [0, 2]
     assert {record["descriptor"] for record in records} == {"calorine"}
+
+
+def test_mace_select_uses_invariant_model_descriptors_by_default(
+    tmp_path, monkeypatch, capsys
+):
+    """MACE selection should use invariant, element-pooled model descriptors."""
+    import sys
+    import types
+
+    from ase import Atoms
+    from ase.io import write
+
+    calculator_calls = []
+    descriptor_calls = []
+
+    class FakeMACECalculator:
+        def __init__(self, **kwargs):
+            calculator_calls.append(kwargs)
+
+        def get_descriptors(self, atoms, *, invariants_only, num_layers):
+            descriptor_calls.append((invariants_only, num_layers))
+            x_mean = float(np.mean(atoms.get_positions()[:, 0]))
+            return np.array(
+                [
+                    [x_mean, 1.0],
+                    [x_mean + 10.0, 2.0],
+                ]
+            )
+
+    mace_module = types.ModuleType("mace")
+    calculators_module = types.ModuleType("mace.calculators")
+    calculators_module.MACECalculator = FakeMACECalculator
+    monkeypatch.setitem(sys.modules, "mace", mace_module)
+    monkeypatch.setitem(sys.modules, "mace.calculators", calculators_module)
+
+    frames = [
+        Atoms(
+            ["Te", "O"],
+            positions=[(0.0, 0.0, 0.0), (0.2, 0.0, 0.0)],
+            cell=[3, 3, 20],
+            pbc=True,
+        ),
+        Atoms(
+            ["Te", "O"],
+            positions=[(0.1, 0.0, 0.0), (0.3, 0.0, 0.0)],
+            cell=[3, 3, 20],
+            pbc=True,
+        ),
+        Atoms(
+            ["Te", "O"],
+            positions=[(1.5, 0.0, 0.0), (1.7, 0.0, 0.0)],
+            cell=[3, 3, 20],
+            pbc=True,
+        ),
+    ]
+    trajectory = tmp_path / "mace.xyz"
+    write(trajectory, frames, format="extxyz")
+    descriptor_model = tmp_path / "mace-omat-small.model"
+    descriptor_model.write_text("fake MACE model\n", encoding="utf-8")
+    selected_dir = tmp_path / "selected"
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: mace_select
+sampling:
+  engine: mace
+  selection:
+    trajectory_pattern: {trajectory.as_posix()}
+    output_dir: {selected_dir.as_posix()}
+    descriptor_model: {descriptor_model.as_posix()}
+    min_distance: 0.0
+    max_count: 2
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["select", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    features = np.load(selected_dir / "selection_features.npy")
+    assert features.shape == (3, 4)
+    assert calculator_calls == [
+        {
+            "model_paths": str(descriptor_model.resolve()),
+            "device": "cuda",
+        }
+    ]
+    assert descriptor_calls == [(True, -1), (True, -1), (True, -1)]
+    assert np.allclose(features[0], [10.1, 2.0, 0.1, 1.0])
+    assert "using invariant descriptors output by the MACE model" in output
+    records = [
+        json.loads(line)
+        for line in (selected_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert [record["source_frame"] for record in records] == [0, 2]
+    assert {record["descriptor"] for record in records} == {"mace"}

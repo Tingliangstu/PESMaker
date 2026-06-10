@@ -72,6 +72,20 @@ The current runtime dependencies are:
 The optional `atomistic` extra currently reserves room for heavier atomistic
 utilities such as `pymatgen`.
 
+Trajectory FPS uses an engine-specific optional dependency:
+
+```bash
+# GPUMD trajectories: Calorine NEP descriptors
+python -m pip install ".[selection]"
+
+# MACE trajectories: ASE MACECalculator descriptors
+python -m pip install ".[mace]"
+```
+
+The MACE extra installs `mace-torch`. It is only needed in the Python
+environment that runs `pesmaker select`; LAMMPS sampling itself still uses the
+separate MLIAP model and LAMMPS executable.
+
 ## Windows command path
 
 On Windows, `pip` may install `pesmaker.exe` into a user script directory that is

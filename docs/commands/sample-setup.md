@@ -96,14 +96,31 @@ sampling:
   selection:
     trajectory_pattern: sampling/**/*.lammpstrj
     output_dir: selected
-    descriptor: simple
-    min_distance: 0.005
+    descriptor_model: /path/to/mace-omat-0-small.model
+    min_distance: 0.0
     max_count: 200
 
 jobs:
   submit_command: nohup
   sub_file: templates/lammps/lammps.sh
 ```
+
+`sampling.potential` and `sampling.selection.descriptor_model` serve different
+purposes. `potential` is the MLIAP model exported for LAMMPS. The
+`descriptor_model` must be the native MACE model that ASE's `MACECalculator`
+can load. PESMaker uses that model's invariant descriptors for FPS. Install
+MACE in the PESMaker environment with:
+
+```bash
+python -m pip install mace-torch
+```
+
+No `selection.descriptor`, `selection.device`, or `selection.num_layers` entry
+is required. For `engine: mace`, PESMaker automatically calls
+`MACECalculator.get_descriptors(..., invariants_only=True, num_layers=-1)`.
+The default device is `cuda`, and descriptors are averaged separately for each
+element before FPS. The command output states that MACE model descriptors were
+used.
 
 `lammps.sh` can contain the full machine-specific LAMMPS command:
 
@@ -272,6 +289,11 @@ sampling:
     trajectory_pattern: sampling/**/movie.xyz
 ```
 
+PESMaker automatically calculates Calorine NEP descriptors with the same
+`sampling.potential` used for GPUMD. The YAML does not need a separate
+`descriptor` or selection potential. The command output states that GPUMD/NEP
+descriptors were used.
+
 The `**` means "match through subdirectories". Do not use
 `sampling/movie.xyz` unless your `movie.xyz` file is directly inside
 `sampling/`.
@@ -282,7 +304,7 @@ For MACE, set selection to the LAMMPS trajectory name used by your template:
 sampling:
   selection:
     trajectory_pattern: sampling/**/*.lammpstrj
-    descriptor: simple
+    descriptor_model: /path/to/native-mace.model
 ```
 
 ## Inputs

@@ -129,8 +129,6 @@ sampling:
   selection:
     trajectory_pattern: sampling/**/movie.xyz
     output_dir: selected
-    descriptor: calorine
-    potential: /path/to/nep.txt
     max_count: 200
     min_distance: 0.2
     plot: true
@@ -194,8 +192,8 @@ sampling:
   selection:
     trajectory_pattern: sampling/**/*.lammpstrj
     output_dir: selected
-    descriptor: simple
-    min_distance: 0.005
+    descriptor_model: /path/to/mace-omat-0-small.model
+    min_distance: 0.0
     max_count: 200
 
 labeling:

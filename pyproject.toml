@@ -30,6 +30,9 @@ atomistic = [
 selection = [
   "calorine>=3.3"
 ]
+mace = [
+  "mace-torch>=0.3"
+]
 dev = [
   "pytest>=8.0",
   "ruff>=0.6"

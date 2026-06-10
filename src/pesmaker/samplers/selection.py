@@ -92,7 +92,10 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
     return StageResult(
         output_dir,
         tuple(files),
-        f"Selected {len(selected)} of {len(frames)} MD frame(s)",
+        (
+            f"Selected {len(selected)} of {len(frames)} MD frame(s) using "
+            f"{_selection_descriptor_label(descriptor_backend)}"
+        ),
         warnings=tuple(
             _selection_limit_warnings(
                 selected_count=len(selected),
@@ -166,16 +169,33 @@ def _selection_features(
             potential = str(potential.resolve())
         features = _calorine_nep_structure_features(frames, potential, options)
         return features, "calorine"
+    if descriptor in {"mace", "mace-descriptor", "mace_descriptor"}:
+        features = _mace_structure_features(
+            frames,
+            options.get("descriptor_model"),
+            options,
+        )
+        return features, "mace"
     if descriptor in {"simple", "geometry"}:
         return _structure_features(frames), "simple"
-    raise ValueError("sampling.selection.descriptor must be 'calorine' or 'simple'")
+    raise ValueError(
+        "sampling.selection.descriptor must be 'mace', 'calorine', or 'simple'"
+    )
 
 
 def _default_selection_descriptor(sampling_options: dict[str, Any]) -> str:
     engine = str(sampling_options.get("engine", "")).lower().replace("_", "-")
     if engine in {"mace", "lammps-mace"}:
-        return "simple"
+        return "mace"
     return "calorine"
+
+
+def _selection_descriptor_label(descriptor_backend: str) -> str:
+    if descriptor_backend == "mace":
+        return "invariant descriptors output by the MACE model"
+    if descriptor_backend == "calorine":
+        return "NEP descriptors calculated from the GPUMD potential"
+    return "the simple geometry descriptor"
 
 
 def _calorine_nep_structure_features(
@@ -225,6 +245,91 @@ def _pool_atom_descriptors(descriptors: np.ndarray, pooling: str) -> np.ndarray:
     raise ValueError(
         "sampling.selection.descriptor_pooling must be mean, sum, or mean_std"
     )
+
+
+def _mace_structure_features(
+    frames,
+    model: Any,
+    options: dict[str, Any],
+) -> np.ndarray:
+    if not model:
+        raise ValueError(
+            "sampling.selection.descriptor_model is required for MACE "
+            "descriptor selection"
+        )
+    try:
+        from mace.calculators import MACECalculator
+    except ImportError as exc:
+        raise RuntimeError(
+            "MACE descriptor selection requires mace-torch. Install it with "
+            "`python -m pip install mace-torch`."
+        ) from exc
+
+    model_path = Path(str(model))
+    if not model_path.exists() or not model_path.is_file():
+        raise ValueError(f"MACE descriptor model does not exist: {model_path}")
+
+    calculator_options: dict[str, Any] = {
+        "model_paths": str(model_path.resolve()),
+        "device": str(options.get("device", "cuda")),
+    }
+    if options.get("default_dtype"):
+        calculator_options["default_dtype"] = str(options["default_dtype"])
+    if options.get("head"):
+        calculator_options["head"] = str(options["head"])
+    calculator = MACECalculator(**calculator_options)
+
+    species = sorted(
+        {
+            int(number)
+            for atoms in frames
+            for number in atoms.get_atomic_numbers()
+        }
+    )
+    num_layers = int(options.get("num_layers", -1))
+    features = []
+    for atoms in frames:
+        descriptors = calculator.get_descriptors(
+            atoms,
+            invariants_only=True,
+            num_layers=num_layers,
+        )
+        if isinstance(descriptors, list):
+            raise ValueError(
+                "MACE descriptor selection supports one descriptor model only"
+            )
+        descriptors = np.asarray(descriptors, dtype=np.float32)
+        if descriptors.ndim != 2 or descriptors.shape[0] != len(atoms):
+            raise ValueError(
+                "Unexpected MACE descriptor shape "
+                f"{descriptors.shape}; expected ({len(atoms)}, feature_count)"
+            )
+        features.append(
+            _pool_mace_descriptors_by_element(
+                descriptors,
+                atoms.get_atomic_numbers(),
+                species,
+            )
+        )
+    return np.vstack(features)
+
+
+def _pool_mace_descriptors_by_element(
+    descriptors: np.ndarray,
+    atomic_numbers: np.ndarray,
+    species: list[int],
+) -> np.ndarray:
+    pooled = []
+    for atomic_number in species:
+        element_descriptors = descriptors[atomic_numbers == atomic_number]
+        if len(element_descriptors) == 0:
+            raise ValueError(
+                "All trajectory frames must contain the same elements for "
+                "MACE descriptor selection; missing atomic number "
+                f"{atomic_number}"
+            )
+        pooled.append(element_descriptors.mean(axis=0))
+    return np.concatenate(pooled)
 
 
 def _structure_features(frames) -> np.ndarray:

@@ -174,8 +174,9 @@ https://Tingliangstu.github.io/PESMaker/
 ## Current Scope
 
 Current implemented stages cover structure generation, GPUMD sampling setup,
-LAMMPS-MACE sampling setup, trajectory-frame selection, VASP SCF setup,
-scheduler submission, extxyz dataset collection, and NEP training setup.
+LAMMPS-MACE sampling setup, engine-matched NEP or MACE descriptor FPS,
+VASP SCF setup, scheduler submission, extxyz dataset collection, and NEP
+training setup.
 
 ## License
 

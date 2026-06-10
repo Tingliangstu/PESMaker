@@ -15,11 +15,11 @@ pesmaker select run.yaml
 
 ```yaml
 sampling:
+  engine: gpumd
+  potential: /path/to/nep.txt
   selection:
     trajectory_pattern: sampling/**/movie.xyz
     output_dir: selected
-    descriptor: calorine
-    potential: /path/to/nep.txt
     min_distance: 0.2
     max_count: 200
     plot: true
@@ -30,6 +30,15 @@ sampling:
 PESMaker reads trajectory frames, builds one descriptor vector per frame, then
 uses farthest point sampling to keep frames that spread across descriptor
 space.
+
+The descriptor backend follows `sampling.engine` automatically:
+
+- `gpumd`: Calorine calculates NEP descriptors with `sampling.potential`;
+- `mace`, `lammps-mace`, or `lammps_mace`: ASE's `MACECalculator` calculates
+  invariant MACE descriptors with `sampling.selection.descriptor_model`.
+
+The terminal summary prints which model descriptor was used. You do not need
+to set `sampling.selection.descriptor`.
 
 `min_distance` and `max_count` are two stop rules:
 
@@ -42,13 +51,38 @@ For example, `min_distance: 0.2` and `max_count: 200` means "keep at most 200
 frames, but stop earlier if the remaining frames are too similar." The distance
 is measured in descriptor space, not in Angstrom.
 
-For quick debugging, use:
+For LAMMPS-MACE trajectories, use:
 
 ```yaml
-descriptor: simple
+sampling:
+  engine: mace
+  selection:
+    trajectory_pattern: sampling/**/*.lammpstrj
+    output_dir: selected
+    descriptor_model: /path/to/native-mace.model
+    min_distance: 0.0
+    max_count: 200
 ```
 
-For production selection, use Calorine NEP descriptors.
+The descriptor model must be a native MACE model loadable by
+`MACECalculator`, not the `*.model-mliap_lammps.pt` file used by LAMMPS.
+PESMaker defaults to CUDA and all MACE interaction layers. It requests
+`invariants_only=True`, then averages atom descriptors separately for each
+element and concatenates them into one structure descriptor.
+
+Install the required backend for the selected engine:
+
+```bash
+# GPUMD/NEP descriptor backend
+python -m pip install ".[selection]"
+
+# MACE descriptor backend
+python -m pip install ".[mace]"
+```
+
+Because MACE and NEP descriptor distances have different numerical scales,
+start a new MACE selection with `min_distance: 0.0` and use `max_count` as the
+initial limit. Inspect the distance curve before choosing a nonzero threshold.
 
 ## Outputs
 
