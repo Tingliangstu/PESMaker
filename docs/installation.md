@@ -4,7 +4,7 @@ PESMaker requires Python 3.10 or newer.
 
 ## Install From PyPI
 
-After the first release is published, the normal installation is:
+The normal installation is:
 
 ```bash
 python -m pip install pesmaker
@@ -30,10 +30,23 @@ python -m pip install "pesmaker[mace]"
 python -m pip install "pesmaker[selection,mace]"
 ```
 
+The core `pesmaker` installation is sufficient for structure generation,
+sampling-folder setup, VASP setup, submission, collection, and training setup.
+Install an optional backend only when `pesmaker select` needs to calculate that
+model's descriptors:
+
+- GPUMD/NEP FPS uses
+  [Calorine](https://calorine.materialsmodeling.org/installation/).
+- MACE FPS uses
+  [MACE](https://mace-docs.readthedocs.io/en/latest/installation.html).
+
+The PESMaker extras above install those Python dependencies automatically. If
+you manage scientific packages separately, follow the corresponding official
+installation guide instead.
+
 ## Install From GitHub
 
-Before the first PyPI release, or when you need the latest merged changes,
-install the `main` branch directly:
+When you need the latest merged changes, install the `main` branch directly:
 
 ```bash
 python -m pip install "git+https://github.com/Tingliangstu/PESMaker.git@main"
