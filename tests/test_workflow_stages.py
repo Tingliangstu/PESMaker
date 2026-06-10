@@ -18,8 +18,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from pathlib import Path
+import warnings
 
 import numpy as np
 
@@ -2111,11 +2113,12 @@ sampling:
     assert (selected_dir / "fps_selection.png").exists()
     assert "FPS descriptor calculation" in output
     assert "Engine           : GPUMD" in output
-    assert "Backend          : Calorine NEP descriptors" in output
+    assert "Backend          : Calorine-calculated NEP descriptors" in output
     assert "Frames           : 3" in output
-    assert "Descriptor progress: 3/3 frame(s) (100%)" in output
+    assert "Progress         : [##############################]" in output
+    assert "3/3 frame(s) (100.0%)" in output
     assert "Descriptor matrix: 3 frame(s) x 2 feature(s)" in output
-    assert "Descriptor calculation complete; selecting farthest points" in output
+    assert "FPS completed    : Selected 2 of 3 frame(s)." in output
     assert "using NEP descriptors calculated from the GPUMD potential" in output
     records = [
         json.loads(line)
@@ -2128,7 +2131,7 @@ sampling:
 
 
 def test_mace_select_uses_invariant_model_descriptors_by_default(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, caplog
 ):
     """MACE selection should use invariant, element-pooled model descriptors."""
     import sys
@@ -2142,6 +2145,18 @@ def test_mace_select_uses_invariant_model_descriptors_by_default(
 
     class FakeMACECalculator:
         def __init__(self, **kwargs):
+            warnings.warn(
+                "Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD "
+                "detected, forcing weights_only=False.",
+                UserWarning,
+            )
+            warnings.warn(
+                "`torch.jit.load` is deprecated. Please switch to torch.export.",
+                DeprecationWarning,
+            )
+            logging.warning(
+                "No dtype selected, switching to float64 to match model dtype."
+            )
             calculator_calls.append(kwargs)
 
         def get_descriptors(self, atoms, *, invariants_only, num_layers):
@@ -2200,9 +2215,13 @@ sampling:
         encoding="utf-8",
     )
 
-    assert main(["select", str(config_path)]) == 0
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        warnings.simplefilter("always")
+        assert main(["select", str(config_path)]) == 0
     output = capsys.readouterr().out
 
+    assert caught_warnings == []
+    assert "No dtype selected" not in caplog.text
     features = np.load(selected_dir / "selection_features.npy")
     assert features.shape == (3, 4)
     assert calculator_calls == [
@@ -2218,9 +2237,10 @@ sampling:
     assert "Backend          : MACECalculator invariant descriptors" in output
     assert "Device           : cuda" in output
     assert "Frames           : 3" in output
-    assert "Descriptor progress: 3/3 frame(s) (100%)" in output
+    assert "Progress         : [##############################]" in output
+    assert "3/3 frame(s) (100.0%)" in output
     assert "Descriptor matrix: 3 frame(s) x 4 feature(s)" in output
-    assert "Descriptor calculation complete; selecting farthest points" in output
+    assert "FPS completed    : Selected 2 of 3 frame(s)." in output
     assert "using invariant descriptors output by the MACE model" in output
     records = [
         json.loads(line)

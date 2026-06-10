@@ -52,17 +52,23 @@ Model            : /path/to/mace-omat-0-small.model
 Device           : cuda
 Frames           : 1501
 Status           : Loading the model and calculating descriptors. This may take some time; please wait.
-Descriptor progress: 1/1501 frame(s) (0.1%)
-Descriptor progress: 151/1501 frame(s) (10.1%)
+Progress         : [###---------------------------] 151/1501 frame(s) ( 10.1%)
 ...
-Descriptor progress: 1501/1501 frame(s) (100%)
+Progress         : [##############################] 1501/1501 frame(s) (100.0%)
 Descriptor matrix: 1501 frame(s) x 512 feature(s)
-FPS status       : Descriptor calculation complete; selecting farthest points. Please wait.
+FPS completed    : Selected 200 of 1501 frame(s).
 ```
 
-GPUMD prints the same progress block with `Engine: GPUMD`, the Calorine NEP
-backend, and the NEP potential path. Output is flushed immediately so the
-terminal remains informative during model loading and descriptor inference.
+GPUMD prints the same progress block with `Engine: GPUMD`, the
+`Calorine-calculated NEP descriptors` backend, and the NEP potential path. In
+an interactive terminal the progress bar updates in place. When output is
+redirected to a log, PESMaker prints progress at regular intervals instead.
+This uses the Python standard library and does not add another package
+dependency.
+
+PESMaker suppresses only known upstream MACE/e3nn/PyTorch model-loading
+compatibility messages, including the automatic model-dtype notice. Other
+warnings and all calculation errors remain visible.
 
 `min_distance` and `max_count` are two stop rules:
 

@@ -18,9 +18,13 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
+import logging
 from pathlib import Path
+import sys
 from typing import Any
+import warnings
 
 import numpy as np
 
@@ -47,11 +51,6 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
         frames,
         options,
         sampling_options=sampling_options,
-    )
-    print(
-        "FPS status       : Descriptor calculation complete; selecting "
-        "farthest points. Please wait.",
-        flush=True,
     )
     selected_indices, selection_distances = _farthest_point_indices(
         features,
@@ -94,6 +93,11 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
     files = [selected_path, features_path, manifest_path]
     if plot_path is not None:
         files.append(plot_path)
+    print(
+        f"FPS completed    : Selected {len(selected)} of {len(frames)} frame(s).",
+        flush=True,
+    )
+    print(flush=True)
     return StageResult(
         output_dir,
         tuple(files),
@@ -229,7 +233,7 @@ def _calorine_nep_structure_features(
         )
     _print_descriptor_start(
         engine="GPUMD",
-        backend="Calorine NEP descriptors",
+        backend="Calorine-calculated NEP descriptors",
         source_label="Potential",
         source_path=potential_path.resolve(),
         frame_count=len(frames),
@@ -272,17 +276,19 @@ def _mace_structure_features(
             "sampling.selection.descriptor_model is required for MACE "
             "descriptor selection"
         )
-    try:
-        from mace.calculators import MACECalculator
-    except ImportError as exc:
-        raise RuntimeError(
-            "MACE descriptor selection requires mace-torch. Install it with "
-            "`python -m pip install mace-torch`."
-        ) from exc
 
     model_path = Path(str(model))
     if not model_path.exists() or not model_path.is_file():
         raise ValueError(f"MACE descriptor model does not exist: {model_path}")
+
+    with _suppress_known_mace_load_messages():
+        try:
+            from mace.calculators import MACECalculator
+        except ImportError as exc:
+            raise RuntimeError(
+                "MACE descriptor selection requires mace-torch. Install it with "
+                "`python -m pip install mace-torch`."
+            ) from exc
 
     calculator_options: dict[str, Any] = {
         "model_paths": str(model_path.resolve()),
@@ -300,7 +306,8 @@ def _mace_structure_features(
         frame_count=len(frames),
         device=str(calculator_options["device"]),
     )
-    calculator = MACECalculator(**calculator_options)
+    with _suppress_known_mace_load_messages():
+        calculator = MACECalculator(**calculator_options)
 
     species = sorted(
         {
@@ -369,11 +376,19 @@ def _print_descriptor_progress(completed: int, total: int) -> None:
     interval = max((total + 9) // 10, 1)
     if completed != 1 and completed != total and completed % interval != 0:
         return
-    percentage = f"{completed * 100 / total:.1f}".rstrip("0").rstrip(".")
-    print(
-        f"Descriptor progress: {completed}/{total} frame(s) ({percentage}%)",
-        flush=True,
+    fraction = min(completed / total, 1.0)
+    width = 30
+    filled = min(int(fraction * width), width)
+    bar = "#" * filled + "-" * (width - filled)
+    percentage = f"{fraction * 100:5.1f}"
+    message = (
+        f"Progress         : [{bar}] {completed}/{total} frame(s) "
+        f"({percentage}%)"
     )
+    if sys.stdout.isatty():
+        print(f"\r{message}", end="\n" if completed >= total else "", flush=True)
+    else:
+        print(message, flush=True)
 
 
 def _print_descriptor_complete(features: np.ndarray) -> None:
@@ -382,6 +397,39 @@ def _print_descriptor_complete(features: np.ndarray) -> None:
         f"{features.shape[1]} feature(s)",
         flush=True,
     )
+
+
+class _KnownMACEMessageFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.getMessage().startswith(
+            "No dtype selected, switching to "
+        )
+
+
+@contextmanager
+def _suppress_known_mace_load_messages():
+    """Suppress noisy upstream compatibility messages during MACE loading."""
+    root_logger = logging.getLogger()
+    log_filter = _KnownMACEMessageFilter()
+    root_logger.addFilter(log_filter)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=(
+                    r"Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD "
+                    r"detected.*"
+                ),
+                category=UserWarning,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message=r"`torch\.jit\.load` is deprecated\..*",
+                category=DeprecationWarning,
+            )
+            yield
+    finally:
+        root_logger.removeFilter(log_filter)
 
 
 def _pool_mace_descriptors_by_element(
