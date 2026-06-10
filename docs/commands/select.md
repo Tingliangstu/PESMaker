@@ -40,6 +40,30 @@ The descriptor backend follows `sampling.engine` automatically:
 The terminal summary prints which model descriptor was used. You do not need
 to set `sampling.selection.descriptor`.
 
+Descriptor inference can take time for a long trajectory. PESMaker prints the
+active engine, descriptor backend, model or potential path, frame count, MACE
+device, and progress at regular intervals. For example:
+
+```text
+FPS descriptor calculation
+Engine           : MACE
+Backend          : MACECalculator invariant descriptors
+Model            : /path/to/mace-omat-0-small.model
+Device           : cuda
+Frames           : 1501
+Status           : Loading the model and calculating descriptors. This may take some time; please wait.
+Descriptor progress: 1/1501 frame(s) (0.1%)
+Descriptor progress: 151/1501 frame(s) (10.1%)
+...
+Descriptor progress: 1501/1501 frame(s) (100%)
+Descriptor matrix: 1501 frame(s) x 512 feature(s)
+FPS status       : Descriptor calculation complete; selecting farthest points. Please wait.
+```
+
+GPUMD prints the same progress block with `Engine: GPUMD`, the Calorine NEP
+backend, and the NEP potential path. Output is flushed immediately so the
+terminal remains informative during model loading and descriptor inference.
+
 `min_distance` and `max_count` are two stop rules:
 
 - `min_distance`: stop when the next farthest frame is still closer than this

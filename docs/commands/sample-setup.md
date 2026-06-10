@@ -120,7 +120,7 @@ is required. For `engine: mace`, PESMaker automatically calls
 `MACECalculator.get_descriptors(..., invariants_only=True, num_layers=-1)`.
 The default device is `cuda`, and descriptors are averaged separately for each
 element before FPS. The command output states that MACE model descriptors were
-used.
+used and shows descriptor progress while the user waits.
 
 `lammps.sh` can contain the full machine-specific LAMMPS command:
 
@@ -292,7 +292,7 @@ sampling:
 PESMaker automatically calculates Calorine NEP descriptors with the same
 `sampling.potential` used for GPUMD. The YAML does not need a separate
 `descriptor` or selection potential. The command output states that GPUMD/NEP
-descriptors were used.
+descriptors were used and shows descriptor progress while the user waits.
 
 The `**` means "match through subdirectories". Do not use
 `sampling/movie.xyz` unless your `movie.xyz` file is directly inside

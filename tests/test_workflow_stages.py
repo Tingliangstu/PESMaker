@@ -2109,6 +2109,13 @@ sampling:
     features = np.load(selected_dir / "selection_features.npy")
     assert features.shape == (3, 2)
     assert (selected_dir / "fps_selection.png").exists()
+    assert "FPS descriptor calculation" in output
+    assert "Engine           : GPUMD" in output
+    assert "Backend          : Calorine NEP descriptors" in output
+    assert "Frames           : 3" in output
+    assert "Descriptor progress: 3/3 frame(s) (100%)" in output
+    assert "Descriptor matrix: 3 frame(s) x 2 feature(s)" in output
+    assert "Descriptor calculation complete; selecting farthest points" in output
     assert "using NEP descriptors calculated from the GPUMD potential" in output
     records = [
         json.loads(line)
@@ -2206,6 +2213,14 @@ sampling:
     ]
     assert descriptor_calls == [(True, -1), (True, -1), (True, -1)]
     assert np.allclose(features[0], [10.1, 2.0, 0.1, 1.0])
+    assert "FPS descriptor calculation" in output
+    assert "Engine           : MACE" in output
+    assert "Backend          : MACECalculator invariant descriptors" in output
+    assert "Device           : cuda" in output
+    assert "Frames           : 3" in output
+    assert "Descriptor progress: 3/3 frame(s) (100%)" in output
+    assert "Descriptor matrix: 3 frame(s) x 4 feature(s)" in output
+    assert "Descriptor calculation complete; selecting farthest points" in output
     assert "using invariant descriptors output by the MACE model" in output
     records = [
         json.loads(line)

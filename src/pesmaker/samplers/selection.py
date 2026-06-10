@@ -48,6 +48,11 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
         options,
         sampling_options=sampling_options,
     )
+    print(
+        "FPS status       : Descriptor calculation complete; selecting "
+        "farthest points. Please wait.",
+        flush=True,
+    )
     selected_indices, selection_distances = _farthest_point_indices(
         features,
         min_distance=min_distance,
@@ -222,9 +227,16 @@ def _calorine_nep_structure_features(
         raise ValueError(
             f"Calorine NEP potential file does not exist: {potential_path}"
         )
+    _print_descriptor_start(
+        engine="GPUMD",
+        backend="Calorine NEP descriptors",
+        source_label="Potential",
+        source_path=potential_path.resolve(),
+        frame_count=len(frames),
+    )
     pooling = str(options.get("descriptor_pooling", options.get("pooling", "mean")))
     features = []
-    for atoms in frames:
+    for index, atoms in enumerate(frames, start=1):
         descriptors = np.asarray(
             get_descriptors(atoms, model_filename=str(potential_path)),
             dtype=float,
@@ -232,7 +244,10 @@ def _calorine_nep_structure_features(
         if descriptors.ndim == 1:
             descriptors = descriptors.reshape(1, -1)
         features.append(_pool_atom_descriptors(descriptors, pooling))
-    return np.vstack(features)
+        _print_descriptor_progress(index, len(frames))
+    feature_matrix = np.vstack(features)
+    _print_descriptor_complete(feature_matrix)
+    return feature_matrix
 
 
 def _pool_atom_descriptors(descriptors: np.ndarray, pooling: str) -> np.ndarray:
@@ -277,6 +292,14 @@ def _mace_structure_features(
         calculator_options["default_dtype"] = str(options["default_dtype"])
     if options.get("head"):
         calculator_options["head"] = str(options["head"])
+    _print_descriptor_start(
+        engine="MACE",
+        backend="MACECalculator invariant descriptors",
+        source_label="Model",
+        source_path=model_path.resolve(),
+        frame_count=len(frames),
+        device=str(calculator_options["device"]),
+    )
     calculator = MACECalculator(**calculator_options)
 
     species = sorted(
@@ -288,7 +311,7 @@ def _mace_structure_features(
     )
     num_layers = int(options.get("num_layers", -1))
     features = []
-    for atoms in frames:
+    for index, atoms in enumerate(frames, start=1):
         descriptors = calculator.get_descriptors(
             atoms,
             invariants_only=True,
@@ -311,7 +334,54 @@ def _mace_structure_features(
                 species,
             )
         )
-    return np.vstack(features)
+        _print_descriptor_progress(index, len(frames))
+    feature_matrix = np.vstack(features)
+    _print_descriptor_complete(feature_matrix)
+    return feature_matrix
+
+
+def _print_descriptor_start(
+    *,
+    engine: str,
+    backend: str,
+    source_label: str,
+    source_path: Path,
+    frame_count: int,
+    device: str | None = None,
+) -> None:
+    print("FPS descriptor calculation")
+    print(f"Engine           : {engine}")
+    print(f"Backend          : {backend}")
+    print(f"{source_label:<17}: {source_path}")
+    if device is not None:
+        print(f"Device           : {device}")
+    print(f"Frames           : {frame_count}")
+    print(
+        "Status           : Loading the model and calculating descriptors. "
+        "This may take some time; please wait.",
+        flush=True,
+    )
+
+
+def _print_descriptor_progress(completed: int, total: int) -> None:
+    if total < 1:
+        return
+    interval = max((total + 9) // 10, 1)
+    if completed != 1 and completed != total and completed % interval != 0:
+        return
+    percentage = f"{completed * 100 / total:.1f}".rstrip("0").rstrip(".")
+    print(
+        f"Descriptor progress: {completed}/{total} frame(s) ({percentage}%)",
+        flush=True,
+    )
+
+
+def _print_descriptor_complete(features: np.ndarray) -> None:
+    print(
+        f"Descriptor matrix: {features.shape[0]} frame(s) x "
+        f"{features.shape[1]} feature(s)",
+        flush=True,
+    )
 
 
 def _pool_mace_descriptors_by_element(
