@@ -1,21 +1,67 @@
 # Installation
 
-Clone the repository:
+PESMaker requires Python 3.10 or newer.
+
+## Install From PyPI
+
+After the first release is published, the normal installation is:
+
+```bash
+python -m pip install pesmaker
+pesmaker --help
+```
+
+Upgrade an existing PyPI installation:
+
+```bash
+python -m pip install --upgrade pesmaker
+```
+
+Optional descriptor backends are installed as extras:
+
+```bash
+# GPUMD trajectories: Calorine NEP descriptors
+python -m pip install "pesmaker[selection]"
+
+# MACE trajectories: ASE MACECalculator descriptors
+python -m pip install "pesmaker[mace]"
+
+# Both descriptor backends
+python -m pip install "pesmaker[selection,mace]"
+```
+
+## Install From GitHub
+
+Before the first PyPI release, or when you need the latest merged changes,
+install the `main` branch directly:
+
+```bash
+python -m pip install "git+https://github.com/Tingliangstu/PESMaker.git@main"
+pesmaker --help
+```
+
+Install a GitHub version with optional dependencies by using a direct
+requirement:
+
+```bash
+python -m pip install "pesmaker[mace] @ git+https://github.com/Tingliangstu/PESMaker.git@main"
+```
+
+Installing directly from GitHub requires `git` and internet access.
+
+## Install From A Source Checkout
+
+Clone the repository and install the local checkout:
 
 ```bash
 git clone https://github.com/Tingliangstu/PESMaker.git
 cd PESMaker
-```
-
-Install PESMaker:
-
-```bash
 python -m pip install .
 pesmaker --help
 ```
 
-No internet: copy or unzip the PESMaker source folder, then run those two
-commands inside it.
+No internet: copy or unzip the PESMaker source folder, enter that folder, then
+run `python -m pip install .`.
 
 ## Quick Test
 
@@ -38,7 +84,13 @@ python -m pytest
 
 ## Update an Existing Checkout
 
-If you are already inside the PESMaker repository on `main`:
+For a PyPI installation:
+
+```bash
+python -m pip install --upgrade pesmaker
+```
+
+If you are using a source checkout on `main`:
 
 ```bash
 git pull --ff-only
@@ -72,7 +124,7 @@ The current runtime dependencies are:
 The optional `atomistic` extra currently reserves room for heavier atomistic
 utilities such as `pymatgen`.
 
-Trajectory FPS uses an engine-specific optional dependency:
+From a source checkout, trajectory FPS extras can also be installed with:
 
 ```bash
 # GPUMD trajectories: Calorine NEP descriptors

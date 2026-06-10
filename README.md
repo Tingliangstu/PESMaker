@@ -1,4 +1,4 @@
-![PESMaker potential energy surface banner](docs/assets/pesmaker-banner.svg)
+![PESMaker potential energy surface banner](https://raw.githubusercontent.com/Tingliangstu/PESMaker/main/docs/assets/pesmaker-banner.svg)
 
 # PESMaker
 
@@ -35,6 +35,51 @@ reactions.
 
 ## Installation
 
+PESMaker requires Python 3.10 or newer.
+
+### Install From PyPI
+
+After the first PESMaker release is published to PyPI, install the stable
+package with:
+
+```bash
+python -m pip install pesmaker
+pesmaker --help
+```
+
+Install an optional descriptor backend when needed:
+
+```bash
+# GPUMD trajectories: Calorine NEP descriptors
+python -m pip install "pesmaker[selection]"
+
+# MACE trajectories: MACECalculator descriptors
+python -m pip install "pesmaker[mace]"
+
+# Both descriptor backends
+python -m pip install "pesmaker[selection,mace]"
+```
+
+### Install The Latest GitHub Version
+
+This works before the first PyPI release and installs the current `main`
+branch:
+
+```bash
+python -m pip install "git+https://github.com/Tingliangstu/PESMaker.git@main"
+pesmaker --help
+```
+
+Optional extras also work with the GitHub URL:
+
+```bash
+python -m pip install "pesmaker[mace] @ git+https://github.com/Tingliangstu/PESMaker.git@main"
+```
+
+### Install From A Source Checkout
+
+Use this method for development or offline installation:
+
 ```bash
 git clone https://github.com/Tingliangstu/PESMaker.git
 cd PESMaker
@@ -42,8 +87,8 @@ python -m pip install .
 pesmaker --help
 ```
 
-No internet: copy or unzip the PESMaker source folder, then run the last two
-commands inside it.
+No internet: copy or unzip the PESMaker source folder, enter that folder, then
+run `python -m pip install .`.
 
 Installation test:
 
@@ -62,7 +107,13 @@ python -m pytest
 
 ## Updating an Existing Checkout
 
-If you are already inside the PESMaker repository on `main`:
+For a PyPI installation:
+
+```bash
+python -m pip install --upgrade pesmaker
+```
+
+For a source checkout on `main`:
 
 ```bash
 git pull --ff-only
@@ -157,13 +208,14 @@ training/    # NEP training input folder and submit script
 
 Minimal YAML examples are grouped by task type in the documentation:
 
-See [`docs/examples/minimal-yaml.md`](docs/examples/minimal-yaml.md).
+See the [minimal YAML examples](https://Tingliangstu.github.io/PESMaker/examples/minimal-yaml/).
 
 ## Documentation
 
-Start with [`docs/usage.md`](docs/usage.md). Command pages are under
-[`docs/commands/`](docs/commands/), and minimal YAML examples are in
-[`docs/examples/minimal-yaml.md`](docs/examples/minimal-yaml.md).
+Start with the [Quick Start](https://Tingliangstu.github.io/PESMaker/usage/).
+The online manual also contains the
+[command reference](https://Tingliangstu.github.io/PESMaker/commands/) and
+[minimal YAML examples](https://Tingliangstu.github.io/PESMaker/examples/minimal-yaml/).
 
 The intended GitHub Pages URL is:
 
@@ -182,4 +234,5 @@ training setup.
 
 PESMaker is free software distributed under the GNU General Public License,
 version 3 of the License, or (at your option) any later version. See
-[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE) for details.
+[LICENSE](https://github.com/Tingliangstu/PESMaker/blob/main/LICENSE) and
+[NOTICE](https://github.com/Tingliangstu/PESMaker/blob/main/NOTICE) for details.

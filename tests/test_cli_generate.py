@@ -17,6 +17,7 @@
 
 import json
 
+from pesmaker import __version__
 from pesmaker.cli import main
 
 
@@ -29,7 +30,7 @@ def test_cli_help_shows_simple_public_commands(capsys):
     output = capsys.readouterr().out
 
     assert "Potential Energy Surface Maker" in output
-    assert "v-0.1.0" in output
+    assert f"v-{__version__}" in output
     assert "sample-setup" in output
     assert "scf-setup" in output
     assert "plan" not in output
@@ -581,5 +582,5 @@ def test_cli_prints_banner_for_commands(tmp_path, capsys):
 
     assert exit_code == 0
     assert "Potential Energy Surface Maker" in output
-    assert "v-0.1.0" in output
+    assert f"v-{__version__}" in output
     assert "Author: liangting.zj@gmail.com" in output

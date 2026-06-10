@@ -1,19 +1,39 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pesmaker"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Foundation-potential-assisted workflow for application-oriented machine-learning potential dataset generation."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
   { name = "PESMaker developers" }
 ]
-license = { file = "LICENSE" }
+maintainers = [
+  { name = "Ting Liang", email = "liangting.zj@gmail.com" }
+]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE"]
+keywords = [
+  "atomistic simulation",
+  "machine-learned interatomic potentials",
+  "MACE",
+  "GPUMD",
+  "VASP"
+]
 classifiers = [
-  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Chemistry",
+  "Topic :: Scientific/Engineering :: Physics"
 ]
 dependencies = [
   "ase>=3.23",
@@ -41,12 +61,25 @@ docs = [
   "mkdocs>=1.6",
   "mkdocs-material>=9.5"
 ]
+release = [
+  "build>=1.2",
+  "twine>=5.1"
+]
 
 [project.scripts]
 pesmaker = "pesmaker.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/Tingliangstu/PESMaker"
+Documentation = "https://Tingliangstu.github.io/PESMaker/"
+Repository = "https://github.com/Tingliangstu/PESMaker.git"
+Issues = "https://github.com/Tingliangstu/PESMaker/issues"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pesmaker.__version__" }
 
 [tool.ruff]
 line-length = 88

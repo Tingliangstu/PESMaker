@@ -39,6 +39,7 @@ nav:
   - Development:
       - Architecture: ARCHITECTURE.md
       - Code Logic: CODE_LOGIC.md
+      - Publishing to PyPI: releasing.md
       - Roadmap: ROADMAP.md
       - Project Brief: PROJECT_BRIEF.md
 
