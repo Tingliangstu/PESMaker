@@ -27,7 +27,7 @@ from pesmaker.artifacts import _read_manifest, _section_output_dir
 from pesmaker.config.schema import PESMakerConfig
 from pesmaker.jobs.resources import _job_resources
 from pesmaker.jobs.scripts import _write_submit_script
-from pesmaker.results import StageResult
+from pesmaker.results import StageResult, SubmissionSummary
 from pesmaker.structures import load_structure
 
 VASP_COMPLETION_MARKER = (
@@ -116,6 +116,11 @@ def submit_jobs(
         output_dir,
         (submitted_log,),
         message,
+        submission=SubmissionSummary(
+            total_jobs=len(jobs),
+            completed_jobs=skipped_count,
+            pending_jobs=submitted_count,
+        ),
     )
 
 

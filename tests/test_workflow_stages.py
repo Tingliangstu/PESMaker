@@ -971,6 +971,10 @@ jobs:
     assert result.message == (
         "Would submit 1 scf job(s); skipped 1 completed VASP job(s)"
     )
+    assert result.submission is not None
+    assert result.submission.total_jobs == 2
+    assert result.submission.completed_jobs == 1
+    assert result.submission.pending_jobs == 1
     log_text = (labeling_dir / "scf_submitted_jobs.txt").read_text(
         encoding="utf-8"
     )
@@ -1288,12 +1292,47 @@ jobs:
     log = tmp_path / "labeling" / "scf_submitted_jobs.txt"
 
     assert "Submission preview complete." in output
-    assert "Jobs found       : 1" in output
+    assert "Jobs total       : 1" in output
+    assert "Jobs completed   : 0" in output
+    assert "Jobs to submit   : 1" in output
     assert f"Output directory : {tmp_path / 'labeling'}" in output
     assert f"Log              : {log}" in output
     assert f"Review commands in {log}" in output
     assert f"Submit SCF jobs: pesmaker submit {config_path}" in output
     assert "Files written" not in output
+
+
+def test_cli_submit_dry_run_reports_all_completed_jobs(tmp_path, capsys):
+    """A zero-job preview should still show how many folders are complete."""
+    labeling_dir = tmp_path / "labeling"
+    for index in range(3):
+        workdir = labeling_dir / f"calc_{index:06d}"
+        workdir.mkdir(parents=True)
+        (workdir / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (workdir / "OUTCAR").write_text(
+            "General timing and accounting informations for this job:\n",
+            encoding="utf-8",
+        )
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        f"""project: completed_scf
+labeling:
+  engine: vasp
+  output_dir: {labeling_dir.as_posix()}
+jobs:
+  skip_completed: true
+  check_scf_convergence: true
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["submit", str(config_path), "--dry-run"]) == 0
+    output = capsys.readouterr().out
+
+    assert "Submission preview complete." in output
+    assert "Jobs total       : 3" in output
+    assert "Jobs completed   : 3" in output
+    assert "Jobs to submit   : 0" in output
 
 
 def test_cli_submit_prints_collect_next_step(tmp_path, capsys):

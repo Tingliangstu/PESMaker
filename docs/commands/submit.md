@@ -41,6 +41,23 @@ pesmaker submit run.yaml --stage training --dry-run
 
 Dry-run writes a log of the commands but does not call the scheduler.
 
+For SCF jobs, the screen summary reports the whole calculation tree:
+
+```text
+Submission preview complete.
+Jobs total       : 120
+Jobs completed   : 95
+Jobs to submit   : 25
+Output directory : labeling
+Log              : labeling/scf_submitted_jobs.txt
+```
+
+`Jobs completed` means VASP terminated normally and passed the configured SCF
+convergence check. `Jobs to submit` includes calculations with no `OUTCAR`,
+incomplete VASP output, or an electronic SCF nonconvergence marker. If
+`Jobs to submit` is `0`, all discovered calculations are complete according to
+the configured checks.
+
 ## Stage Names
 
 `submit` is one command with different stages:

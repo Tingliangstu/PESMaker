@@ -461,10 +461,20 @@ def _print_submit_result(
     job_count = _stage_job_count(result.message)
     if dry_run:
         print("Submission preview complete.")
-        print(f"Jobs found       : {job_count}")
+        if result.submission is not None:
+            print(f"Jobs total       : {result.submission.total_jobs}")
+            print(f"Jobs completed   : {result.submission.completed_jobs}")
+            print(f"Jobs to submit   : {result.submission.pending_jobs}")
+        else:
+            print(f"Jobs found       : {job_count}")
     else:
         print("Job submission complete.")
-        print(f"Jobs submitted  : {job_count}")
+        if result.submission is not None:
+            print(f"Jobs total       : {result.submission.total_jobs}")
+            print(f"Jobs completed   : {result.submission.completed_jobs}")
+            print(f"Jobs submitted   : {result.submission.pending_jobs}")
+        else:
+            print(f"Jobs submitted  : {job_count}")
     print(f"Output directory : {result.output_dir}")
     print(f"Log              : {log_path}")
     print()

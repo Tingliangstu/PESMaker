@@ -23,6 +23,15 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class SubmissionSummary:
+    """Structured counts for one scheduler submission pass."""
+
+    total_jobs: int
+    completed_jobs: int
+    pending_jobs: int
+
+
+@dataclass(frozen=True)
 class StageResult:
     """Summary for a prepared or collected workflow stage."""
 
@@ -30,3 +39,4 @@ class StageResult:
     files: tuple[Path, ...]
     message: str
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    submission: SubmissionSummary | None = None
