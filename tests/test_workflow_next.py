@@ -346,6 +346,7 @@ generation:
     assert "output_dir: run_vasp_scf" in followup_text
     assert "vasp_kpar: 3" in followup_text
     assert "vasp_ncore: 6" in followup_text
+    assert "skip_completed: true" in followup_text
 
     followup.write_text("custom: keep\n", encoding="utf-8")
     assert main(["next", str(config_path)]) == 0

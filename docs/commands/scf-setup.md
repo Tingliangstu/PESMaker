@@ -58,10 +58,14 @@ jobs:
   cores_cpu: 36
   vasp_kpar: 2
   vasp_ncore: 6
+  skip_completed: true
 ```
 
 If `vasp_kpar` and `vasp_ncore` are omitted, PESMaker chooses conservative
 values from `cores_cpu`.
+
+`skip_completed` defaults to `true`. During SCF submission, PESMaker skips
+folders whose `OUTCAR` contains the normal VASP completion footer.
 
 ## Next Step
 

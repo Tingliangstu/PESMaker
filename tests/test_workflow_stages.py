@@ -931,6 +931,115 @@ jobs:
     assert "DRY-RUN" in log.read_text(encoding="utf-8")
 
 
+def test_submit_jobs_skips_completed_vasp_jobs_by_default(tmp_path):
+    """Normally terminated VASP calculations should not be submitted again."""
+    labeling_dir = tmp_path / "labeling"
+    complete = labeling_dir / "calc_complete"
+    incomplete = labeling_dir / "calc_incomplete"
+    for workdir in (complete, incomplete):
+        workdir.mkdir(parents=True)
+        (workdir / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    (complete / "OUTCAR").write_text(
+        "General timing and accounting informations for this job:\n",
+        encoding="utf-8",
+    )
+    (incomplete / "OUTCAR").write_text("DAV:  20\n", encoding="utf-8")
+    (labeling_dir / "labeling_manifest.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps({"index": 0, "workdir": str(complete)}),
+                json.dumps({"index": 1, "workdir": str(incomplete)}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_test
+labeling:
+  engine: vasp
+  output_dir: {labeling_dir.as_posix()}
+jobs:
+  submit_command: sbatch
+""",
+        encoding="utf-8",
+    )
+
+    result = submit_jobs(load_config(config_path), dry_run=True)
+
+    assert result.message == (
+        "Would submit 1 scf job(s); skipped 1 completed VASP job(s)"
+    )
+    log_text = (labeling_dir / "scf_submitted_jobs.txt").read_text(
+        encoding="utf-8"
+    )
+    assert f"SKIPPED completed VASP job: {complete}" in log_text
+    assert f"cd {incomplete}" in log_text
+    assert f"cd {complete}" not in log_text
+
+
+def test_submit_jobs_can_resubmit_completed_vasp_jobs(tmp_path):
+    """Users should be able to disable completed-job filtering explicitly."""
+    workdir = tmp_path / "labeling" / "calc_complete"
+    workdir.mkdir(parents=True)
+    (workdir / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    (workdir / "OUTCAR").write_text(
+        "General timing and accounting informations for this job:\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "labeling" / "labeling_manifest.jsonl").write_text(
+        json.dumps({"index": 0, "workdir": str(workdir)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_test
+labeling:
+  engine: vasp
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  submit_command: sbatch
+  skip_completed: false
+""",
+        encoding="utf-8",
+    )
+
+    result = submit_jobs(load_config(config_path), dry_run=True)
+
+    assert result.message == "Would submit 1 scf job(s)"
+    log_text = (tmp_path / "labeling" / "scf_submitted_jobs.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "DRY-RUN" in log_text
+    assert "SKIPPED" not in log_text
+
+
+def test_submit_jobs_rejects_non_boolean_skip_completed(tmp_path):
+    """The completed-job option should not accept ambiguous string values."""
+    workdir = tmp_path / "labeling" / "calc"
+    workdir.mkdir(parents=True)
+    (workdir / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_test
+labeling:
+  engine: vasp
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  skip_completed: "false"
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        submit_jobs(load_config(config_path), dry_run=True)
+    except ValueError as exc:
+        assert "jobs.skip_completed must be true or false" in str(exc)
+    else:
+        raise AssertionError("string skip_completed values should fail")
+
+
 def test_submit_jobs_nohup_uses_bash_and_out_log(tmp_path):
     """Local nohup submission should launch submit.sh with bash and out log."""
     workdir = tmp_path / "sampling" / "md_000000_temp_300K"
