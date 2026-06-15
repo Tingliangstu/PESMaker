@@ -82,6 +82,7 @@ class NextStep:
     message: str
     stage: str | None = None
     command: str | None = None
+    log_path: Path | None = None
     template_path: Path | None = None
 
 
@@ -153,6 +154,7 @@ def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
                 kind=step.kind,
                 message=step.message,
                 command=step.command,
+                log_path=step.log_path,
             )
         )
         return _result(config, step.kind, events)
@@ -166,6 +168,7 @@ def inspect_next(config: PESMakerConfig, config_path: Path) -> NextResult:
         kind=f"next-action:{step.kind}",
         message=step.message,
         command=step.command,
+        log_path=step.log_path,
         template_path=step.template_path,
     )
     return _result(config, "status", [event])
@@ -237,6 +240,18 @@ def determine_next_step(
             )
 
     if _labeling_enabled(config):
+        if _is_migrated_scf_submission(config):
+            return NextStep(
+                action="manual_scf_submit",
+                kind="scf-retry",
+                stage="scf",
+                command=submit_command_text(config_path, "scf"),
+                log_path=_scf_submission_log_path(config),
+                message=(
+                    "Existing VASP calculation folders look like a migrated "
+                    "or retry submission."
+                ),
+            )
         if not labeling_manifest_path(config).exists():
             return NextStep(
                 action="setup_labeling",
@@ -290,6 +305,8 @@ def determine_next_step(
 
 def inferred_flow(config: PESMakerConfig) -> str:
     """Return a concise human-readable workflow inferred from config sections."""
+    if _is_migrated_scf_submission(config):
+        return "SCF-retry submission"
     stages = []
     if config.structures:
         stages.append("generate")
@@ -371,6 +388,22 @@ def _labeling_enabled(config: PESMakerConfig) -> bool:
     return config.labeling.engine.strip().lower() not in {"", "none"}
 
 
+def _is_migrated_scf_submission(config: PESMakerConfig) -> bool:
+    """Detect prepared VASP folders that should be submitted, not set up."""
+    if config.structures or _sampling_enabled(config):
+        return False
+    if _labeling_has_explicit_input(config):
+        return False
+    output_dir = labeling_manifest_path(config).parent
+    if not output_dir.is_dir():
+        return False
+    return any(output_dir.rglob("POSCAR"))
+
+
+def _scf_submission_log_path(config: PESMakerConfig) -> Path:
+    return labeling_manifest_path(config).parent / "scf_submitted_jobs.txt"
+
+
 def _training_enabled(config: PESMakerConfig) -> bool:
     if config.workflow.mode == "direct-scf":
         return False
@@ -407,6 +440,7 @@ jobs:
   vasp_kpar: 3
   vasp_ncore: 6
   skip_completed: true
+  check_scf_convergence: true
   sub_file: /path/to/sub.sh
 """
     path.write_text(text, encoding="utf-8")

@@ -62,16 +62,36 @@ jobs:
   cores_cpu: 36
   gpus: 0
   skip_completed: true
+  check_scf_convergence: true
   sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp_cpu_36.sh
     training: templates/sbatch/nep.sh
 ```
 
-For VASP SCF jobs, `skip_completed` defaults to `true`. PESMaker skips a job
-folder only when its `OUTCAR` contains VASP's normal timing and accounting
-footer. Merely having an `OUTCAR` is not enough, so interrupted calculations
-are still submitted.
+For VASP SCF jobs, `skip_completed` defaults to `true`. Before submission,
+PESMaker classifies each calculation folder:
+
+```text
+No OUTCAR                                      -> submit
+OUTCAR without the normal VASP footer          -> retry
+Normal footer plus SCF nonconvergence marker   -> retry
+Normal footer and no SCF failure marker        -> skip
+```
+
+The electronic SCF failure marker is:
+
+```text
+The electronic self-consistency was not achieved in
+```
+
+`check_scf_convergence` defaults to `true`. Set it to `false` only when the
+normal VASP timing and accounting footer alone should count as completion.
+
+For every VASP folder that will be submitted or retried, PESMaker rewrites
+`submit.sh` from the current `jobs.sub_file`, resource settings, and
+`labeling.command`. Completed folders are not modified. This refresh also
+happens during `--dry-run`, while the scheduler itself is not called.
 
 To intentionally submit every prepared VASP folder again:
 
@@ -81,7 +101,44 @@ jobs:
   skip_completed: false
 ```
 
-Skipped folders are listed as `SKIPPED` in `scf_submitted_jobs.txt`.
+With `skip_completed: false`, PESMaker submits every existing script and does
+not refresh it. Skipped, retried, and refreshed folders are recorded as
+`SKIPPED`, `RETRY`, and `REFRESHED` in `scf_submitted_jobs.txt`.
+
+## Submit Migrated VASP Folders
+
+Use this when a prepared `labeling/` calculation tree was copied from another
+machine. Point `output_dir` directly at that existing tree. `input_dir` is not
+needed because no new calculation folders are being created:
+
+```yaml
+project: migrated_scf
+
+labeling:
+  engine: vasp
+  output_dir: labeling
+  command: /current/machine/path/to/vasp_std
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+  vasp_kpar: 3
+  vasp_ncore: 6
+  skip_completed: true
+  check_scf_convergence: true
+  sub_file: /current/machine/path/to/sub.sh
+```
+
+PESMaker discovers calculation folders from `labeling_manifest.jsonl`,
+`POSCAR`, or an existing `submit.sh`. Preview first:
+
+```bash
+pesmaker submit migrated.yaml --dry-run
+pesmaker submit migrated.yaml
+```
+
+For this migration workflow, run `submit` directly. Do not run `scf-setup` or
+`next`, because those commands may prepare or rewrite calculation inputs.
 
 If your YAML only uses one submit template, `sub_file` can be a single path:
 

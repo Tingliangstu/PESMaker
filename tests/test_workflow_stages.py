@@ -932,7 +932,7 @@ jobs:
 
 
 def test_submit_jobs_skips_completed_vasp_jobs_by_default(tmp_path):
-    """Normally terminated VASP calculations should not be submitted again."""
+    """Normally terminated and converged VASP jobs should not be resubmitted."""
     labeling_dir = tmp_path / "labeling"
     complete = labeling_dir / "calc_complete"
     incomplete = labeling_dir / "calc_incomplete"
@@ -979,6 +979,123 @@ jobs:
     assert f"cd {complete}" not in log_text
 
 
+def test_submit_jobs_refreshes_only_vasp_jobs_that_need_retry(tmp_path):
+    """Migrated VASP folders should reuse results and get current scripts."""
+    labeling_dir = tmp_path / "labeling"
+    complete = labeling_dir / "calc_complete"
+    not_converged = labeling_dir / "calc_not_converged"
+    incomplete = labeling_dir / "calc_incomplete"
+    not_started = labeling_dir / "calc_not_started"
+    old_script = "#!/bin/bash\n#SBATCH --partition=old\n/old/vasp_std\n"
+    poscar = """SiC
+1.0
+3.0 0.0 0.0
+0.0 3.0 0.0
+0.0 0.0 3.0
+Si C
+1 1
+Direct
+0.0 0.0 0.0
+0.25 0.25 0.25
+"""
+    for workdir in (complete, not_converged, incomplete, not_started):
+        workdir.mkdir(parents=True)
+        (workdir / "POSCAR").write_text(poscar, encoding="utf-8")
+    for workdir in (complete, not_converged, incomplete):
+        (workdir / "submit.sh").write_text(old_script, encoding="utf-8")
+    (complete / "OUTCAR").write_text(
+        "General timing and accounting informations for this job:\n",
+        encoding="utf-8",
+    )
+    (not_converged / "OUTCAR").write_text(
+        "The electronic self-consistency was not achieved in the given "
+        "number of steps\n"
+        "General timing and accounting informations for this job:\n",
+        encoding="utf-8",
+    )
+    (incomplete / "OUTCAR").write_text("DAV:  20\n", encoding="utf-8")
+    submit_template = tmp_path / "new_sub.sh"
+    submit_template.write_text(
+        """#!/bin/bash
+#SBATCH --job-name=old_name
+#SBATCH --ntasks=1
+mpirun /old/vasp_std
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: migrated_scf
+labeling:
+  engine: vasp
+  output_dir: {labeling_dir.as_posix()}
+  command: /new/vasp_std
+jobs:
+  submit_command: sbatch
+  cores_cpu: 36
+  vasp_kpar: 3
+  vasp_ncore: 6
+  skip_completed: true
+  check_scf_convergence: true
+  sub_file: {submit_template.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    result = submit_jobs(load_config(config_path), dry_run=True)
+
+    assert result.message == (
+        "Would submit 3 scf job(s); skipped 1 completed VASP job(s)"
+    )
+    assert (complete / "submit.sh").read_text(encoding="utf-8") == old_script
+    for workdir in (not_converged, incomplete, not_started):
+        submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+        assert f"#SBATCH --job-name={workdir.name}" in submit_text
+        assert "#SBATCH --ntasks=36" in submit_text
+        assert "mpirun /new/vasp_std" in submit_text
+        assert "#SBATCH --partition=old" not in submit_text
+    log_text = (labeling_dir / "scf_submitted_jobs.txt").read_text(
+        encoding="utf-8"
+    )
+    assert f"SKIPPED completed VASP job: {complete}" in log_text
+    assert f"RETRY electronic SCF not converged: {not_converged}" in log_text
+    assert f"RETRY incomplete VASP output: {incomplete}" in log_text
+    assert log_text.count("REFRESHED submit script:") == 3
+    assert log_text.count("DRY-RUN") == 3
+    assert not (labeling_dir / "labeling_manifest.jsonl").exists()
+
+
+def test_submit_jobs_can_ignore_scf_convergence_marker(tmp_path):
+    """Users can treat a normally terminated nonconverged OUTCAR as complete."""
+    workdir = tmp_path / "labeling" / "calc_nonconverged"
+    workdir.mkdir(parents=True)
+    old_script = "#!/bin/bash\nkeep this script\n"
+    (workdir / "submit.sh").write_text(old_script, encoding="utf-8")
+    (workdir / "OUTCAR").write_text(
+        "The electronic self-consistency was not achieved in 150 steps\n"
+        "General timing and accounting informations for this job:\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_test
+labeling:
+  engine: vasp
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  check_scf_convergence: false
+""",
+        encoding="utf-8",
+    )
+
+    result = submit_jobs(load_config(config_path), dry_run=True)
+
+    assert result.message == (
+        "Would submit 0 scf job(s); skipped 1 completed VASP job(s)"
+    )
+    assert (workdir / "submit.sh").read_text(encoding="utf-8") == old_script
+
+
 def test_submit_jobs_can_resubmit_completed_vasp_jobs(tmp_path):
     """Users should be able to disable completed-job filtering explicitly."""
     workdir = tmp_path / "labeling" / "calc_complete"
@@ -1013,6 +1130,7 @@ jobs:
     )
     assert "DRY-RUN" in log_text
     assert "SKIPPED" not in log_text
+    assert (workdir / "submit.sh").read_text(encoding="utf-8") == "#!/bin/bash\n"
 
 
 def test_submit_jobs_rejects_non_boolean_skip_completed(tmp_path):
@@ -1038,6 +1156,31 @@ jobs:
         assert "jobs.skip_completed must be true or false" in str(exc)
     else:
         raise AssertionError("string skip_completed values should fail")
+
+
+def test_submit_jobs_rejects_non_boolean_scf_convergence_check(tmp_path):
+    """The SCF convergence option should require a YAML boolean."""
+    workdir = tmp_path / "labeling" / "calc"
+    workdir.mkdir(parents=True)
+    (workdir / "submit.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_test
+labeling:
+  engine: vasp
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+jobs:
+  check_scf_convergence: "true"
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        submit_jobs(load_config(config_path), dry_run=True)
+    except ValueError as exc:
+        assert "jobs.check_scf_convergence must be true or false" in str(exc)
+    else:
+        raise AssertionError("string check_scf_convergence values should fail")
 
 
 def test_submit_jobs_nohup_uses_bash_and_out_log(tmp_path):

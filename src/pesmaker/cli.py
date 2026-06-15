@@ -377,6 +377,8 @@ jobs:
   submit_command: sbatch
   cores_cpu: 36
   gpus: 0
+  skip_completed: true
+  check_scf_convergence: true
   sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp_cpu_36.sh

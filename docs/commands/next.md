@@ -111,6 +111,7 @@ jobs:
   vasp_kpar: 3
   vasp_ncore: 6
   skip_completed: true
+  check_scf_convergence: true
   sub_file: /path/to/sub.sh
 ```
 
@@ -159,6 +160,46 @@ pesmaker next run.yaml
 ```
 
 PESMaker will collect the dataset.
+
+## Migrated Or Retry SCF Folders
+
+If a YAML points directly to an existing VASP calculation tree, and it has no
+new `structures`, `input_dir`, or `input_manifest`, `next` treats the current
+stage as migration or retry submission rather than SCF setup.
+
+For example:
+
+```yaml
+labeling:
+  engine: vasp
+  output_dir: labeling
+  command: /current/path/to/vasp_std
+
+jobs:
+  submit_command: sbatch
+  skip_completed: true
+  check_scf_convergence: true
+  sub_file: /current/path/to/sub.sh
+```
+
+When `labeling/` already contains calculation folders with `POSCAR`, running
+`pesmaker next sub.yaml` does not run `scf-setup`, rewrite inputs, or submit
+jobs. It prints:
+
+```text
+Next flow
+Flow             : SCF-retry submission
+Current          : SCF retry submission
+
+Next:
+  1. Preview and refresh retry scripts: pesmaker submit sub.yaml --dry-run
+  2. Review: cat labeling/scf_submitted_jobs.txt
+  3. Submit retry jobs: pesmaker submit sub.yaml
+```
+
+The dry-run command classifies each `OUTCAR` and refreshes `submit.sh` only for
+folders that need submission or retry. Normally terminated and electronically
+converged calculations are left unchanged.
 
 ## Sampling Example
 

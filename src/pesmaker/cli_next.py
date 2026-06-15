@@ -58,6 +58,9 @@ def print_next_concise(result: NextResult, *, config_path: Path) -> None:
         if event.kind == "config-needed":
             _print_config_needed(event, config_path=config_path)
             continue
+        if event.kind == "scf-retry":
+            _print_scf_retry(event, config_path=config_path)
+            continue
         if event.kind in {"wait", "waiting"}:
             _print_waiting(event, config_path=config_path)
             continue
@@ -119,10 +122,13 @@ def print_next_diagnostics(result: NextResult, *, config_path: Path) -> None:
             print(f"Next action      : {event.message}")
             print()
             print("What you should do next:")
-            print(f"  - Run: pesmaker next {config_path}")
+            if _next_action_kind(event) == "scf-retry":
+                _print_scf_retry_steps(event, config_path=config_path)
+            else:
+                print(f"  - Run: pesmaker next {config_path}")
             if _next_action_kind(event) == "config-needed" and event.template_path:
                 print(f"  - Edit the generated template: {event.template_path}")
-            elif event.command:
+            elif event.command and _next_action_kind(event) != "scf-retry":
                 print(f"  - {submit_action_label(_event_stage(event))}: {event.command}")
             print()
         return
@@ -164,6 +170,12 @@ def print_next_diagnostics(result: NextResult, *, config_path: Path) -> None:
             )
             print(f"  2. Check it: pesmaker validate {template_path}")
             print(f"  3. Continue: pesmaker next {template_path}")
+            continue
+        if event.kind == "scf-retry":
+            print(f"  - {event.message}")
+            print()
+            print("What you should do next:")
+            _print_scf_retry_steps(event, config_path=config_path)
             continue
         if event.kind in {"wait", "waiting"}:
             print("  - PESMaker is waiting for external job outputs.")
@@ -237,6 +249,12 @@ def print_next_preflight(result: NextResult, *, config_path: Path) -> None:
         print("Stop rule        : wait for the user to edit the follow-up YAML")
         if event.template_path is not None:
             print(f"Template         : {event.template_path}")
+    elif step_kind == "scf-retry":
+        print("No SCF setup will run.")
+        print(f"Detected         : {event.message}")
+        print("Stop rule        : wait for explicit retry submission")
+        if event.command:
+            print(f"Preview command  : {event.command} --dry-run")
     elif step_kind == "complete":
         print("No PESMaker task needs to run now.")
         print(f"Reason           : {event.message}")
@@ -336,6 +354,24 @@ def _print_waiting(event: NextEvent, *, config_path: Path) -> None:
     print()
 
 
+def _print_scf_retry(event: NextEvent, *, config_path: Path) -> None:
+    print("SCF retry submission:")
+    print(f"  - {event.message}")
+    print("  - PESMaker will not run scf-setup for these existing folders.")
+    print()
+    print("Next:")
+    _print_scf_retry_steps(event, config_path=config_path)
+    print()
+
+
+def _print_scf_retry_steps(event: NextEvent, *, config_path: Path) -> None:
+    command = event.command or f"pesmaker submit {config_path}"
+    log_path = event.log_path or Path("labeling") / "scf_submitted_jobs.txt"
+    print(f"  1. Preview and refresh retry scripts: {command} --dry-run")
+    print(f"  2. Review: cat {log_path}")
+    print(f"  3. Submit retry jobs: {command}")
+
+
 def _waiting_message(stage: str) -> str:
     if stage == "sampling":
         return "Sampling trajectory files are not ready."
@@ -352,6 +388,8 @@ def _current_next_label(event: NextEvent | None, status: str) -> str:
         return event.message
     if step_kind == "config-needed":
         return "waiting for SCF settings"
+    if step_kind == "scf-retry":
+        return "SCF retry submission"
     if step_kind == "submit-preview":
         return f"{_stage_display(_event_stage(event))} submission preview"
     if step_kind in {"wait", "waiting"}:

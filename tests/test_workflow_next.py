@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from pesmaker.cli import main
 from pesmaker.results import StageResult
@@ -347,6 +348,7 @@ generation:
     assert "vasp_kpar: 3" in followup_text
     assert "vasp_ncore: 6" in followup_text
     assert "skip_completed: true" in followup_text
+    assert "check_scf_convergence: true" in followup_text
 
     followup.write_text("custom: keep\n", encoding="utf-8")
     assert main(["next", str(config_path)]) == 0
@@ -386,6 +388,66 @@ labeling:
     assert "Plan before execution" not in output
     assert not (tmp_path / "generated").exists()
     assert not (tmp_path / ".pesmaker").exists()
+
+
+def test_next_guides_migrated_scf_retry_without_rewriting_files(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """`next` should direct migrated SCF trees to explicit submit commands."""
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        """project: migrated_scf
+labeling:
+  engine: vasp
+  output_dir: labeling
+  command: /new/vasp_std
+jobs:
+  submit_command: sbatch
+  skip_completed: true
+  check_scf_convergence: true
+  sub_file: /new/sub.sh
+""",
+        encoding="utf-8",
+    )
+    workdir = tmp_path / "labeling" / "calc_000001"
+    workdir.mkdir(parents=True)
+    (workdir / "POSCAR").write_text("existing POSCAR\n", encoding="utf-8")
+    old_script = "#!/bin/bash\n/old/vasp_std\n"
+    (workdir / "submit.sh").write_text(old_script, encoding="utf-8")
+    (workdir / "OUTCAR").write_text("DAV: 20\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["next", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    log = tmp_path / "labeling" / "scf_submitted_jobs.txt"
+    displayed_log = Path("labeling") / "scf_submitted_jobs.txt"
+    assert "Flow             : SCF-retry submission" in output
+    assert "Current          : SCF retry submission" in output
+    assert "Existing VASP calculation folders look like a migrated" in output
+    assert "PESMaker will not run scf-setup" in output
+    assert (
+        f"1. Preview and refresh retry scripts: "
+        f"pesmaker submit {config_path} --dry-run"
+    ) in output
+    assert f"2. Review: cat {displayed_log}" in output
+    assert f"3. Submit retry jobs: pesmaker submit {config_path}" in output
+    assert (workdir / "submit.sh").read_text(encoding="utf-8") == old_script
+    assert not (tmp_path / "labeling" / "labeling_manifest.jsonl").exists()
+    assert not log.exists()
+    assert not (tmp_path / ".pesmaker").exists()
+
+    assert main(["next", str(config_path), "--verbose"]) == 0
+    verbose_output = capsys.readouterr().out
+    assert "No SCF setup will run." in verbose_output
+    assert f"Preview command  : pesmaker submit {config_path} --dry-run" in (
+        verbose_output
+    )
+    assert f"2. Review: cat {displayed_log}" in verbose_output
+    assert (workdir / "submit.sh").read_text(encoding="utf-8") == old_script
+    assert not log.exists()
 
 
 def test_next_continues_from_finished_scf_to_training_preview(

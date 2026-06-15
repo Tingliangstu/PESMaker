@@ -59,13 +59,15 @@ jobs:
   vasp_kpar: 2
   vasp_ncore: 6
   skip_completed: true
+  check_scf_convergence: true
 ```
 
 If `vasp_kpar` and `vasp_ncore` are omitted, PESMaker chooses conservative
 values from `cores_cpu`.
 
-`skip_completed` defaults to `true`. During SCF submission, PESMaker skips
-folders whose `OUTCAR` contains the normal VASP completion footer.
+During SCF submission, `skip_completed` and `check_scf_convergence` both
+default to `true`. PESMaker skips only VASP folders that terminated normally
+without the electronic SCF nonconvergence marker.
 
 ## Next Step
 
