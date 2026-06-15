@@ -14,8 +14,7 @@ authors = [
 maintainers = [
   { name = "Ting Liang", email = "liangting.zj@gmail.com" }
 ]
-license = "GPL-3.0-or-later"
-license-files = ["LICENSE", "NOTICE"]
+license = { file = "LICENSE" }
 keywords = [
   "atomistic simulation",
   "machine-learned interatomic potentials",
