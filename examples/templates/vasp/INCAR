@@ -12,3 +12,5 @@ SIGMA = 0.02     # Smearing width in eV
 ISMEAR = 0       # Gaussian smearing
 PREC = Accurate  # High precision level
 NELM = 150       # Maximum electronic SCF steps
+LWAVE = .FALSE.  # Do not write WAVECAR
+LCHARG = .FALSE. # Do not write CHGCAR or CHG

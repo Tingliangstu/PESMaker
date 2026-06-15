@@ -568,6 +568,8 @@ jobs:
     assert "SIGMA = 0.02" in incar_text
     assert "ISMEAR = 0" in incar_text
     assert "IVDW" not in incar_text
+    assert "LWAVE = .FALSE." in incar_text
+    assert "LCHARG = .FALSE." in incar_text
     assert "KPAR = 2" in incar_text
     assert "NCORE = 3" in incar_text
     assert "#!/bin/bash -l" in submit_text
