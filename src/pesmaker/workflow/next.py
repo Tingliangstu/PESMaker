@@ -406,6 +406,7 @@ jobs:
   cores_cpu: 36
   vasp_kpar: 3
   vasp_ncore: 6
+  skip_completed: true
   sub_file: /path/to/sub.sh
 """
     path.write_text(text, encoding="utf-8")

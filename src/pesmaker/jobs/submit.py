@@ -26,6 +26,11 @@ from pesmaker.artifacts import _read_manifest, _section_output_dir
 from pesmaker.config.schema import PESMakerConfig
 from pesmaker.results import StageResult
 
+VASP_COMPLETION_MARKER = (
+    b"General timing and accounting informations for this job"
+)
+OUTCAR_COMPLETION_SCAN_BYTES = 128 * 1024
+
 
 def submit_jobs(
     config: PESMakerConfig,
@@ -43,20 +48,57 @@ def submit_jobs(
     output_dir.mkdir(parents=True, exist_ok=True)
     submitted_log = output_dir / f"{stage}_submitted_jobs.txt"
     lines: list[str] = []
+    submitted_count = 0
+    skipped_count = 0
+    skip_completed = _skip_completed_jobs(config, stage)
     for script in submit_scripts:
+        if skip_completed and _vasp_job_is_complete(script.parent):
+            lines.append(f"SKIPPED completed VASP job: {script.parent}")
+            skipped_count += 1
+            continue
         display = _submit_display(submit_command, script)
         if dry_run:
             lines.append(f"DRY-RUN {display}")
+            submitted_count += 1
             continue
         message = _run_submit_command(submit_command, script)
         lines.append(f"{script.parent}: {message}")
+        submitted_count += 1
     submitted_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
     action = "Would submit" if dry_run else "Submitted"
+    message = f"{action} {submitted_count} {stage} job(s)"
+    if skipped_count:
+        message += f"; skipped {skipped_count} completed VASP job(s)"
     return StageResult(
         output_dir,
         (submitted_log,),
-        f"{action} {len(submit_scripts)} {stage} job(s)",
+        message,
     )
+
+
+def _skip_completed_jobs(config: PESMakerConfig, stage: str) -> bool:
+    """Return whether completed VASP SCF folders should be skipped."""
+    if stage != "scf" or config.labeling.engine.strip().lower() != "vasp":
+        return False
+    value = config.jobs.options.get("skip_completed", True)
+    if not isinstance(value, bool):
+        raise ValueError("jobs.skip_completed must be true or false")
+    return value
+
+
+def _vasp_job_is_complete(workdir: Path) -> bool:
+    """Detect a normally terminated VASP run from the end of its OUTCAR."""
+    outcar = workdir / "OUTCAR"
+    if not outcar.is_file():
+        return False
+    try:
+        with outcar.open("rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(max(0, size - OUTCAR_COMPLETION_SCAN_BYTES))
+            return VASP_COMPLETION_MARKER in handle.read()
+    except OSError:
+        return False
 
 
 def _submit_display(submit_command: str, script: Path) -> str:

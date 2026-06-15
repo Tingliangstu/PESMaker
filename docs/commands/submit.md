@@ -61,11 +61,27 @@ jobs:
   submit_command: sbatch
   cores_cpu: 36
   gpus: 0
+  skip_completed: true
   sub_file:
     sampling: templates/sbatch/gpumd.sh
     labeling: templates/sbatch/vasp_cpu_36.sh
     training: templates/sbatch/nep.sh
 ```
+
+For VASP SCF jobs, `skip_completed` defaults to `true`. PESMaker skips a job
+folder only when its `OUTCAR` contains VASP's normal timing and accounting
+footer. Merely having an `OUTCAR` is not enough, so interrupted calculations
+are still submitted.
+
+To intentionally submit every prepared VASP folder again:
+
+```yaml
+jobs:
+  submit_command: sbatch
+  skip_completed: false
+```
+
+Skipped folders are listed as `SKIPPED` in `scf_submitted_jobs.txt`.
 
 If your YAML only uses one submit template, `sub_file` can be a single path:
 
