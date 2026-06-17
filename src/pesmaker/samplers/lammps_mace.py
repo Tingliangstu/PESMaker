@@ -34,6 +34,7 @@ from pesmaker.samplers.gpumd import (
     _preserve_sampling_run_in,
     _sampling_ensemble_mode,
     _sampling_conditions,
+    _sampling_workdir,
     _two_dimensional_axis,
 )
 from pesmaker.structures import load_structure
@@ -102,9 +103,15 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
     manifest_path = output_dir / "sampling_manifest.jsonl"
     with manifest_path.open("w", encoding="utf-8") as manifest:
         job_index = 0
-        for record_index, record in enumerate(records):
+        used_workdirs: set[Path] = set()
+        for record in records:
             for condition in conditions:
-                stage_dir = output_dir / f"md_{record_index:06d}_{condition.name}"
+                stage_dir = _sampling_workdir(
+                    output_dir,
+                    record,
+                    condition,
+                    used_workdirs=used_workdirs,
+                )
                 stage_dir.mkdir(parents=True, exist_ok=True)
                 atoms = load_structure(record["path"])
                 elements = _first_seen_elements(atoms)

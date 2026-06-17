@@ -273,7 +273,7 @@ sampling:
 This creates a folder like:
 
 ```text
-sampling/md_000000_ramp_300K_to_1200K/movie.xyz
+sampling/2D_beta_Te_ramp_300K_to_1200K/movie.xyz
 ```
 
 Use a temperature list when you want independent MD jobs:
@@ -286,10 +286,18 @@ sampling:
 This creates folders like:
 
 ```text
-sampling/md_000000_temp_300K/movie.xyz
-sampling/md_000000_temp_600K/movie.xyz
-sampling/md_000000_temp_900K/movie.xyz
+sampling/2D_beta_Te_temp_300K/movie.xyz
+sampling/2D_beta_Te_temp_600K/movie.xyz
+sampling/2D_beta_Te_temp_900K/movie.xyz
 ```
+
+Sampling work directories are named from the source structure stem plus the
+temperature condition. For structures generated from CIF files, PESMaker uses
+the original CIF stem recorded in `generated/manifest.jsonl`, so inputs such as
+`2D_alpha_Te.cif`, `2D_beta_Te.cif`, and `2D_gamma_Te.cif` produce directories
+such as `2D_alpha_Te_temp_300K`, `2D_beta_Te_temp_300K`, and
+`2D_gamma_Te_temp_300K`. If multiple jobs would get the same name, PESMaker
+adds a numeric suffix such as `_2`.
 
 For GPUMD, set selection to:
 
@@ -332,7 +340,7 @@ PESMaker looks for structures in this order:
 ```text
 sampling/
   sampling_manifest.jsonl
-  md_000000_temp_300K/
+  2D_beta_Te_temp_300K/
     data.in                 # MACE/LAMMPS
     in.run_mace_npt         # MACE/LAMMPS
     model.xyz               # GPUMD

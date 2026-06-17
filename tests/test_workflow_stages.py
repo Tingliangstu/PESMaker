@@ -89,8 +89,8 @@ training:
     assert main(["scf-setup", str(config_path)]) == 0
     assert main(["train-setup", str(config_path)]) == 0
 
-    assert (tmp_path / "sampling" / "md_000000_temp_300K" / "run.in").exists()
-    assert (tmp_path / "sampling" / "md_000000_temp_300K" / "submit.sh").exists()
+    assert (tmp_path / "sampling" / "structure_temp_300K" / "run.in").exists()
+    assert (tmp_path / "sampling" / "structure_temp_300K" / "submit.sh").exists()
     assert (tmp_path / "labeling" / "calc_000000" / "POSCAR").exists()
     incar_text = (tmp_path / "labeling" / "calc_000000" / "INCAR").read_text(
         encoding="utf-8"
@@ -1399,8 +1399,10 @@ def test_sampling_setup_writes_temperature_jobs(tmp_path):
     )
     generated_dir = tmp_path / "generated"
     generated_dir.mkdir()
+    source_path = tmp_path / "2D_beta_Te.cif"
+    source_path.write_text("data_beta\n", encoding="utf-8")
     (generated_dir / "manifest.jsonl").write_text(
-        json.dumps({"path": str(structure_path)}) + "\n",
+        json.dumps({"path": str(structure_path), "source": str(source_path)}) + "\n",
         encoding="utf-8",
     )
     potential = tmp_path / "nep89_20250409.txt"
@@ -1424,7 +1426,7 @@ sampling:
     assert main(["sample-setup", str(config_path)]) == 0
 
     for temperature in (300, 600, 900):
-        workdir = tmp_path / "sampling" / f"md_000000_temp_{temperature}K"
+        workdir = tmp_path / "sampling" / f"2D_beta_Te_temp_{temperature}K"
         assert (workdir / "model.xyz").exists()
         assert (workdir / "nep89_20250409.txt").exists()
         run_in = (workdir / "run.in").read_text(encoding="utf-8")
@@ -1483,7 +1485,7 @@ sampling:
 
     assert main(["sample-setup", str(config_path)]) == 0
 
-    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    workdir = tmp_path / "sampling" / "structure_temp_300K"
     assert (workdir / "nep89_20250409.txt").exists()
     run_in = (workdir / "run.in").read_text(encoding="utf-8")
     assert "potential      nep89_20250409.txt" in run_in
@@ -1546,7 +1548,7 @@ jobs:
 
     assert main(["sample-setup", str(config_path)]) == 0
 
-    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    workdir = tmp_path / "sampling" / "structure_temp_300K"
     assert (workdir / "gpumd.sh").exists()
     assert (workdir / "submit.sh").exists()
     submit = (workdir / "gpumd.sh").read_text(encoding="utf-8")
@@ -1610,7 +1612,7 @@ jobs:
     result = submit_jobs(load_config(config_path), stage="sampling", dry_run=True)
 
     assert result.message == "Would submit 1 sampling job(s)"
-    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    workdir = tmp_path / "sampling" / "structure_temp_300K"
     assert (workdir / "gpumd.sh").exists()
     assert (workdir / "submit.sh").exists()
     log = tmp_path / "sampling" / "sampling_submitted_jobs.txt"
@@ -1692,7 +1694,7 @@ jobs:
 
     assert main(["sample-setup", str(config_path)]) == 0
 
-    workdir = tmp_path / "sampling" / "md_000000_ramp_300K_to_1200K"
+    workdir = tmp_path / "sampling" / "structure_ramp_300K_to_1200K"
     data_in = (workdir / "data.in").read_text(encoding="utf-8")
     run_in = (workdir / "in.run_mace_npt").read_text(encoding="utf-8")
     submit = (workdir / "lammps.sh").read_text(encoding="utf-8")
@@ -1783,7 +1785,7 @@ jobs:
     assert main(["sample-setup", str(config_path)]) == 0
 
     run_in = (
-        tmp_path / "sampling" / "md_000000_temp_300K" / "in.run_mace_d3"
+        tmp_path / "sampling" / "structure_temp_300K" / "in.run_mace_d3"
     ).read_text(encoding="utf-8")
     assert "mliap unified /models/mace-omat-0-small.model-mliap_lammps.pt 0" in run_in
     assert "pair_coeff    * * mliap Te" in run_in
@@ -1859,7 +1861,7 @@ jobs:
     assert main(["sample-setup", str(config_path)]) == 0
 
     run_in = (
-        tmp_path / "sampling" / "md_000000_ramp_300K_to_900K" / "in.run_mace_npt"
+        tmp_path / "sampling" / "structure_ramp_300K_to_900K" / "in.run_mace_npt"
     ).read_text(encoding="utf-8")
     assert "variable      T          equal  300" in run_in
     assert "variable      Tstart     equal  300" in run_in
@@ -1922,7 +1924,7 @@ jobs:
 
     assert main(["sample-setup", str(config_path)]) == 0
 
-    workdir = tmp_path / "sampling" / "md_000000_ramp_300K_to_900K"
+    workdir = tmp_path / "sampling" / "structure_ramp_300K_to_900K"
     assert (workdir / "data.in").exists()
     assert (workdir / "in.run_mace_npt").read_text(encoding="utf-8") == literal_text
 
@@ -1970,7 +1972,7 @@ sampling:
     assert main(["sample-setup", str(config_path)]) == 0
 
     run_in = (
-        tmp_path / "sampling" / "md_000000_ramp_300K_to_900K" / "run.in"
+        tmp_path / "sampling" / "structure_ramp_300K_to_900K" / "run.in"
     ).read_text(encoding="utf-8")
     assert run_in == literal_text
 
@@ -2010,7 +2012,7 @@ sampling:
 
     assert main(["sample-setup", str(config_path)]) == 0
 
-    workdir = tmp_path / "sampling" / "md_000000_ramp_300K_to_1500K"
+    workdir = tmp_path / "sampling" / "structure_ramp_300K_to_1500K"
     run_in = (workdir / "run.in").read_text(encoding="utf-8")
     assert "velocity       300" in run_in
     assert "ensemble       npt_scr 300 1500" in run_in
@@ -2073,7 +2075,7 @@ sampling:
     output = capsys.readouterr().out
 
     run_in = (
-        tmp_path / "sampling" / "md_000000_ramp_300K_to_1200K" / "run.in"
+        tmp_path / "sampling" / "structure_ramp_300K_to_1200K" / "run.in"
     ).read_text(encoding="utf-8")
     assert (
         "ensemble       npt_scr 300 1200 100 0 0 0 0 0 0 "
@@ -2142,16 +2144,16 @@ sampling:
     assert main(["sample-setup", str(config_path)]) == 0
 
     orthogonal = (
-        tmp_path / "sampling" / "md_000000_temp_300K" / "run.in"
+        tmp_path / "sampling" / "structure_0_temp_300K" / "run.in"
     ).read_text(encoding="utf-8")
     triclinic = (
-        tmp_path / "sampling" / "md_000001_temp_300K" / "run.in"
+        tmp_path / "sampling" / "structure_1_temp_300K" / "run.in"
     ).read_text(encoding="utf-8")
     two_dimensional = (
-        tmp_path / "sampling" / "md_000002_temp_300K" / "run.in"
+        tmp_path / "sampling" / "structure_2_temp_300K" / "run.in"
     ).read_text(encoding="utf-8")
     two_dimensional_triclinic = (
-        tmp_path / "sampling" / "md_000003_temp_300K" / "run.in"
+        tmp_path / "sampling" / "structure_3_temp_300K" / "run.in"
     ).read_text(encoding="utf-8")
 
     assert "ensemble       npt_scr 300 300 100 0 0 0 50 50 50 1000" in orthogonal
@@ -2211,7 +2213,7 @@ sampling:
     assert main(["sample-setup", str(config_path)]) == 0
 
     run_in = (
-        tmp_path / "sampling" / "md_000000_temp_300K" / "run.in"
+        tmp_path / "sampling" / "structure_temp_300K" / "run.in"
     ).read_text(encoding="utf-8")
     assert (
         "ensemble       npt_scr 300 300 100 0 0 0 0 0 0 "

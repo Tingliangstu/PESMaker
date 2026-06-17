@@ -101,9 +101,15 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
     manifest_path = output_dir / "sampling_manifest.jsonl"
     with manifest_path.open("w", encoding="utf-8") as manifest:
         job_index = 0
-        for record_index, record in enumerate(records):
+        used_workdirs: set[Path] = set()
+        for record in records:
             for condition in conditions:
-                stage_dir = output_dir / f"md_{record_index:06d}_{condition.name}"
+                stage_dir = _sampling_workdir(
+                    output_dir,
+                    record,
+                    condition,
+                    used_workdirs=used_workdirs,
+                )
                 stage_dir.mkdir(parents=True, exist_ok=True)
                 structure_path = stage_dir / "model.xyz"
                 atoms = load_structure(record["path"])
@@ -167,6 +173,36 @@ def setup_sampling(config: PESMakerConfig) -> StageResult:
         f"Prepared {job_count} GPUMD-MD job(s)",
         warnings=tuple(warnings),
     )
+
+
+def _sampling_workdir(
+    output_dir: Path,
+    record: dict[str, Any],
+    condition: SamplingCondition,
+    *,
+    used_workdirs: set[Path],
+) -> Path:
+    """Return an informative, unique sampling work directory."""
+    source = Path(str(record.get("source", record["path"])))
+    candidate = output_dir / f"{_safe_path_part(source.stem)}_{condition.name}"
+    return _unique_workdir(candidate, used_workdirs)
+
+
+def _unique_workdir(candidate: Path, used_workdirs: set[Path]) -> Path:
+    base = candidate
+    counter = 2
+    while candidate in used_workdirs:
+        candidate = base.with_name(f"{base.name}_{counter}")
+        counter += 1
+    used_workdirs.add(candidate)
+    return candidate
+
+
+def _safe_path_part(value: str) -> str:
+    safe = "".join(
+        char if char.isalnum() or char in {"-", "_"} else "_" for char in value
+    )
+    return safe.strip("_") or "structure"
 
 
 def _sampling_conditions(options: dict[str, Any]) -> tuple[SamplingCondition, ...]:

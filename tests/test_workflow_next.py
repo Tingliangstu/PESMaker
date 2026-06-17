@@ -147,7 +147,7 @@ jobs:
     from ase import Atoms
     from ase.io import write
 
-    movie = tmp_path / "sampling" / "md_000000_temp_300K" / "movie.xyz"
+    movie = tmp_path / "sampling" / "structure_temp_300K" / "movie.xyz"
     write(
         movie,
         [
@@ -223,7 +223,7 @@ jobs:
     assert main(["next", str(config_path)]) == 0
     output = capsys.readouterr().out
 
-    workdir = tmp_path / "sampling" / "md_000000_temp_300K"
+    workdir = tmp_path / "sampling" / "structure_temp_300K"
     assert (workdir / "data.in").exists()
     assert (workdir / "in.run_mace_npt").exists()
     assert (workdir / "lammps.sh").exists()
@@ -274,7 +274,7 @@ jobs:
     from ase import Atoms
     from ase.io import write
 
-    movie = tmp_path / "sampling" / "md_000000_temp_300K" / "movie.xyz"
+    movie = tmp_path / "sampling" / "structure_temp_300K" / "movie.xyz"
     write(
         movie,
         [
