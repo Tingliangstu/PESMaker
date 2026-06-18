@@ -24,6 +24,15 @@ from typing import Any
 from pesmaker.config.schema import PESMakerConfig
 from pesmaker.jobs.resources import JobResources, _job_resources
 
+SUBMIT_RESOURCE_KEYS = {
+    "nodes",
+    "cores_cpu",
+    "gpus",
+    "gpus_gpu",
+    "vasp_kpar",
+    "vasp_ncore",
+}
+
 
 def _write_submit_script(
     config: PESMakerConfig,
@@ -39,10 +48,16 @@ def _write_submit_script(
     engine = _stage_engine(config, stage)
     if template_path:
         ntasks = resources.nodes * resources.cores_cpu
+        run_command = _default_run_command(
+            command,
+            stage=stage,
+            engine=engine,
+            resources=resources,
+        )
         text = _format_submit_template(
             template_path.read_text(encoding="utf-8"),
             {
-                "command": command,
+                "command": run_command,
                 "job_name": job_name,
                 "workdir": str(workdir),
                 "nodes": resources.nodes,
@@ -54,7 +69,7 @@ def _write_submit_script(
                 "vasp_ncore": resources.vasp_ncore,
             },
         )
-        if not _preserve_user_submit_template(stage, engine):
+        if _should_normalize_submit_template(config, stage, engine):
             text = _normalize_submit_template(
                 text,
                 command=command,
@@ -108,6 +123,16 @@ def _preserve_user_submit_template(stage: str, engine: str) -> bool:
         "mace",
         "lammps-mace",
     }
+
+
+def _should_normalize_submit_template(
+    config: PESMakerConfig,
+    stage: str,
+    engine: str,
+) -> bool:
+    if _preserve_user_submit_template(stage, engine):
+        return False
+    return any(key in config.jobs.options for key in SUBMIT_RESOURCE_KEYS)
 
 
 def _submit_script_path(
@@ -307,6 +332,18 @@ def _default_run_command(
     engine: str,
     resources: JobResources,
 ) -> str:
-    if stage == "labeling" and engine.lower() == "vasp" and not resources.gpus:
+    if stage == "labeling" and engine.lower() == "vasp":
+        if _has_mpi_launcher(command):
+            return command
+        if resources.gpus:
+            return f"mpirun -np {resources.gpus} {command}"
         return f"mpirun {command}"
     return command
+
+
+def _has_mpi_launcher(command: str) -> bool:
+    command_start = command.strip().lower()
+    return any(
+        command_start == launcher or command_start.startswith(f"{launcher} ")
+        for launcher in ("mpirun", "mpiexec", "srun")
+    )
