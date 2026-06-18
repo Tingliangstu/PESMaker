@@ -46,6 +46,7 @@ def _write_submit_script(
     job_name = workdir.name
     resources = resources or _job_resources(config)
     engine = _stage_engine(config, stage)
+    mpi_ranks = _requested_mpi_ranks(config, resources)
     if template_path:
         ntasks = resources.nodes * resources.cores_cpu
         run_command = _default_run_command(
@@ -53,6 +54,7 @@ def _write_submit_script(
             stage=stage,
             engine=engine,
             resources=resources,
+            mpi_ranks=mpi_ranks,
         )
         text = _format_submit_template(
             template_path.read_text(encoding="utf-8"),
@@ -78,6 +80,7 @@ def _write_submit_script(
                 stage=stage,
                 engine=engine,
                 resources=resources,
+                mpi_ranks=mpi_ranks,
             )
         elif not text.endswith("\n"):
             text += "\n"
@@ -88,6 +91,7 @@ def _write_submit_script(
             stage=stage,
             engine=engine,
             resources=resources,
+            mpi_ranks=mpi_ranks,
         )
     path = _submit_script_path(workdir, template_path, stage=stage, engine=engine)
     path.write_text(text, encoding="utf-8")
@@ -135,6 +139,18 @@ def _should_normalize_submit_template(
     return any(key in config.jobs.options for key in SUBMIT_RESOURCE_KEYS)
 
 
+def _requested_mpi_ranks(
+    config: PESMakerConfig,
+    resources: JobResources,
+) -> int | None:
+    options = config.jobs.options
+    if resources.gpus and any(key in options for key in ("gpus", "gpus_gpu")):
+        return resources.gpus
+    if any(key in options for key in ("cores_cpu", "nodes")):
+        return resources.nodes * resources.cores_cpu
+    return None
+
+
 def _submit_script_path(
     workdir: Path,
     template_path: Path | None,
@@ -180,6 +196,7 @@ def _normalize_submit_template(
     stage: str,
     engine: str,
     resources: JobResources,
+    mpi_ranks: int | None,
 ) -> str:
     ntasks = resources.nodes * resources.cores_cpu
     lines: list[str] = []
@@ -202,6 +219,7 @@ def _normalize_submit_template(
                 stage=stage,
                 engine=engine,
                 resources=resources,
+                mpi_ranks=mpi_ranks,
             )
         lines.append(updated if updated is not None else line)
     return "\n".join(lines) + "\n"
@@ -246,6 +264,7 @@ def _replace_vasp_run_command(
     stage: str,
     engine: str,
     resources: JobResources,
+    mpi_ranks: int | None,
 ) -> str | None:
     if stage != "labeling" or engine.lower() != "vasp":
         return None
@@ -263,6 +282,7 @@ def _replace_vasp_run_command(
         stage=stage,
         engine=engine,
         resources=resources,
+        mpi_ranks=mpi_ranks,
     )
 
 
@@ -273,6 +293,7 @@ def _default_submit_script(
     stage: str,
     engine: str,
     resources: JobResources,
+    mpi_ranks: int | None = None,
 ) -> str:
     if _preserve_user_submit_template(stage, engine):
         return _default_sampling_submit_script(command)
@@ -305,7 +326,11 @@ def _default_submit_script(
             'echo "--------------------------------"',
             "",
             _default_run_command(
-                command, stage=stage, engine=engine, resources=resources
+                command,
+                stage=stage,
+                engine=engine,
+                resources=resources,
+                mpi_ranks=mpi_ranks,
             ),
             "",
             'echo "Simulation finished at $(date)"',
@@ -331,12 +356,13 @@ def _default_run_command(
     stage: str,
     engine: str,
     resources: JobResources,
+    mpi_ranks: int | None = None,
 ) -> str:
     if stage == "labeling" and engine.lower() == "vasp":
+        if mpi_ranks is not None:
+            return _with_mpi_ranks(command, mpi_ranks)
         if _has_mpi_launcher(command):
             return command
-        if resources.gpus:
-            return f"mpirun -np {resources.gpus} {command}"
         return f"mpirun {command}"
     return command
 
@@ -346,4 +372,28 @@ def _has_mpi_launcher(command: str) -> bool:
     return any(
         command_start == launcher or command_start.startswith(f"{launcher} ")
         for launcher in ("mpirun", "mpiexec", "srun")
+    )
+
+
+def _with_mpi_ranks(command: str, mpi_ranks: int) -> str:
+    prefix = command[: len(command) - len(command.lstrip())]
+    stripped = command.strip()
+    launcher, separator, rest = stripped.partition(" ")
+    launcher_lower = launcher.lower()
+    if launcher_lower in {"mpirun", "mpiexec"}:
+        if _mpi_command_has_rank_count(rest):
+            return command
+        suffix = f"{separator}{rest}" if rest else ""
+        return f"{prefix}{launcher} -np {mpi_ranks}{suffix}"
+    if launcher_lower == "srun":
+        return command
+    return f"mpirun -np {mpi_ranks} {command}"
+
+
+def _mpi_command_has_rank_count(command: str) -> bool:
+    rank_options = {"-np", "-n", "--np", "--ntasks"}
+    return any(
+        token in rank_options
+        or token.startswith(("-np=", "-n=", "--np=", "--ntasks="))
+        for token in command.split()
     )

@@ -245,7 +245,7 @@ jobs:
     assert "NCORE = 3" in incar_text
     assert f'cd "{workdir}"' not in submit_text
     assert "#SBATCH --job-name=structure_000000" in submit_text
-    assert "mpirun /opt/vasp/vasp_std" in submit_text
+    assert "mpirun -np 36 /opt/vasp/vasp_std" in submit_text
 
 
 def test_labeling_setup_normalizes_interleaved_vasp_source(tmp_path, capsys):
@@ -441,7 +441,7 @@ jobs:
     assert "#SBATCH --job-name=perturb_000000" in submit_text
     assert "#SBATCH --ntasks=36" in submit_text
     assert "# total MPI ranks" in submit_text
-    assert "mpirun /opt/vasp/vasp_std" in submit_text
+    assert "mpirun -np 36 /opt/vasp/vasp_std" in submit_text
     assert "/old/software/vasp_std" not in submit_text
     assert "${SLURM_NODELIST:-unknown}" in submit_text
 
@@ -677,7 +677,43 @@ jobs:
     assert "cd " not in submit_text
     assert "export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}" in submit_text
     assert "ulimit -s unlimited" in submit_text
-    assert "mpirun /opt/vasp/vasp_std" in submit_text
+    assert "mpirun -np 36 /opt/vasp/vasp_std" in submit_text
+
+
+def test_labeling_setup_adds_np_to_explicit_cpu_mpirun_command(tmp_path):
+    """CPU VASP commands with mpirun but no rank count should get -np."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: cpu_explicit_mpirun_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: mpirun /opt/vasp/vasp_std
+jobs:
+  cores_cpu: 36
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert submit_text.count("mpirun -np 36 /opt/vasp/vasp_std") == 1
+    assert "mpirun -np 36 mpirun" not in submit_text
 
 
 def test_labeling_setup_uses_manual_vasp_parallel_options(tmp_path):
@@ -893,6 +929,46 @@ generation:
 labeling:
   output_dir: {(tmp_path / 'labeling').as_posix()}
   command: mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std
+jobs:
+  cores_cpu: 6
+  gpus: 1
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert (
+        submit_text.count("mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std")
+        == 1
+    )
+    assert "mpirun -np 1 mpirun" not in submit_text
+
+
+def test_labeling_setup_adds_np_to_explicit_gpu_mpirun_command(tmp_path):
+    """GPU VASP commands with mpirun but no rank count should get -np."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: gpu_explicit_mpirun_np_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: mpirun /data/software/vasp6.4-gpu/bin/vasp_std
 jobs:
   cores_cpu: 6
   gpus: 1
@@ -1242,7 +1318,7 @@ jobs:
         submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
         assert f"#SBATCH --job-name={workdir.name}" in submit_text
         assert "#SBATCH --ntasks=36" in submit_text
-        assert "mpirun /new/vasp_std" in submit_text
+        assert "mpirun -np 36 /new/vasp_std" in submit_text
         assert "#SBATCH --partition=old" not in submit_text
     log_text = (labeling_dir / "scf_submitted_jobs.txt").read_text(
         encoding="utf-8"

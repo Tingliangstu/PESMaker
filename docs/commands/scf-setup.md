@@ -94,12 +94,19 @@ script content unchanged except for explicit placeholders such as `{command}`,
 to refresh matching scheduler lines and VASP launch commands in the generated
 `submit.sh`.
 
+For CPU VASP jobs with `cores_cpu` or `nodes` set, PESMaker uses
+`mpirun -np <nodes * cores_cpu> <labeling.command>` when `labeling.command` is
+only the VASP executable. If the command starts with `mpirun` or `mpiexec` but
+does not include `-np`, `-n`, `--np`, or `--ntasks`, PESMaker inserts the same
+rank count. Existing rank-count options are kept unchanged.
+
 For GPU VASP, request GPUs with `jobs.gpus` and usually omit `vasp_kpar` and
 `vasp_ncore`. When `gpus` is greater than zero, PESMaker does not add CPU VASP
 parallel tags to `INCAR`. If `labeling.command` is only the VASP executable,
-PESMaker runs it as `mpirun -np <jobs.gpus> <labeling.command>`. If
-`labeling.command` already starts with `mpirun`, `mpiexec`, or `srun`, PESMaker
-keeps it unchanged.
+PESMaker runs it as `mpirun -np <jobs.gpus> <labeling.command>`. If the command
+starts with `mpirun` or `mpiexec` but does not include an explicit rank count,
+PESMaker inserts `-np <jobs.gpus>`. Commands that start with `srun` are kept
+unchanged.
 
 ```yaml
 project: 2D_Te_MD

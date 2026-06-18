@@ -116,6 +116,12 @@ script content unchanged except for explicit placeholders such as `{command}`,
 `{job_name}`, or `{workdir}`. Add resource fields only when you want PESMaker
 to update matching scheduler lines and VASP launch commands.
 
+For CPU VASP jobs with `cores_cpu` or `nodes` set, refreshed launch commands
+use `mpirun -np <nodes * cores_cpu>`. If `labeling.command` already starts with
+`mpirun` or `mpiexec` but does not include `-np`, `-n`, `--np`, or `--ntasks`,
+PESMaker inserts the rank count. Existing rank-count options are kept
+unchanged.
+
 To intentionally submit every prepared VASP folder again:
 
 ```yaml
@@ -187,7 +193,8 @@ For one-GPU-per-job VASP SCF submissions, set `jobs.gpus: 1` and keep the CPU
 task count in `jobs.cores_cpu` aligned with the template. If `labeling.command`
 is only the VASP executable, PESMaker runs it with one MPI rank per requested
 GPU, for example `mpirun -np 1 /path/to/vasp_std`. Commands that already start
-with `mpirun`, `mpiexec`, or `srun` are kept unchanged.
+with `mpirun` or `mpiexec` get `-np <jobs.gpus>` inserted unless they already
+include a rank count. Commands that start with `srun` are kept unchanged.
 
 ```yaml
 labeling:
