@@ -145,13 +145,21 @@ Separate trajectory selection
 Mode             : separate_trajectories
 Trajectories     : 2
 Method           : FPS
+Descriptor       : GPUMD / Calorine-calculated NEP descriptors
+Potential        : /path/to/nep.txt
 Per trajectory   : max_count=50, min_distance=0.004
 Output directory : selected
 
 Trajectory       : 1/2 MD_run_2D_Pd_551/mp-1186427_Pd_temp_300K/movie.xyz
+Frames           : 1000
+Progress         : [##############################] 1000/1000 frame(s) (100.0%)
+Descriptor matrix: 1000 frame(s) x 35 feature(s)
 Selected         : 50 of 1000 frame(s)
 
 Trajectory       : 2/2 MD_run_2D_Pd_551/mp-2646997_Pd_temp_300K/movie.xyz
+Frames           : 1000
+Progress         : [##############################] 1000/1000 frame(s) (100.0%)
+Descriptor matrix: 1000 frame(s) x 35 feature(s)
 Selected         : 50 of 1000 frame(s)
 
 Separate selection completed: Selected 100 of 2000 frame(s) from 2 trajectory file(s).

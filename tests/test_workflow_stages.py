@@ -2459,6 +2459,69 @@ sampling:
     assert {record["path"] for record in records} == {str(selected_dir / "selected.xyz")}
 
 
+def test_separate_gpumd_select_prints_descriptor_summary_once(
+    tmp_path, monkeypatch, capsys
+):
+    """Separate GPUMD selection should avoid repeated model header blocks."""
+    import sys
+    import types
+
+    from ase import Atoms
+    from ase.io import write
+
+    def fake_get_descriptors(atoms, *, model_filename):
+        x_mean = float(np.mean(atoms.get_positions()[:, 0]))
+        return np.array([[x_mean, x_mean**2]])
+
+    calorine_module = types.ModuleType("calorine")
+    nep_module = types.ModuleType("calorine.nep")
+    nep_module.get_descriptors = fake_get_descriptors
+    monkeypatch.setitem(sys.modules, "calorine", calorine_module)
+    monkeypatch.setitem(sys.modules, "calorine.nep", nep_module)
+
+    trajectory_a = tmp_path / "traj_a" / "movie.xyz"
+    trajectory_b = tmp_path / "traj_b" / "movie.xyz"
+    trajectory_a.parent.mkdir()
+    trajectory_b.parent.mkdir()
+    frames_a = [
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+        Atoms("Te", positions=[(1.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+    ]
+    frames_b = [
+        Atoms("Te", positions=[(2.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+        Atoms("Te", positions=[(3.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+    ]
+    write(trajectory_a, frames_a, format="extxyz")
+    write(trajectory_b, frames_b, format="extxyz")
+    potential = tmp_path / "nep89.txt"
+    potential.write_text("fake potential\n", encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: separate_gpumd_output
+sampling:
+  engine: gpumd
+  potential: {potential.as_posix()}
+  selection:
+    trajectory_pattern: {(tmp_path / 'traj_*' / 'movie.xyz').as_posix()}
+    output_dir: {(tmp_path / 'selected').as_posix()}
+    min_distance: 0.0
+    max_count: 1
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["select", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Descriptor       : GPUMD / Calorine-calculated NEP descriptors" in output
+    assert output.count("Potential        :") == 1
+    assert "Engine           : GPUMD" not in output
+    assert "Backend          : Calorine-calculated NEP descriptors" not in output
+    assert "Status           : Loading the model" not in output
+    assert output.count("Frames           : 2") == 2
+    assert output.count("Descriptor matrix: 2 frame(s) x 2 feature(s)") == 2
+
+
 def test_selection_warning_suggests_lower_min_distance():
     """Min-distance warnings should suggest a smaller threshold."""
     from pesmaker.samplers.selection import _suggest_lower_min_distance

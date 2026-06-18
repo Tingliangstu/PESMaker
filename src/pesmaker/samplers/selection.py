@@ -155,6 +155,8 @@ def _select_separate_trajectory_frames(
     print("Mode             : separate_trajectories")
     print(f"Trajectories     : {len(frame_groups)}")
     print(f"Method           : {_selection_method_label(method)}")
+    if method != "interval":
+        _print_separate_descriptor_summary(options, sampling_options)
     print(f"Per trajectory   : {_per_trajectory_limit_label(options, method)}")
     print(f"Output directory : {output_dir}", flush=True)
     print(flush=True)
@@ -174,6 +176,7 @@ def _select_separate_trajectory_frames(
             f"Trajectory       : {trajectory_index}/{len(frame_groups)} {trajectory_path}",
             flush=True,
         )
+        print(f"Frames           : {len(frames)}", flush=True)
         if method == "interval":
             run = _run_interval_selection(
                 frames,
@@ -193,6 +196,7 @@ def _select_separate_trajectory_frames(
                 min_distance=min_distance,
                 max_count=max_count,
                 source_path=trajectory_path,
+                show_descriptor_header=False,
             )
         files.extend(run.files)
         for warning in run.warnings:
@@ -240,6 +244,30 @@ def _selection_method_label(method: str) -> str:
     if method == "interval":
         return "interval sampling"
     return "FPS"
+
+
+def _print_separate_descriptor_summary(
+    options: dict[str, Any],
+    sampling_options: dict[str, Any],
+) -> None:
+    descriptor = str(
+        options.get("descriptor", _default_selection_descriptor(sampling_options))
+    ).lower()
+    if descriptor in {"calorine", "nep", "calorine-nep", "calorine_nep"}:
+        potential = _resolve_selection_potential(options, sampling_options)
+        print("Descriptor       : GPUMD / Calorine-calculated NEP descriptors")
+        print(f"Potential        : {potential}")
+        return
+    if descriptor in {"mace", "mace-descriptor", "mace_descriptor"}:
+        model = Path(str(options.get("descriptor_model", "")))
+        if model.exists():
+            model = model.resolve()
+        print("Descriptor       : MACE invariant descriptors")
+        print(f"Model            : {model}")
+        print(f"Device           : {options.get('device', 'cuda')}")
+        return
+    if descriptor in {"simple", "geometry"}:
+        print("Descriptor       : simple geometry")
 
 
 def _per_trajectory_limit_label(options: dict[str, Any], method: str) -> str:
@@ -328,11 +356,13 @@ def _run_fps_selection(
     min_distance: float,
     max_count: int | None,
     source_path: Path | None = None,
+    show_descriptor_header: bool = True,
 ) -> SelectionRun:
     features, descriptor_name = _selection_features(
         frames,
         options,
         sampling_options=sampling_options,
+        show_descriptor_header=show_descriptor_header,
     )
     selected_indices, selection_distances = _farthest_point_indices(
         features,
@@ -501,25 +531,26 @@ def _selection_features(
     options: dict[str, Any],
     *,
     sampling_options: dict[str, Any],
+    show_descriptor_header: bool = True,
 ) -> tuple[np.ndarray, str]:
     descriptor = str(
         options.get("descriptor", _default_selection_descriptor(sampling_options))
     ).lower()
     if descriptor in {"calorine", "nep", "calorine-nep", "calorine_nep"}:
-        selection_potential = options.get("potential", options.get("model"))
-        potential_options = dict(sampling_options)
-        if selection_potential:
-            potential_options["potential"] = selection_potential
-        potential = _resolve_sampling_potential_path(potential_options)
-        if potential is not None and potential.exists():
-            potential = potential.resolve()
-        features = _calorine_nep_structure_features(frames, potential, options)
+        potential = _resolve_selection_potential(options, sampling_options)
+        features = _calorine_nep_structure_features(
+            frames,
+            potential,
+            options,
+            show_header=show_descriptor_header,
+        )
         return features, _nep_descriptor_name(potential)
     if descriptor in {"mace", "mace-descriptor", "mace_descriptor"}:
         features = _mace_structure_features(
             frames,
             options.get("descriptor_model"),
             options,
+            show_header=show_descriptor_header,
         )
         return features, "mace"
     if descriptor in {"simple", "geometry"}:
@@ -527,6 +558,20 @@ def _selection_features(
     raise ValueError(
         "sampling.selection.descriptor must be 'mace', 'calorine', or 'simple'"
     )
+
+
+def _resolve_selection_potential(
+    options: dict[str, Any],
+    sampling_options: dict[str, Any],
+) -> Path | None:
+    selection_potential = options.get("potential", options.get("model"))
+    potential_options = dict(sampling_options)
+    if selection_potential:
+        potential_options["potential"] = selection_potential
+    potential = _resolve_sampling_potential_path(potential_options)
+    if potential is not None and potential.exists():
+        potential = potential.resolve()
+    return potential
 
 
 def _default_selection_descriptor(sampling_options: dict[str, Any]) -> str:
@@ -557,6 +602,8 @@ def _calorine_nep_structure_features(
     frames,
     potential: Any,
     options: dict[str, Any],
+    *,
+    show_header: bool = True,
 ) -> np.ndarray:
     if not potential:
         raise ValueError(
@@ -577,13 +624,14 @@ def _calorine_nep_structure_features(
         raise ValueError(
             f"Calorine NEP potential file does not exist: {potential_path}"
         )
-    _print_descriptor_start(
-        engine="GPUMD",
-        backend="Calorine-calculated NEP descriptors",
-        source_label="Potential",
-        source_path=potential_path.resolve(),
-        frame_count=len(frames),
-    )
+    if show_header:
+        _print_descriptor_start(
+            engine="GPUMD",
+            backend="Calorine-calculated NEP descriptors",
+            source_label="Potential",
+            source_path=potential_path.resolve(),
+            frame_count=len(frames),
+        )
     pooling = str(options.get("descriptor_pooling", options.get("pooling", "mean")))
     features = []
     for index, atoms in enumerate(frames, start=1):
@@ -616,6 +664,8 @@ def _mace_structure_features(
     frames,
     model: Any,
     options: dict[str, Any],
+    *,
+    show_header: bool = True,
 ) -> np.ndarray:
     if not model:
         raise ValueError(
@@ -644,14 +694,15 @@ def _mace_structure_features(
         calculator_options["default_dtype"] = str(options["default_dtype"])
     if options.get("head"):
         calculator_options["head"] = str(options["head"])
-    _print_descriptor_start(
-        engine="MACE",
-        backend="MACECalculator invariant descriptors",
-        source_label="Model",
-        source_path=model_path.resolve(),
-        frame_count=len(frames),
-        device=str(calculator_options["device"]),
-    )
+    if show_header:
+        _print_descriptor_start(
+            engine="MACE",
+            backend="MACECalculator invariant descriptors",
+            source_label="Model",
+            source_path=model_path.resolve(),
+            frame_count=len(frames),
+            device=str(calculator_options["device"]),
+        )
     with _suppress_known_mace_load_messages():
         calculator = MACECalculator(**calculator_options)
 
