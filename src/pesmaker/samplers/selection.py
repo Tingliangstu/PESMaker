@@ -35,17 +35,21 @@ from pesmaker.samplers.gpumd import _resolve_sampling_potential_path
 
 
 def select_sampling_frames(config: PESMakerConfig) -> StageResult:
-    """Select representative MD frames with farthest point sampling."""
+    """Select representative MD frames from a trajectory."""
     options = config.sampling.options.get("selection", {})
     if not isinstance(options, dict):
         raise ValueError("sampling.selection must be a mapping")
     pattern = str(options.get("trajectory_pattern", "runs/*/sampling/**/movie.xyz"))
     output_dir = Path(str(options.get("output_dir", "selected")))
+
+    frames = _read_trajectory_frames(pattern)
+    method = _selection_method(options)
+    if method == "interval":
+        return _select_interval_frames(frames, output_dir=output_dir, options=options)
+
     min_distance = float(options.get("min_distance", 0.0))
     max_count = options.get("max_count")
     max_count = int(max_count) if max_count is not None else None
-
-    frames = _read_trajectory_frames(pattern)
     sampling_options = {"engine": config.sampling.engine, **config.sampling.options}
     features, descriptor_name = _selection_features(
         frames,
@@ -114,6 +118,120 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
             )
         ),
     )
+
+
+def _selection_method(options: dict[str, Any]) -> str:
+    raw_method = options.get("method", options.get("strategy", options.get("mode")))
+    if raw_method is None and any(
+        key in options for key in ("interval", "stride", "step", "frame_interval")
+    ):
+        raw_method = "interval"
+    method = str(raw_method or "fps").lower().replace("-", "_")
+    if method in {"fps", "farthest", "farthest_point", "farthest_point_sampling"}:
+        return "fps"
+    if method in {"interval", "stride", "uniform", "even", "every_n"}:
+        return "interval"
+    raise ValueError("sampling.selection.method must be 'fps' or 'interval'")
+
+
+def _select_interval_frames(
+    frames,
+    *,
+    output_dir: Path,
+    options: dict[str, Any],
+) -> StageResult:
+    interval = _selection_interval(options)
+    offset = _selection_offset(options)
+    max_count = options.get("max_count")
+    max_count = int(max_count) if max_count is not None else None
+    selected_indices = _interval_indices(
+        frame_count=len(frames),
+        interval=interval,
+        offset=offset,
+        max_count=max_count,
+    )
+    selected = [frames[index] for index in selected_indices]
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selected_path = output_dir / "selected.xyz"
+    _write_extxyz_many(selected_path, selected)
+    manifest_path = output_dir / "manifest.jsonl"
+    with manifest_path.open("w", encoding="utf-8") as manifest:
+        for index, (frame_index, atoms) in enumerate(zip(selected_indices, selected)):
+            manifest.write(
+                json.dumps(
+                    {
+                        "index": index,
+                        "source_frame": frame_index,
+                        "frame_index": index,
+                        "path": str(selected_path),
+                        "atom_count": len(atoms),
+                        "selection_method": "interval",
+                        "interval": interval,
+                    }
+                )
+                + "\n"
+            )
+    print(
+        (
+            "Interval sampling completed: "
+            f"Selected {len(selected)} of {len(frames)} frame(s)."
+        ),
+        flush=True,
+    )
+    print(flush=True)
+    return StageResult(
+        output_dir,
+        (selected_path, manifest_path),
+        (
+            f"Selected {len(selected)} of {len(frames)} MD frame(s) "
+            f"using interval sampling every {interval} frame(s)"
+        ),
+    )
+
+
+def _selection_interval(options: dict[str, Any]) -> int:
+    for key in ("interval", "stride", "step", "frame_interval"):
+        if key in options:
+            interval = int(options[key])
+            if interval < 1:
+                raise ValueError(
+                    "sampling.selection.interval must be a positive integer"
+                )
+            return interval
+    raise ValueError(
+        "sampling.selection.interval is required when method is 'interval'"
+    )
+
+
+def _selection_offset(options: dict[str, Any]) -> int:
+    raw_offset = options.get(
+        "offset",
+        options.get("start", options.get("start_frame", 0)),
+    )
+    offset = int(raw_offset)
+    if offset < 0:
+        raise ValueError("sampling.selection.offset must be zero or a positive integer")
+    return offset
+
+
+def _interval_indices(
+    *,
+    frame_count: int,
+    interval: int,
+    offset: int,
+    max_count: int | None,
+) -> list[int]:
+    if max_count is not None and max_count < 1:
+        return []
+    if offset >= frame_count:
+        raise ValueError(
+            "sampling.selection.offset must be smaller than the number of frames"
+        )
+    indices = list(range(offset, frame_count, interval))
+    if max_count is not None:
+        indices = indices[:max_count]
+    return indices
 
 
 def _read_trajectory_frames(pattern: str):

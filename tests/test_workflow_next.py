@@ -305,6 +305,104 @@ jobs:
     assert f"Run: pesmaker next {followup}" in output
 
 
+def test_next_interval_selection_only_does_not_require_sampling_engine(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Existing trajectories should be selectable without a sampling engine."""
+    from ase import Atoms
+    from ase.io import write
+
+    trajectory = tmp_path / "XDATCAR"
+    write(
+        trajectory,
+        [
+            Atoms("Te", positions=[(float(index), 0.0, 0.0)], cell=[10, 10, 10], pbc=True)
+            for index in range(5)
+        ],
+        format="vasp-xdatcar",
+    )
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(
+        f"""project: interval_existing_trajectory
+sampling:
+  selection:
+    method: interval
+    trajectory_pattern: {trajectory.as_posix()}
+    output_dir: selected
+    interval: 2
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["next", str(config_path)]) == 0
+    output = capsys.readouterr().out
+    followup = tmp_path / "run.next.yaml"
+
+    assert (tmp_path / "selected" / "manifest.jsonl").exists()
+    assert followup.exists()
+    assert not (tmp_path / "runs" / "interval_existing_trajectory" / "sampling").exists()
+    assert "Flow             : interval-select -> SCF-config-needed" in output
+    assert "Current          : waiting for SCF settings" in output
+    assert "Selected 3 of 5 MD frame(s) using interval sampling every 2 frame(s)" in output
+    assert "input_manifest: selected/manifest.jsonl" in followup.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_next_existing_trajectory_with_engine_runs_select_not_sampling_setup(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """`next` should select from an existing trajectory before MD setup."""
+    from ase import Atoms
+    from ase.io import write
+
+    trajectory = tmp_path / "XDATCAR"
+    write(
+        trajectory,
+        [
+            Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[10, 10, 10], pbc=True),
+            Atoms("Te", positions=[(0.1, 0.0, 0.0)], cell=[10, 10, 10], pbc=True),
+            Atoms("Te", positions=[(1.0, 0.0, 0.0)], cell=[10, 10, 10], pbc=True),
+        ],
+        format="vasp-xdatcar",
+    )
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(
+        f"""project: existing_gpumd_trajectory
+sampling:
+  engine: gpumd
+  potential: ./nep.txt
+  selection:
+    trajectory_pattern: {trajectory.as_posix()}
+    output_dir: selected
+    descriptor: simple
+    min_distance: 0.02
+    max_count: 2
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["next", str(config_path)]) == 0
+    output = capsys.readouterr().out
+    followup = tmp_path / "run.next.yaml"
+
+    assert (tmp_path / "selected" / "manifest.jsonl").exists()
+    assert followup.exists()
+    assert not (tmp_path / "runs" / "existing_gpumd_trajectory" / "sampling").exists()
+    assert "Flow             : FPS-select -> SCF-config-needed" in output
+    assert "Current          : waiting for SCF settings" in output
+    assert "Selected 2 of 3 MD frame(s) using the simple geometry descriptor" in output
+    assert "input_manifest: selected/manifest.jsonl" in followup.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_next_generation_only_writes_followup_scf_template(
     tmp_path,
     monkeypatch,

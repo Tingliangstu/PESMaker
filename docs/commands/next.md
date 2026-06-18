@@ -227,6 +227,41 @@ pesmaker next run.yaml
 
 PESMaker will select frames, prepare SCF folders, and preview SCF submission.
 
+If the trajectory already exists and you only want interval selection, the
+sampling engine can be omitted:
+
+```yaml
+sampling:
+  selection:
+    method: interval
+    trajectory_pattern: /path/to/XDATCAR
+    output_dir: selected
+    interval: 10
+```
+
+In this selection-only mode, `next` does not prepare or submit MD jobs. It reads
+the trajectory directly, writes `selected/manifest.jsonl`, and then asks for the
+SCF labeling settings if they are not already configured.
+
+For FPS selection from an existing trajectory, keep `engine: gpumd` when you
+want NEP descriptors from `sampling.potential`:
+
+```yaml
+sampling:
+  engine: gpumd
+  potential: ./nep.txt
+  selection:
+    trajectory_pattern: /path/to/XDATCAR
+    output_dir: selected
+    min_distance: 0.004
+    max_count: 100
+```
+
+If the trajectory pattern already matches files and no PESMaker sampling
+manifest exists, `next` runs the same selection stage as
+`pesmaker select run.yaml`. It does not try to prepare GPUMD sampling folders
+unless structure inputs for MD setup are configured.
+
 ## What `next` Never Does
 
 `next` does not call `sbatch`, `qsub`, or any scheduler for real.
