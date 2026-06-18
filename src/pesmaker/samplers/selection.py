@@ -56,7 +56,7 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
     output_dir = Path(str(options.get("output_dir", "selected")))
 
     frame_groups = _read_trajectory_frame_groups(pattern)
-    if _separate_trajectories(options):
+    if _separate_trajectories(options) and len(frame_groups) > 1:
         return _select_separate_trajectory_frames(
             config,
             frame_groups,
@@ -124,7 +124,7 @@ def _separate_trajectories(options: dict[str, Any]) -> bool:
     for key in ("separate_trajectories", "per_trajectory"):
         if key in options:
             return _bool_option(options[key])
-    return False
+    return True
 
 
 def _bool_option(value: Any) -> bool:

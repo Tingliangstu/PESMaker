@@ -2328,8 +2328,10 @@ sampling:
     assert {record["interval"] for record in records} == {3}
 
 
-def test_select_can_sample_each_trajectory_separately(tmp_path, monkeypatch, capsys):
-    """Separate trajectory selection should apply max_count per trajectory."""
+def test_select_samples_each_trajectory_separately_by_default(
+    tmp_path, monkeypatch, capsys
+):
+    """Multiple trajectory files should apply max_count per trajectory by default."""
     from ase import Atoms
     from ase.io import write
 
@@ -2358,7 +2360,6 @@ sampling:
   selection:
     trajectory_pattern: {(tmp_path / '*' / 'movie.xyz').as_posix()}
     output_dir: {selected_dir.as_posix()}
-    separate_trajectories: true
     descriptor: simple
     min_distance: 0.2
     max_count: 2
@@ -2394,6 +2395,68 @@ sampling:
         "mp-2_temp_300K",
     }
     assert {record["descriptor"] for record in records} == {"simple"}
+
+
+def test_select_can_combine_multiple_trajectories_when_requested(
+    tmp_path, monkeypatch, capsys
+):
+    """Users can still opt into one global selection over all matched frames."""
+    from ase import Atoms
+    from ase.io import write
+
+    trajectory_a = tmp_path / "traj_a" / "movie.xyz"
+    trajectory_b = tmp_path / "traj_b" / "movie.xyz"
+    trajectory_a.parent.mkdir()
+    trajectory_b.parent.mkdir()
+    write(
+        trajectory_a,
+        [
+            Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+            Atoms("Te", positions=[(1.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+        ],
+        format="extxyz",
+    )
+    write(
+        trajectory_b,
+        [
+            Atoms("Te", positions=[(2.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+            Atoms("Te", positions=[(3.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+        ],
+        format="extxyz",
+    )
+    selected_dir = tmp_path / "selected"
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: combined_select_test
+sampling:
+  engine: gpumd
+  selection:
+    trajectory_pattern: {(tmp_path / 'traj_*' / 'movie.xyz').as_posix()}
+    output_dir: {selected_dir.as_posix()}
+    separate_trajectories: false
+    descriptor: simple
+    min_distance: 0.0
+    max_count: 2
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["select", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Separate trajectory selection" not in output
+    assert "Selected 2 of 4 MD frame(s)" in output
+    assert (selected_dir / "selected.xyz").exists()
+    assert not (selected_dir / "traj_a" / "selected.xyz").exists()
+    records = [
+        json.loads(line)
+        for line in (selected_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert len(records) == 2
+    assert {record["path"] for record in records} == {str(selected_dir / "selected.xyz")}
 
 
 def test_selection_warning_suggests_lower_min_distance():
