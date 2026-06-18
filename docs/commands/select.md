@@ -119,10 +119,9 @@ initial limit. Inspect the distance curve before choosing a nonzero threshold.
 
 ## Separate Trajectory Sampling
 
-When `trajectory_pattern` matches several independent MD trajectories, PESMaker
-normally combines all frames and runs one global selection. Use
-`separate_trajectories: true` when each trajectory should be sampled
-independently:
+When `trajectory_pattern` matches several MD trajectory files, PESMaker samples
+each trajectory independently by default. This keeps every initial structure
+represented in the selected DFT labeling set.
 
 ```yaml
 sampling:
@@ -131,7 +130,6 @@ sampling:
   selection:
     trajectory_pattern: MD_run_2D_Pd_551/*/movie.xyz
     output_dir: selected
-    separate_trajectories: true
     min_distance: 0.004
     max_count: 50
 ```
@@ -159,10 +157,19 @@ Selected         : 50 of 1000 frame(s)
 Separate selection completed: Selected 100 of 2000 frame(s) from 2 trajectory file(s).
 ```
 
-This mode is useful when the trajectories come from different initial
-structures and each structure should be represented in the DFT labeling set.
-If several trajectories are replicas of the same structure and you want global
-deduplication, leave `separate_trajectories` unset.
+This default is useful when the trajectories come from different initial
+structures. If several trajectories are replicas of the same structure and you
+want one global FPS selection over all frames, disable separate sampling:
+
+```yaml
+sampling:
+  selection:
+    trajectory_pattern: MD_run_2D_Pd_551/*/movie.xyz
+    output_dir: selected
+    separate_trajectories: false
+    min_distance: 0.004
+    max_count: 100
+```
 
 ## Interval Sampling
 
