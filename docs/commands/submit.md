@@ -177,6 +177,42 @@ jobs:
     training: templates/sbatch/nep.sh
 ```
 
+For one-GPU-per-job VASP SCF submissions, set `jobs.gpus: 1` and keep the CPU
+task count in `jobs.cores_cpu` aligned with the template:
+
+```yaml
+labeling:
+  engine: vasp
+  output_dir: run_vasp_scf
+  input_dir: selected
+  command: "mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std"
+
+jobs:
+  submit_command: sbatch
+  cores_cpu: 6
+  gpus: 1
+  sub_file: /path/to/sub_gpu.sh
+```
+
+For this example, `sub_gpu.sh` should request one GPU and six CPU tasks:
+
+```bash
+#SBATCH -N 1
+#SBATCH -n 6
+#SBATCH --gres=gpu:1
+```
+
+PESMaker refreshes VASP SCF submit scripts from `jobs.sub_file` before
+submission. Put `{command}` where the VASP command should run:
+
+```bash
+{command}
+```
+
+For GPU VASP jobs, omit `vasp_kpar` and `vasp_ncore` unless you intentionally
+need those INCAR tags. PESMaker does not add them automatically when
+`jobs.gpus` is greater than zero.
+
 For GPUMD sampling, PESMaker does not rewrite CPU resource directives in the
 provided sampling submit template. Keep GPU, partition, time, and any other
 cluster-specific settings in `templates/sbatch/gpumd.sh`.

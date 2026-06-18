@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 import json
 import logging
 from pathlib import Path
@@ -29,9 +30,21 @@ import warnings
 import numpy as np
 
 from pesmaker.config.schema import PESMakerConfig
-from pesmaker.parsers.ase import read_frames, write_extxyz_many
+from pesmaker.parsers.ase import read_frame_groups, read_frames, write_extxyz_many
 from pesmaker.results import StageResult
 from pesmaker.samplers.gpumd import _resolve_sampling_potential_path
+
+
+@dataclass(frozen=True)
+class SelectionRun:
+    """Files and manifest records written by one selection pass."""
+
+    files: tuple[Path, ...]
+    records: tuple[dict[str, Any], ...]
+    message: str
+    warnings: tuple[str, ...]
+    selected_count: int
+    frame_count: int
 
 
 def select_sampling_frames(config: PESMakerConfig) -> StageResult:
@@ -42,15 +55,280 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
     pattern = str(options.get("trajectory_pattern", "runs/*/sampling/**/movie.xyz"))
     output_dir = Path(str(options.get("output_dir", "selected")))
 
-    frames = _read_trajectory_frames(pattern)
+    frame_groups = _read_trajectory_frame_groups(pattern)
+    if _separate_trajectories(options):
+        return _select_separate_trajectory_frames(
+            config,
+            frame_groups,
+            output_dir=output_dir,
+            options=options,
+        )
+
+    frames = _flatten_frame_groups(frame_groups)
     method = _selection_method(options)
     if method == "interval":
-        return _select_interval_frames(frames, output_dir=output_dir, options=options)
+        run = _run_interval_selection(frames, output_dir=output_dir, options=options)
+        print(
+            (
+                "Interval sampling completed: "
+                f"Selected {run.selected_count} of {run.frame_count} frame(s)."
+            ),
+            flush=True,
+        )
+        print(flush=True)
+        return StageResult(output_dir, run.files, run.message, warnings=run.warnings)
 
     min_distance = float(options.get("min_distance", 0.0))
     max_count = options.get("max_count")
     max_count = int(max_count) if max_count is not None else None
     sampling_options = {"engine": config.sampling.engine, **config.sampling.options}
+    run = _run_fps_selection(
+        frames,
+        output_dir=output_dir,
+        options=options,
+        sampling_options=sampling_options,
+        min_distance=min_distance,
+        max_count=max_count,
+    )
+    print(
+        (
+            "FPS completed    : "
+            f"Selected {run.selected_count} of {run.frame_count} frame(s)."
+        ),
+        flush=True,
+    )
+    print(flush=True)
+    return StageResult(
+        output_dir,
+        run.files,
+        run.message,
+        warnings=run.warnings,
+    )
+
+
+def _selection_method(options: dict[str, Any]) -> str:
+    raw_method = options.get("method", options.get("strategy", options.get("mode")))
+    if raw_method is None and any(
+        key in options for key in ("interval", "stride", "step", "frame_interval")
+    ):
+        raw_method = "interval"
+    method = str(raw_method or "fps").lower().replace("-", "_")
+    if method in {"fps", "farthest", "farthest_point", "farthest_point_sampling"}:
+        return "fps"
+    if method in {"interval", "stride", "uniform", "even", "every_n"}:
+        return "interval"
+    raise ValueError("sampling.selection.method must be 'fps' or 'interval'")
+
+
+def _separate_trajectories(options: dict[str, Any]) -> bool:
+    for key in ("separate_trajectories", "per_trajectory"):
+        if key in options:
+            return _bool_option(options[key])
+    return False
+
+
+def _bool_option(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return bool(value)
+
+
+def _select_separate_trajectory_frames(
+    config: PESMakerConfig,
+    frame_groups: list[tuple[Path, list[Any]]],
+    *,
+    output_dir: Path,
+    options: dict[str, Any],
+) -> StageResult:
+    method = _selection_method(options)
+    sampling_options = {"engine": config.sampling.engine, **config.sampling.options}
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = output_dir / "manifest.jsonl"
+
+    print("Separate trajectory selection", flush=True)
+    print("Mode             : separate_trajectories")
+    print(f"Trajectories     : {len(frame_groups)}")
+    print(f"Method           : {_selection_method_label(method)}")
+    print(f"Per trajectory   : {_per_trajectory_limit_label(options, method)}")
+    print(f"Output directory : {output_dir}", flush=True)
+    print(flush=True)
+
+    files: list[Path] = [manifest_path]
+    records: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    used_names: set[str] = set()
+    total_selected = 0
+    total_frames = 0
+    for trajectory_index, (trajectory_path, frames) in enumerate(
+        frame_groups, start=1
+    ):
+        group_name = _trajectory_group_name(trajectory_path, used_names)
+        group_output_dir = output_dir / group_name
+        print(
+            f"Trajectory       : {trajectory_index}/{len(frame_groups)} {trajectory_path}",
+            flush=True,
+        )
+        if method == "interval":
+            run = _run_interval_selection(
+                frames,
+                output_dir=group_output_dir,
+                options=options,
+                source_path=trajectory_path,
+            )
+        else:
+            min_distance = float(options.get("min_distance", 0.0))
+            max_count = options.get("max_count")
+            max_count = int(max_count) if max_count is not None else None
+            run = _run_fps_selection(
+                frames,
+                output_dir=group_output_dir,
+                options=options,
+                sampling_options=sampling_options,
+                min_distance=min_distance,
+                max_count=max_count,
+                source_path=trajectory_path,
+            )
+        files.extend(run.files)
+        for warning in run.warnings:
+            warnings.append(f"{trajectory_path}: {warning}")
+        for record in run.records:
+            records.append(
+                {
+                    **record,
+                    "index": len(records),
+                    "trajectory_index": trajectory_index - 1,
+                    "trajectory_name": group_name,
+                }
+            )
+        total_selected += run.selected_count
+        total_frames += run.frame_count
+        print(
+            f"Selected         : {run.selected_count} of {run.frame_count} frame(s)",
+            flush=True,
+        )
+        print(flush=True)
+
+    _write_manifest(manifest_path, records)
+    print(
+        (
+            "Separate selection completed: "
+            f"Selected {total_selected} of {total_frames} frame(s) from "
+            f"{len(frame_groups)} trajectory file(s)."
+        ),
+        flush=True,
+    )
+    print(flush=True)
+    return StageResult(
+        output_dir,
+        tuple(files),
+        (
+            f"Selected {total_selected} of {total_frames} MD frame(s) from "
+            f"{len(frame_groups)} trajectory file(s) using separate "
+            f"{_selection_method_label(method)} per trajectory"
+        ),
+        warnings=tuple(warnings),
+    )
+
+
+def _selection_method_label(method: str) -> str:
+    if method == "interval":
+        return "interval sampling"
+    return "FPS"
+
+
+def _per_trajectory_limit_label(options: dict[str, Any], method: str) -> str:
+    max_count = options.get("max_count")
+    max_text = "no max_count" if max_count is None else f"max_count={int(max_count)}"
+    if method == "interval":
+        return f"{max_text}, interval={_selection_interval(options)}"
+    min_distance = float(options.get("min_distance", 0.0))
+    return f"{max_text}, min_distance={min_distance:g}"
+
+
+def _trajectory_group_name(path: Path, used_names: set[str]) -> str:
+    base = path.parent.name or path.stem
+    if not base or base in {".", ".."}:
+        base = path.stem
+    safe = "".join(
+        char if char.isalnum() or char in {"-", "_"} else "_" for char in base
+    ).strip("_")
+    safe = safe or "trajectory"
+    candidate = safe
+    counter = 2
+    while candidate in used_names:
+        candidate = f"{safe}_{counter}"
+        counter += 1
+    used_names.add(candidate)
+    return candidate
+
+
+def _run_interval_selection(
+    frames,
+    *,
+    output_dir: Path,
+    options: dict[str, Any],
+    source_path: Path | None = None,
+) -> SelectionRun:
+    interval = _selection_interval(options)
+    offset = _selection_offset(options)
+    max_count = options.get("max_count")
+    max_count = int(max_count) if max_count is not None else None
+    selected_indices = _interval_indices(
+        frame_count=len(frames),
+        interval=interval,
+        offset=offset,
+        max_count=max_count,
+    )
+    selected = [frames[index] for index in selected_indices]
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selected_path = output_dir / "selected.xyz"
+    _write_extxyz_many(selected_path, selected)
+    manifest_path = output_dir / "manifest.jsonl"
+    records = []
+    for index, (frame_index, atoms) in enumerate(zip(selected_indices, selected)):
+        record = {
+            "index": index,
+            "source_frame": frame_index,
+            "frame_index": index,
+            "path": str(selected_path),
+            "atom_count": len(atoms),
+            "selection_method": "interval",
+            "interval": interval,
+        }
+        if source_path is not None:
+            record["source_trajectory"] = str(source_path)
+        records.append(record)
+    _write_manifest(manifest_path, records)
+    return SelectionRun(
+        (selected_path, manifest_path),
+        tuple(records),
+        (
+            f"Selected {len(selected)} of {len(frames)} MD frame(s) "
+            f"using interval sampling every {interval} frame(s)"
+        ),
+        (),
+        len(selected),
+        len(frames),
+    )
+
+
+def _run_fps_selection(
+    frames,
+    *,
+    output_dir: Path,
+    options: dict[str, Any],
+    sampling_options: dict[str, Any],
+    min_distance: float,
+    max_count: int | None,
+    source_path: Path | None = None,
+) -> SelectionRun:
     features, descriptor_name = _selection_features(
         frames,
         options,
@@ -76,40 +354,34 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
     selected_path = output_dir / "selected.xyz"
     _write_extxyz_many(selected_path, selected)
     manifest_path = output_dir / "manifest.jsonl"
-    with manifest_path.open("w", encoding="utf-8") as manifest:
-        for index, (frame_index, atoms, distance) in enumerate(
-            zip(selected_indices, selected, selection_distances)
-        ):
-            manifest.write(
-                json.dumps(
-                    {
-                        "index": index,
-                        "source_frame": frame_index,
-                        "frame_index": index,
-                        "path": str(selected_path),
-                        "atom_count": len(atoms),
-                        "descriptor": descriptor_name,
-                        "selection_distance": distance,
-                    }
-                )
-                + "\n"
-            )
+    records = []
+    for index, (frame_index, atoms, distance) in enumerate(
+        zip(selected_indices, selected, selection_distances)
+    ):
+        record = {
+            "index": index,
+            "source_frame": frame_index,
+            "frame_index": index,
+            "path": str(selected_path),
+            "atom_count": len(atoms),
+            "descriptor": descriptor_name,
+            "selection_distance": distance,
+        }
+        if source_path is not None:
+            record["source_trajectory"] = str(source_path)
+        records.append(record)
+    _write_manifest(manifest_path, records)
     files = [selected_path, features_path, manifest_path]
     if plot_path is not None:
         files.append(plot_path)
-    print(
-        f"FPS completed    : Selected {len(selected)} of {len(frames)} frame(s).",
-        flush=True,
-    )
-    print(flush=True)
-    return StageResult(
-        output_dir,
+    return SelectionRun(
         tuple(files),
+        tuple(records),
         (
             f"Selected {len(selected)} of {len(frames)} MD frame(s) using "
             f"{_selection_descriptor_label(descriptor_name)}"
         ),
-        warnings=tuple(
+        tuple(
             _selection_limit_warnings(
                 selected_count=len(selected),
                 total_count=len(frames),
@@ -117,76 +389,8 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
                 max_count=max_count,
             )
         ),
-    )
-
-
-def _selection_method(options: dict[str, Any]) -> str:
-    raw_method = options.get("method", options.get("strategy", options.get("mode")))
-    if raw_method is None and any(
-        key in options for key in ("interval", "stride", "step", "frame_interval")
-    ):
-        raw_method = "interval"
-    method = str(raw_method or "fps").lower().replace("-", "_")
-    if method in {"fps", "farthest", "farthest_point", "farthest_point_sampling"}:
-        return "fps"
-    if method in {"interval", "stride", "uniform", "even", "every_n"}:
-        return "interval"
-    raise ValueError("sampling.selection.method must be 'fps' or 'interval'")
-
-
-def _select_interval_frames(
-    frames,
-    *,
-    output_dir: Path,
-    options: dict[str, Any],
-) -> StageResult:
-    interval = _selection_interval(options)
-    offset = _selection_offset(options)
-    max_count = options.get("max_count")
-    max_count = int(max_count) if max_count is not None else None
-    selected_indices = _interval_indices(
-        frame_count=len(frames),
-        interval=interval,
-        offset=offset,
-        max_count=max_count,
-    )
-    selected = [frames[index] for index in selected_indices]
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    selected_path = output_dir / "selected.xyz"
-    _write_extxyz_many(selected_path, selected)
-    manifest_path = output_dir / "manifest.jsonl"
-    with manifest_path.open("w", encoding="utf-8") as manifest:
-        for index, (frame_index, atoms) in enumerate(zip(selected_indices, selected)):
-            manifest.write(
-                json.dumps(
-                    {
-                        "index": index,
-                        "source_frame": frame_index,
-                        "frame_index": index,
-                        "path": str(selected_path),
-                        "atom_count": len(atoms),
-                        "selection_method": "interval",
-                        "interval": interval,
-                    }
-                )
-                + "\n"
-            )
-    print(
-        (
-            "Interval sampling completed: "
-            f"Selected {len(selected)} of {len(frames)} frame(s)."
-        ),
-        flush=True,
-    )
-    print(flush=True)
-    return StageResult(
-        output_dir,
-        (selected_path, manifest_path),
-        (
-            f"Selected {len(selected)} of {len(frames)} MD frame(s) "
-            f"using interval sampling every {interval} frame(s)"
-        ),
+        len(selected),
+        len(frames),
     )
 
 
@@ -238,8 +442,23 @@ def _read_trajectory_frames(pattern: str):
     return read_frames(pattern)
 
 
+def _read_trajectory_frame_groups(pattern: str) -> list[tuple[Path, list[Any]]]:
+    return read_frame_groups(pattern)
+
+
+def _flatten_frame_groups(frame_groups: list[tuple[Path, list[Any]]]) -> list[Any]:
+    return [frame for _, frames in frame_groups for frame in frames]
+
+
 def _write_extxyz_many(path: Path, frames) -> None:
     write_extxyz_many(path, frames)
+
+
+def _write_manifest(path: Path, records: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as manifest:
+        for record in records:
+            manifest.write(json.dumps(record) + "\n")
 
 
 def _selection_limit_warnings(

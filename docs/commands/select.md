@@ -117,6 +117,53 @@ Because MACE and NEP descriptor distances have different numerical scales,
 start a new MACE selection with `min_distance: 0.0` and use `max_count` as the
 initial limit. Inspect the distance curve before choosing a nonzero threshold.
 
+## Separate Trajectory Sampling
+
+When `trajectory_pattern` matches several independent MD trajectories, PESMaker
+normally combines all frames and runs one global selection. Use
+`separate_trajectories: true` when each trajectory should be sampled
+independently:
+
+```yaml
+sampling:
+  engine: gpumd
+  potential: /path/to/nep.txt
+  selection:
+    trajectory_pattern: MD_run_2D_Pd_551/*/movie.xyz
+    output_dir: selected
+    separate_trajectories: true
+    min_distance: 0.004
+    max_count: 50
+```
+
+Here `max_count: 50` means at most 50 frames from each trajectory, not 50
+frames total. For example, two matched `movie.xyz` files can produce up to 100
+selected frames.
+
+The terminal output states that separate trajectory selection is active:
+
+```text
+Separate trajectory selection
+Mode             : separate_trajectories
+Trajectories     : 2
+Method           : FPS
+Per trajectory   : max_count=50, min_distance=0.004
+Output directory : selected
+
+Trajectory       : 1/2 MD_run_2D_Pd_551/mp-1186427_Pd_temp_300K/movie.xyz
+Selected         : 50 of 1000 frame(s)
+
+Trajectory       : 2/2 MD_run_2D_Pd_551/mp-2646997_Pd_temp_300K/movie.xyz
+Selected         : 50 of 1000 frame(s)
+
+Separate selection completed: Selected 100 of 2000 frame(s) from 2 trajectory file(s).
+```
+
+This mode is useful when the trajectories come from different initial
+structures and each structure should be represented in the DFT labeling set.
+If several trajectories are replicas of the same structure and you want global
+deduplication, leave `separate_trajectories` unset.
+
 ## Interval Sampling
 
 Use interval sampling when you want frames at a fixed trajectory stride and do
@@ -180,6 +227,26 @@ descriptor separates different trajectory regions.
 `fps_selection.png` is the diagnostic plot. PESMaker uses a seaborn-styled
 plot: all MD frames are shown as light points, while selected frames are drawn
 smaller on top so you can see how they sit inside the full cloud.
+
+For separate trajectory sampling, PESMaker writes a subdirectory per trajectory:
+
+```text
+selected/
+  manifest.jsonl
+  mp-1186427_Pd_temp_300K/
+    selected.xyz
+    manifest.jsonl
+    selection_features.npy
+    fps_selection.png
+  mp-2646997_Pd_temp_300K/
+    selected.xyz
+    manifest.jsonl
+    selection_features.npy
+    fps_selection.png
+```
+
+The top-level `selected/manifest.jsonl` combines all selected frames and is the
+file used by `pesmaker scf-setup` or `pesmaker next` for later labeling.
 
 For interval sampling, PESMaker writes only `selected.xyz` and `manifest.jsonl`
 because no descriptor matrix or FPS diagnostic plot is calculated.

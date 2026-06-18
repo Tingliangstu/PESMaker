@@ -24,6 +24,12 @@ from typing import Any
 
 def read_frames(pattern: str | Path) -> list[Any]:
     """Read all ASE frames matching a path or glob pattern."""
+    groups = read_frame_groups(pattern)
+    return [frame for _, frames in groups for frame in frames]
+
+
+def read_frame_groups(pattern: str | Path) -> list[tuple[Path, list[Any]]]:
+    """Read ASE frames grouped by each matched trajectory file."""
     try:
         from ase.io import read
     except ImportError as exc:
@@ -34,15 +40,15 @@ def read_frames(pattern: str | Path) -> list[Any]:
     if not paths and Path(pattern_text).exists():
         paths = [Path(pattern_text)]
 
-    frames = []
+    groups = []
     for path in paths:
         items = read(path, index=":")
         if not isinstance(items, list):
             items = [items]
-        frames.extend(items)
-    if not frames:
+        groups.append((path, items))
+    if not any(frames for _, frames in groups):
         raise ValueError(f"no frames matched pattern: {pattern_text}")
-    return frames
+    return groups
 
 
 def write_extxyz_many(path: str | Path, frames) -> None:
