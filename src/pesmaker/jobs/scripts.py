@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
 
-"""Submission script rendering and normalization helpers."""
+"""Submission script rendering helpers."""
 
 from __future__ import annotations
 
@@ -49,12 +49,17 @@ def _write_submit_script(
     mpi_ranks = _requested_mpi_ranks(config, resources)
     if template_path:
         ntasks = resources.nodes * resources.cores_cpu
-        run_command = _default_run_command(
-            command,
-            stage=stage,
-            engine=engine,
-            resources=resources,
-            mpi_ranks=mpi_ranks,
+        use_resource_command = _should_use_resource_command(config, stage, engine)
+        run_command = (
+            _default_run_command(
+                command,
+                stage=stage,
+                engine=engine,
+                resources=resources,
+                mpi_ranks=mpi_ranks,
+            )
+            if use_resource_command
+            else command
         )
         text = _format_submit_template(
             template_path.read_text(encoding="utf-8"),
@@ -71,19 +76,6 @@ def _write_submit_script(
                 "vasp_ncore": resources.vasp_ncore,
             },
         )
-        if _should_normalize_submit_template(config, stage, engine):
-            text = _normalize_submit_template(
-                text,
-                command=command,
-                job_name=job_name,
-                workdir=workdir,
-                stage=stage,
-                engine=engine,
-                resources=resources,
-                mpi_ranks=mpi_ranks,
-            )
-        elif not text.endswith("\n"):
-            text += "\n"
     else:
         text = _default_submit_script(
             command=command,
@@ -120,7 +112,7 @@ def _job_template_path(config: PESMakerConfig, stage: str) -> Path | None:
 
 
 def _preserve_user_submit_template(stage: str, engine: str) -> bool:
-    """Return true when PESMaker should not rewrite scheduler resources."""
+    """Return true when PESMaker should keep sampling templates literal."""
     normalized_engine = engine.lower().replace("_", "-")
     return stage == "sampling" and normalized_engine in {
         "gpumd",
@@ -129,7 +121,7 @@ def _preserve_user_submit_template(stage: str, engine: str) -> bool:
     }
 
 
-def _should_normalize_submit_template(
+def _should_use_resource_command(
     config: PESMakerConfig,
     stage: str,
     engine: str,
@@ -185,105 +177,6 @@ def _format_submit_template(text: str, values: dict[str, object]) -> str:
     for key, value in values.items():
         text = text.replace(f"{{{key}}}", str(value))
     return text
-
-
-def _normalize_submit_template(
-    text: str,
-    *,
-    command: str,
-    job_name: str,
-    workdir: Path,
-    stage: str,
-    engine: str,
-    resources: JobResources,
-    mpi_ranks: int | None,
-) -> str:
-    ntasks = resources.nodes * resources.cores_cpu
-    lines: list[str] = []
-    for line in text.splitlines():
-        if _is_generated_workdir_cd(line, workdir):
-            continue
-        updated = _set_sbatch_directive(line, "--job-name", job_name)
-        if updated is None:
-            updated = _set_sbatch_directive(line, "--ntasks", str(ntasks))
-        if updated is None:
-            updated = _set_sbatch_directive(
-                line,
-                "--ntasks-per-node",
-                str(resources.cores_cpu),
-            )
-        if updated is None:
-            updated = _replace_vasp_run_command(
-                line,
-                command=command,
-                stage=stage,
-                engine=engine,
-                resources=resources,
-                mpi_ranks=mpi_ranks,
-            )
-        lines.append(updated if updated is not None else line)
-    return "\n".join(lines) + "\n"
-
-
-def _set_sbatch_directive(line: str, option: str, value: str) -> str | None:
-    prefix = line[: len(line) - len(line.lstrip())]
-    stripped = line.lstrip()
-    if not stripped.startswith("#SBATCH"):
-        return None
-    rest = stripped[len("#SBATCH") :].lstrip()
-    if rest.startswith(f"{option}="):
-        suffix = _directive_suffix(rest[len(option) + 1 :])
-        return f"{prefix}#SBATCH {option}={value}{suffix}"
-    if rest == option or rest.startswith(f"{option} "):
-        suffix = _directive_suffix(rest[len(option) :].lstrip())
-        return f"{prefix}#SBATCH {option}={value}{suffix}"
-    return None
-
-
-def _directive_suffix(value_text: str) -> str:
-    comment_index = value_text.find(" #")
-    if comment_index >= 0:
-        return value_text[comment_index:]
-    return ""
-
-
-def _is_generated_workdir_cd(line: str, workdir: Path) -> bool:
-    stripped = line.strip()
-    workdir_text = str(workdir)
-    return stripped in {
-        f'cd "{workdir_text}"',
-        f"cd '{workdir_text}'",
-        f"cd {workdir_text}",
-    }
-
-
-def _replace_vasp_run_command(
-    line: str,
-    *,
-    command: str,
-    stage: str,
-    engine: str,
-    resources: JobResources,
-    mpi_ranks: int | None,
-) -> str | None:
-    if stage != "labeling" or engine.lower() != "vasp":
-        return None
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return None
-    lower = stripped.lower()
-    if lower.startswith(("echo ", "export ", "module ", "source ", "ulimit ", "set ")):
-        return None
-    if "vasp" not in lower:
-        return None
-    prefix = line[: len(line) - len(line.lstrip())]
-    return prefix + _default_run_command(
-        command,
-        stage=stage,
-        engine=engine,
-        resources=resources,
-        mpi_ranks=mpi_ranks,
-    )
 
 
 def _default_submit_script(

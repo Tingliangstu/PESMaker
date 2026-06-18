@@ -443,8 +443,8 @@ generation:
     assert "dataset_path" not in followup_text
     assert "input_dir: generated" in followup_text
     assert "output_dir: run_vasp_scf" in followup_text
-    assert "vasp_kpar: 3" in followup_text
-    assert "vasp_ncore: 6" in followup_text
+    assert "vasp_kpar" not in followup_text
+    assert "vasp_ncore" not in followup_text
     assert "skip_completed: true" in followup_text
     assert "check_scf_convergence: true" in followup_text
 

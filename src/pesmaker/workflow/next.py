@@ -527,8 +527,6 @@ labeling:
 jobs:
   submit_command: sbatch
   cores_cpu: 36
-  vasp_kpar: 3
-  vasp_ncore: 6
   skip_completed: true
   check_scf_convergence: true
   sub_file: /path/to/sub.sh

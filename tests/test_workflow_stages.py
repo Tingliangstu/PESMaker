@@ -96,8 +96,8 @@ training:
         encoding="utf-8"
     )
     assert "NSW = 0\n" in incar_text
-    assert "KPAR = 1" in incar_text
-    assert "NCORE = 1" in incar_text
+    assert "KPAR =" not in incar_text
+    assert "NCORE =" not in incar_text
     assert (tmp_path / "training" / "nep.in").exists()
 
 
@@ -241,8 +241,8 @@ jobs:
     incar_text = (workdir / "INCAR").read_text(encoding="utf-8")
     submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
     assert "NSW = 0\n" in incar_text
-    assert "KPAR = 2" in incar_text
-    assert "NCORE = 3" in incar_text
+    assert "KPAR =" not in incar_text
+    assert "NCORE =" not in incar_text
     assert f'cd "{workdir}"' not in submit_text
     assert "#SBATCH --job-name=structure_000000" in submit_text
     assert "mpirun -np 36 /opt/vasp/vasp_std" in submit_text
@@ -390,8 +390,8 @@ jobs:
     assert "Large SCF job" not in output
 
 
-def test_labeling_setup_normalizes_literal_submit_template(tmp_path):
-    """User submit scripts should inherit generated job names and resources."""
+def test_labeling_setup_preserves_literal_submit_template_with_resources(tmp_path):
+    """Literal user submit scripts should stay untouched without placeholders."""
     generated_dir = tmp_path / "generated"
     source_dir = generated_dir / "mp-105_Te"
     source_dir.mkdir(parents=True)
@@ -405,8 +405,7 @@ def test_labeling_setup_normalizes_literal_submit_template(tmp_path):
         encoding="utf-8",
     )
     sub_file = tmp_path / "sub.sh"
-    sub_file.write_text(
-        """#!/bin/bash -l
+    template_text = """#!/bin/bash -l
 #SBATCH --job-name=VASP-CPU
 #SBATCH --output=out.%j
 #SBATCH --error=err.%j
@@ -416,9 +415,8 @@ def test_labeling_setup_normalizes_literal_submit_template(tmp_path):
 
 echo "Running on node: ${SLURM_NODELIST:-unknown}"
 mpirun /old/software/vasp_std
-""",
-        encoding="utf-8",
-    )
+""".rstrip()
+    sub_file.write_text(template_text, encoding="utf-8")
     config_path = tmp_path / "pesmaker.yaml"
     config_path.write_text(
         f"""project: submit_template_test
@@ -437,13 +435,57 @@ jobs:
     assert main(["scf-setup", str(config_path)]) == 0
 
     workdir = tmp_path / "labeling" / "mp-105_Te" / "perturb_000000"
+    assert (workdir / "submit.sh").read_text(encoding="utf-8") == template_text
+
+
+def test_labeling_setup_fills_submit_template_placeholders_with_resources(
+    tmp_path,
+):
+    """Placeholders explicitly opt in to PESMaker resource rendering."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "perturb_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    sub_file = tmp_path / "sub.sh"
+    sub_file.write_text(
+        """#!/bin/bash -l
+#SBATCH --job-name={job_name}
+#SBATCH --ntasks={ntasks}              # total MPI ranks
+
+{command}
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: submit_template_placeholder_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: /opt/vasp/vasp_std
+jobs:
+  cores_cpu: 36
+  sub_file: {sub_file.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "perturb_000000"
     submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
     assert "#SBATCH --job-name=perturb_000000" in submit_text
-    assert "#SBATCH --ntasks=36" in submit_text
-    assert "# total MPI ranks" in submit_text
+    assert "#SBATCH --ntasks=36              # total MPI ranks" in submit_text
     assert "mpirun -np 36 /opt/vasp/vasp_std" in submit_text
-    assert "/old/software/vasp_std" not in submit_text
-    assert "${SLURM_NODELIST:-unknown}" in submit_text
 
 
 def test_labeling_setup_preserves_literal_submit_template_without_resources(
@@ -489,6 +531,45 @@ jobs:
     assert (workdir / "submit.sh").read_text(encoding="utf-8") == template_text
 
 
+def test_labeling_setup_uses_exact_command_placeholder_without_resources(
+    tmp_path,
+):
+    """Without resource fields, {command} should be the literal YAML value."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "perturb_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    sub_file = tmp_path / "sub.sh"
+    sub_file.write_text("#!/bin/bash\n{command}\n", encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: exact_command_placeholder_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: /new/vasp_std
+jobs:
+  sub_file: {sub_file.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "perturb_000000"
+    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert submit_text == "#!/bin/bash\n/new/vasp_std\n"
+
+
 def test_labeling_setup_scans_explicit_input_dir_without_manifest(tmp_path):
     """Users can point SCF setup at a folder of generated structure files."""
     input_dir = tmp_path / "generated"
@@ -526,8 +607,8 @@ labeling:
     )
     assert manifest_records[0]["cores_cpu"] == 1
     assert manifest_records[0]["gpus"] == 0
-    assert manifest_records[0]["vasp_kpar"] == 1
-    assert manifest_records[0]["vasp_ncore"] == 1
+    assert "vasp_kpar" not in manifest_records[0]
+    assert "vasp_ncore" not in manifest_records[0]
 
 
 def test_labeling_setup_scans_generic_xyz_without_manifest(tmp_path):
@@ -664,8 +745,8 @@ jobs:
     assert "IVDW" not in incar_text
     assert "LWAVE = .FALSE." in incar_text
     assert "LCHARG = .FALSE." in incar_text
-    assert "KPAR = 2" in incar_text
-    assert "NCORE = 3" in incar_text
+    assert "KPAR =" not in incar_text
+    assert "NCORE =" not in incar_text
     assert "#!/bin/bash -l" in submit_text
     assert "#SBATCH --output=out.%j" in submit_text
     assert "#SBATCH --error=err.%j" in submit_text
@@ -678,6 +759,45 @@ jobs:
     assert "export OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}" in submit_text
     assert "ulimit -s unlimited" in submit_text
     assert "mpirun -np 36 /opt/vasp/vasp_std" in submit_text
+
+
+def test_labeling_setup_preserves_user_incar_parallel_tags_by_default(tmp_path):
+    """cores_cpu should not overwrite KPAR/NCORE unless VASP tags are explicit."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    incar_template = tmp_path / "INCAR"
+    incar_template.write_text("NSW = 0\nKPAR = 9\nNCORE = 9\n", encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: preserve_incar_parallel_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  incar: {incar_template.as_posix()}
+  command: /opt/vasp/vasp_std
+jobs:
+  cores_cpu: 36
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    incar_text = (workdir / "INCAR").read_text(encoding="utf-8")
+    assert "KPAR = 9" in incar_text
+    assert "NCORE = 9" in incar_text
 
 
 def test_labeling_setup_adds_np_to_explicit_cpu_mpirun_command(tmp_path):
@@ -875,8 +995,8 @@ def test_labeling_setup_wraps_gpu_vasp_command_in_submit_template(tmp_path):
     sub_file = tmp_path / "sub_gpu.sh"
     sub_file.write_text(
         """#!/bin/bash
-#SBATCH --job-name=old_name
-#SBATCH --ntasks=1
+#SBATCH --job-name={job_name}
+#SBATCH --ntasks={ntasks}
 #SBATCH --gres=gpu:1
 {command}
 """,
@@ -1243,6 +1363,8 @@ jobs:
     assert f"SKIPPED completed VASP job: {complete}" in log_text
     assert f"cd {incomplete}" in log_text
     assert f"cd {complete}" not in log_text
+    assert "REFRESHED submit script:" not in log_text
+    assert (incomplete / "submit.sh").read_text(encoding="utf-8") == "#!/bin/bash\n"
 
 
 def test_submit_jobs_refreshes_only_vasp_jobs_that_need_retry(tmp_path):
@@ -1283,9 +1405,9 @@ Direct
     submit_template = tmp_path / "new_sub.sh"
     submit_template.write_text(
         """#!/bin/bash
-#SBATCH --job-name=old_name
-#SBATCH --ntasks=1
-mpirun /old/vasp_std
+#SBATCH --job-name={job_name}
+#SBATCH --ntasks={ntasks}
+{command}
 """,
         encoding="utf-8",
     )

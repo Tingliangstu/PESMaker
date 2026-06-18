@@ -26,7 +26,7 @@ from pathlib import Path
 from pesmaker.artifacts import _read_manifest, _section_output_dir
 from pesmaker.config.schema import PESMakerConfig
 from pesmaker.jobs.resources import _job_resources
-from pesmaker.jobs.scripts import _write_submit_script
+from pesmaker.jobs.scripts import SUBMIT_RESOURCE_KEYS, _write_submit_script
 from pesmaker.results import StageResult, SubmissionSummary
 from pesmaker.structures import load_structure
 
@@ -154,6 +154,22 @@ def _refresh_vasp_submit_scripts(
         skip_completed
         and stage == "scf"
         and config.labeling.engine.strip().lower() == "vasp"
+        and _has_submit_refresh_options(config)
+    )
+
+
+def _has_submit_refresh_options(config: PESMakerConfig) -> bool:
+    return (
+        "command" in config.labeling.options
+        or any(
+            key in config.jobs.options
+            for key in (
+                "sub_file",
+                "sbatch_template",
+                "sbatch_templates",
+                *SUBMIT_RESOURCE_KEYS,
+            )
+        )
     )
 
 

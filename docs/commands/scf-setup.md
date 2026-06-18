@@ -84,15 +84,18 @@ jobs:
   check_scf_convergence: true
 ```
 
-If `vasp_kpar` and `vasp_ncore` are omitted, PESMaker chooses conservative
-values from `cores_cpu`.
+PESMaker writes `KPAR` or `NCORE` to `INCAR` only when `jobs.vasp_kpar` or
+`jobs.vasp_ncore` is explicitly set. If those keys are omitted, the INCAR
+template is left in control of VASP parallel tags.
 
-When `jobs.sub_file` is provided without resource fields such as `cores_cpu`,
-`nodes`, `gpus`, `vasp_kpar`, or `vasp_ncore`, PESMaker keeps the user submit
-script content unchanged except for explicit placeholders such as `{command}`,
-`{job_name}`, or `{workdir}`. Add resource fields only when you want PESMaker
-to refresh matching scheduler lines and VASP launch commands in the generated
-`submit.sh`.
+When `jobs.sub_file` is provided, PESMaker does not scan and rewrite literal
+`#SBATCH` lines or literal VASP command lines. It only replaces explicit
+placeholders such as `{command}`, `{job_name}`, `{workdir}`, `{nodes}`,
+`{ntasks}`, `{cores_cpu}`, `{gpus}`, `{vasp_kpar}`, and `{vasp_ncore}`. If the
+template does not contain `{command}`, the command line in the user script is
+left unchanged. If resource fields such as `cores_cpu`, `nodes`, or `gpus` are
+present, they affect the replacement value of `{command}` and the corresponding
+resource placeholders.
 
 For CPU VASP jobs with `cores_cpu` or `nodes` set, PESMaker uses
 `mpirun -np <nodes * cores_cpu> <labeling.command>` when `labeling.command` is

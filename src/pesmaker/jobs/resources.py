@@ -33,6 +33,8 @@ class JobResources:
     gpus: int
     vasp_kpar: int
     vasp_ncore: int
+    write_vasp_kpar: bool = False
+    write_vasp_ncore: bool = False
 
 
 def _job_resources(
@@ -49,6 +51,8 @@ def _job_resources(
         default=_nonnegative_int_option(options, "gpus_gpu", default=0),
     )
     _reject_legacy_vasp_parallel_options(options)
+    write_vasp_kpar = "vasp_kpar" in options
+    write_vasp_ncore = "vasp_ncore" in options
     vasp_kpar = _positive_int_option(
         options,
         "vasp_kpar",
@@ -74,6 +78,8 @@ def _job_resources(
         gpus=gpus,
         vasp_kpar=vasp_kpar,
         vasp_ncore=vasp_ncore,
+        write_vasp_kpar=write_vasp_kpar,
+        write_vasp_ncore=write_vasp_ncore,
     )
 
 

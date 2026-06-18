@@ -317,8 +317,9 @@ def setup_labeling(config: PESMakerConfig) -> StageResult:
                 "cores_cpu": resources.cores_cpu,
                 "gpus": resources.gpus,
             }
-            if not resources.gpus:
+            if not resources.gpus and resources.write_vasp_kpar:
                 record_data["vasp_kpar"] = resources.vasp_kpar
+            if not resources.gpus and resources.write_vasp_ncore:
                 record_data["vasp_ncore"] = resources.vasp_ncore
             for key in (
                 "input_dir",
@@ -597,18 +598,20 @@ def _join_potcar_chunks(chunks: list[bytes]) -> bytes:
 def _prepare_labeling_incar(text: str, resources: JobResources) -> str:
     if resources.gpus:
         return _ensure_trailing_newline(text)
-    text = _set_incar_value(
-        text,
-        "KPAR",
-        str(resources.vasp_kpar),
-        "K-point parallel groups",
-    )
-    text = _set_incar_value(
-        text,
-        "NCORE",
-        str(resources.vasp_ncore),
-        "MPI ranks per band group",
-    )
+    if resources.write_vasp_kpar:
+        text = _set_incar_value(
+            text,
+            "KPAR",
+            str(resources.vasp_kpar),
+            "K-point parallel groups",
+        )
+    if resources.write_vasp_ncore:
+        text = _set_incar_value(
+            text,
+            "NCORE",
+            str(resources.vasp_ncore),
+            "MPI ranks per band group",
+        )
     return _ensure_trailing_newline(text)
 
 

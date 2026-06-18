@@ -107,20 +107,30 @@ normal VASP timing and accounting footer alone should count as completion.
 
 For every VASP folder that will be submitted or retried, PESMaker can refresh
 `submit.sh` from the current `jobs.sub_file`, resource settings, and
-`labeling.command`. Completed folders are not modified. This refresh also
-happens during `--dry-run`, while the scheduler itself is not called.
+`labeling.command` when one of those script-refresh settings is explicitly
+present in the YAML. Completed folders are not modified. This refresh also
+happens during `--dry-run`, while the scheduler itself is not called. If no
+script-refresh setting is present, PESMaker submits the existing `submit.sh`
+without rewriting it.
 
-If `jobs.sub_file` is provided without resource fields such as `cores_cpu`,
-`nodes`, `gpus`, `vasp_kpar`, or `vasp_ncore`, PESMaker keeps the user submit
-script content unchanged except for explicit placeholders such as `{command}`,
-`{job_name}`, or `{workdir}`. Add resource fields only when you want PESMaker
-to update matching scheduler lines and VASP launch commands.
+When `jobs.sub_file` is provided, PESMaker does not scan and rewrite literal
+`#SBATCH` lines or literal VASP command lines. It only replaces explicit
+placeholders such as `{command}`, `{job_name}`, `{workdir}`, `{nodes}`,
+`{ntasks}`, `{cores_cpu}`, `{gpus}`, `{vasp_kpar}`, and `{vasp_ncore}`. If the
+template does not contain `{command}`, the command line in the user script is
+left unchanged. If resource fields such as `cores_cpu`, `nodes`, or `gpus` are
+present, they affect the replacement value of `{command}` and the corresponding
+resource placeholders.
 
 For CPU VASP jobs with `cores_cpu` or `nodes` set, refreshed launch commands
 use `mpirun -np <nodes * cores_cpu>`. If `labeling.command` already starts with
 `mpirun` or `mpiexec` but does not include `-np`, `-n`, `--np`, or `--ntasks`,
 PESMaker inserts the rank count. Existing rank-count options are kept
 unchanged.
+
+`jobs.vasp_kpar` and `jobs.vasp_ncore` are optional INCAR overrides. PESMaker
+writes `KPAR` or `NCORE` only for the keys that are explicitly present in the
+YAML; otherwise the INCAR template keeps its own values.
 
 To intentionally submit every prepared VASP folder again:
 
@@ -151,8 +161,6 @@ labeling:
 jobs:
   submit_command: sbatch
   cores_cpu: 36
-  vasp_kpar: 3
-  vasp_ncore: 6
   skip_completed: true
   check_scf_convergence: true
   sub_file: /current/machine/path/to/sub.sh
@@ -218,9 +226,8 @@ For this example, `sub_gpu.sh` should request one GPU and six CPU tasks:
 #SBATCH --gres=gpu:1
 ```
 
-When resource fields are present, PESMaker refreshes VASP SCF submit scripts
-from `jobs.sub_file` before submission. Put `{command}` where the VASP command
-should run:
+Put `{command}` where PESMaker should insert the VASP launch command. Without
+`{command}`, PESMaker leaves the command line from `sub_file` as written:
 
 ```bash
 {command}
