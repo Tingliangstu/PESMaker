@@ -2262,6 +2262,12 @@ sampling:
 
     assert Image.open(selected_dir / "fps_selection.png").info["dpi"][0] >= 590
     assert list(selected_dir.glob("selected_*.xyz")) == []
+    assert "Trajectory selection" in output
+    assert "Mode             : separate_trajectories" in output
+    assert "Trajectories     : 1" in output
+    assert "Descriptor       : simple geometry" in output
+    assert "Trajectory       : 1/1" in output
+    assert "Selection completed: Selected 2 of 3 frame(s) from 1 trajectory file(s)." in output
     assert "Selected 2 of 3 MD frame(s)" in output
     assert "Selection stopped because remaining frames are closer" in output
     assert "edit your YAML under sampling.selection" in output
@@ -2314,8 +2320,12 @@ sampling:
     assert (selected_dir / "manifest.jsonl").exists()
     assert not (selected_dir / "selection_features.npy").exists()
     assert not (selected_dir / "fps_selection.png").exists()
-    assert "Interval sampling completed" in output
-    assert "Selected 3 of 7 MD frame(s) using interval sampling" in output
+    assert "Trajectory selection" in output
+    assert "Trajectories     : 1" in output
+    assert "Method           : interval sampling" in output
+    assert "Trajectory       : 1/1" in output
+    assert "Selection completed: Selected 3 of 7 frame(s) from 1 trajectory file(s)." in output
+    assert "Selected 3 of 7 MD frame(s) using interval sampling every 3 frame(s)" in output
     records = [
         json.loads(line)
         for line in (selected_dir / "manifest.jsonl").read_text(
@@ -2371,11 +2381,11 @@ sampling:
     assert main(["select", str(config_path)]) == 0
     output = capsys.readouterr().out
 
-    assert "Separate trajectory selection" in output
+    assert "Trajectory selection" in output
     assert "Mode             : separate_trajectories" in output
     assert "Trajectories     : 2" in output
     assert "Per trajectory   : max_count=2, min_distance=0.2" in output
-    assert "Separate selection completed: Selected 4 of 6 frame(s)" in output
+    assert "Selection completed: Selected 4 of 6 frame(s)" in output
     assert (selected_dir / "mp-1_temp_300K" / "selected.xyz").exists()
     assert (selected_dir / "mp-2_temp_300K" / "selected.xyz").exists()
     assert (selected_dir / "mp-1_temp_300K" / "selection_features.npy").exists()
@@ -2445,7 +2455,7 @@ sampling:
     assert main(["select", str(config_path)]) == 0
     output = capsys.readouterr().out
 
-    assert "Separate trajectory selection" not in output
+    assert "Trajectory selection" not in output
     assert "Selected 2 of 4 MD frame(s)" in output
     assert (selected_dir / "selected.xyz").exists()
     assert not (selected_dir / "traj_a" / "selected.xyz").exists()
@@ -2514,6 +2524,7 @@ sampling:
     output = capsys.readouterr().out
 
     assert "Descriptor       : GPUMD / Calorine-calculated NEP descriptors" in output
+    assert "Trajectory selection" in output
     assert output.count("Potential        :") == 1
     assert "Engine           : GPUMD" not in output
     assert "Backend          : Calorine-calculated NEP descriptors" not in output
@@ -2661,14 +2672,19 @@ sampling:
     features = np.load(selected_dir / "selection_features.npy")
     assert features.shape == (3, 2)
     assert (selected_dir / "fps_selection.png").exists()
-    assert "FPS descriptor calculation" in output
-    assert "Engine           : GPUMD" in output
-    assert "Backend          : Calorine-calculated NEP descriptors" in output
+    assert "Trajectory selection" in output
+    assert "Mode             : separate_trajectories" in output
+    assert "Trajectories     : 1" in output
+    assert "Descriptor       : GPUMD / Calorine-calculated NEP descriptors" in output
+    assert "Potential        :" in output
+    assert "FPS descriptor calculation" not in output
+    assert "Engine           : GPUMD" not in output
+    assert "Backend          : Calorine-calculated NEP descriptors" not in output
     assert "Frames           : 3" in output
     assert "Progress         : [##############################]" in output
     assert "3/3 frame(s) (100.0%)" in output
     assert "Descriptor matrix: 3 frame(s) x 2 feature(s)" in output
-    assert "FPS completed    : Selected 2 of 3 frame(s)." in output
+    assert "Selection completed: Selected 2 of 3 frame(s) from 1 trajectory file(s)." in output
     assert "using NEP89 descriptors calculated from the GPUMD potential" in output
     records = [
         json.loads(line)
@@ -2782,15 +2798,20 @@ sampling:
     ]
     assert descriptor_calls == [(True, -1), (True, -1), (True, -1)]
     assert np.allclose(features[0], [10.1, 2.0, 0.1, 1.0])
-    assert "FPS descriptor calculation" in output
-    assert "Engine           : MACE" in output
-    assert "Backend          : MACECalculator invariant descriptors" in output
+    assert "Trajectory selection" in output
+    assert "Mode             : separate_trajectories" in output
+    assert "Trajectories     : 1" in output
+    assert "Descriptor       : MACE invariant descriptors" in output
+    assert f"Model            : {descriptor_model.resolve()}" in output
     assert "Device           : cuda" in output
+    assert "FPS descriptor calculation" not in output
+    assert "Engine           : MACE" not in output
+    assert "Backend          : MACECalculator invariant descriptors" not in output
     assert "Frames           : 3" in output
     assert "Progress         : [##############################]" in output
     assert "3/3 frame(s) (100.0%)" in output
     assert "Descriptor matrix: 3 frame(s) x 4 feature(s)" in output
-    assert "FPS completed    : Selected 2 of 3 frame(s)." in output
+    assert "Selection completed: Selected 2 of 3 frame(s) from 1 trajectory file(s)." in output
     assert "using invariant descriptors output by the MACE model" in output
     records = [
         json.loads(line)

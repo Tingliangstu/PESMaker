@@ -41,28 +41,35 @@ The terminal summary prints which model descriptor was used. You do not need
 to set `sampling.selection.descriptor`.
 
 Descriptor inference can take time for a long trajectory. PESMaker prints the
-active engine, descriptor backend, model or potential path, frame count, MACE
-device, and progress at regular intervals. For example:
+descriptor source once, then uses the same per-trajectory progress format for
+single and multiple trajectory files. For example:
 
 ```text
-FPS descriptor calculation
-Engine           : MACE
-Backend          : MACECalculator invariant descriptors
+Trajectory selection
+Mode             : separate_trajectories
+Trajectories     : 1
+Method           : FPS
+Descriptor       : MACE invariant descriptors
 Model            : /path/to/mace-omat-0-small.model
 Device           : cuda
+Per trajectory   : max_count=200, min_distance=0
+Output directory : selected
+
+Trajectory       : 1/1 /path/to/movie.xyz
 Frames           : 1501
-Status           : Loading the model and calculating descriptors. This may take some time; please wait.
 Progress         : [###---------------------------] 151/1501 frame(s) ( 10.1%)
 ...
 Progress         : [##############################] 1501/1501 frame(s) (100.0%)
 Descriptor matrix: 1501 frame(s) x 512 feature(s)
-FPS completed    : Selected 200 of 1501 frame(s).
+Selected         : 200 of 1501 frame(s)
+
+Selection completed: Selected 200 of 1501 frame(s) from 1 trajectory file(s).
 ```
 
-GPUMD prints the same progress block with `Engine: GPUMD`, the
-`Calorine-calculated NEP descriptors` backend, and the NEP potential path. In
-an interactive terminal the progress bar updates in place. When output is
-redirected to a log, PESMaker prints progress at regular intervals instead.
+GPUMD prints the same compact block with
+`Descriptor: GPUMD / Calorine-calculated NEP descriptors` and the NEP potential
+path. In an interactive terminal the progress bar updates in place. When output
+is redirected to a log, PESMaker prints progress at regular intervals instead.
 This uses the Python standard library and does not add another package
 dependency.
 
@@ -138,10 +145,11 @@ Here `max_count: 50` means at most 50 frames from each trajectory, not 50
 frames total. For example, two matched `movie.xyz` files can produce up to 100
 selected frames.
 
-The terminal output states that separate trajectory selection is active:
+The terminal output uses the same format as a single trajectory, with one block
+per matched trajectory:
 
 ```text
-Separate trajectory selection
+Trajectory selection
 Mode             : separate_trajectories
 Trajectories     : 2
 Method           : FPS
@@ -162,8 +170,12 @@ Progress         : [##############################] 1000/1000 frame(s) (100.0%)
 Descriptor matrix: 1000 frame(s) x 35 feature(s)
 Selected         : 50 of 1000 frame(s)
 
-Separate selection completed: Selected 100 of 2000 frame(s) from 2 trajectory file(s).
+Selection completed: Selected 100 of 2000 frame(s) from 2 trajectory file(s).
 ```
+
+For one matched trajectory, the same screen format is used with
+`Trajectories: 1` and `Trajectory: 1/1`. The output files stay directly under
+`selected/` rather than under an extra trajectory subdirectory.
 
 This default is useful when the trajectories come from different initial
 structures. If several trajectories are replicas of the same structure and you
@@ -243,7 +255,8 @@ descriptor separates different trajectory regions.
 plot: all MD frames are shown as light points, while selected frames are drawn
 smaller on top so you can see how they sit inside the full cloud.
 
-For separate trajectory sampling, PESMaker writes a subdirectory per trajectory:
+For multiple matched trajectories in the default separate mode, PESMaker writes
+a subdirectory per trajectory:
 
 ```text
 selected/
