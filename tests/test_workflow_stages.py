@@ -2279,6 +2279,55 @@ sampling:
     assert {record["descriptor"] for record in records} == {"simple"}
 
 
+def test_select_uses_interval_sampling_without_descriptor_model(
+    tmp_path, monkeypatch, capsys
+):
+    """Interval selection should not require a NEP potential or descriptors."""
+    from ase import Atoms
+    from ase.io import write
+
+    frames = [
+        Atoms("Te", positions=[(float(index), 0.0, 0.0)], cell=[10, 10, 10], pbc=True)
+        for index in range(7)
+    ]
+    trajectory = tmp_path / "XDATCAR"
+    write(trajectory, frames, format="vasp-xdatcar")
+    config_path = tmp_path / "pesmaker.yaml"
+    selected_dir = tmp_path / "selected"
+    config_path.write_text(
+        f"""project: interval_select_test
+sampling:
+  selection:
+    method: interval
+    trajectory_pattern: {trajectory.as_posix()}
+    output_dir: {selected_dir.as_posix()}
+    interval: 3
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["select", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert (selected_dir / "selected.xyz").exists()
+    assert (selected_dir / "manifest.jsonl").exists()
+    assert not (selected_dir / "selection_features.npy").exists()
+    assert not (selected_dir / "fps_selection.png").exists()
+    assert "Interval sampling completed" in output
+    assert "Selected 3 of 7 MD frame(s) using interval sampling" in output
+    records = [
+        json.loads(line)
+        for line in (selected_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert [record["source_frame"] for record in records] == [0, 3, 6]
+    assert [record["frame_index"] for record in records] == [0, 1, 2]
+    assert {record["selection_method"] for record in records} == {"interval"}
+    assert {record["interval"] for record in records} == {3}
+
+
 def test_selection_warning_suggests_lower_min_distance():
     """Min-distance warnings should suggest a smaller threshold."""
     from pesmaker.samplers.selection import _suggest_lower_min_distance

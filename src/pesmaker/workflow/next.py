@@ -58,6 +58,7 @@ class NextEvent:
     message: str
     result: StageResult | None = None
     command: str | None = None
+    stage: str | None = None
     log_path: Path | None = None
     template_path: Path | None = None
     template_created: bool = False
@@ -138,6 +139,7 @@ def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
                     kind=step.kind,
                     message=step.message,
                     command=step.command,
+                    stage=step.stage,
                     template_path=step.template_path,
                     template_created=created,
                 )
@@ -154,6 +156,7 @@ def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
                 kind=step.kind,
                 message=step.message,
                 command=step.command,
+                stage=step.stage,
                 log_path=step.log_path,
             )
         )
@@ -168,6 +171,7 @@ def inspect_next(config: PESMakerConfig, config_path: Path) -> NextResult:
         kind=f"next-action:{step.kind}",
         message=step.message,
         command=step.command,
+        stage=step.stage,
         log_path=step.log_path,
         template_path=step.template_path,
     )
@@ -198,6 +202,24 @@ def determine_next_step(
         )
 
     if _sampling_enabled(config):
+        if _selection_enabled(config) and not sampling_manifest_path(config).exists():
+            if matched_sampling_trajectories(config):
+                if not selected_manifest_path(config).exists():
+                    return NextStep(
+                        action="select",
+                        kind="run",
+                        message="Select frames from an existing trajectory.",
+                    )
+            elif not _sampling_setup_inputs_available(config):
+                return NextStep(
+                    action="wait",
+                    kind="waiting",
+                    stage="selection",
+                    message=(
+                        "Waiting for trajectory files matching "
+                        f"{sampling_trajectory_pattern(config)}."
+                    ),
+                )
         if not sampling_manifest_path(config).exists():
             return NextStep(
                 action="setup_sampling",
@@ -237,6 +259,24 @@ def determine_next_step(
                     "Sampling setup is ready. Add sampling.selection or "
                     "labeling.input_manifest/input_dir if later stages should run."
                 ),
+            )
+
+    if _selection_only_enabled(config):
+        if not matched_sampling_trajectories(config):
+            return NextStep(
+                action="wait",
+                kind="waiting",
+                stage="selection",
+                message=(
+                    "Waiting for trajectory files matching "
+                    f"{sampling_trajectory_pattern(config)}."
+                ),
+            )
+        if not selected_manifest_path(config).exists():
+            return NextStep(
+                action="select",
+                kind="run",
+                message="Select frames from an existing trajectory.",
             )
 
     if _labeling_enabled(config):
@@ -310,16 +350,20 @@ def inferred_flow(config: PESMakerConfig) -> str:
     stages = []
     if config.structures:
         stages.append("generate")
-    if _sampling_enabled(config):
+    if _existing_trajectory_selection(config):
+        stages.append(_selection_flow_label(config))
+    elif _sampling_enabled(config):
         stages.append("MD-sampling")
         if _selection_enabled(config):
-            stages.append("FPS-select")
+            stages.append(_selection_flow_label(config))
+    elif _selection_enabled(config):
+        stages.append(_selection_flow_label(config))
     if _labeling_enabled(config):
         stages.extend(["SCF-labeling", "dataset-collect"])
     if _training_enabled(config):
         stages.append("train")
     if (
-        config.structures
+        (config.structures or selected_manifest_path(config).exists())
         and not _labeling_enabled(config)
         and not _training_enabled(config)
         and (not _sampling_enabled(config) or _selection_enabled(config))
@@ -344,6 +388,7 @@ def _preview_submit(
         message=result.message,
         result=result,
         command=command,
+        stage=stage,
         log_path=log_path,
     )
 
@@ -361,8 +406,7 @@ def _needs_next_config(config: PESMakerConfig) -> bool:
         and not _training_enabled(config)
     )
     selected_without_labeling = (
-        _sampling_enabled(config)
-        and _selection_enabled(config)
+        _selection_enabled(config)
         and selected_manifest_path(config).exists()
         and not _labeling_enabled(config)
         and not _training_enabled(config)
@@ -378,8 +422,54 @@ def _sampling_enabled(config: PESMakerConfig) -> bool:
     return config.sampling.engine.strip().lower() not in {"", "none"}
 
 
+def _sampling_setup_inputs_available(config: PESMakerConfig) -> bool:
+    options = config.sampling.options
+    if config.structures:
+        return True
+    if options.get("input_manifest") or options.get("input_dir"):
+        return True
+    generated_manifest = generated_manifest_path(config)
+    return generated_manifest.exists() or generated_manifest.parent.exists()
+
+
 def _selection_enabled(config: PESMakerConfig) -> bool:
     return isinstance(config.sampling.options.get("selection"), dict)
+
+
+def _selection_only_enabled(config: PESMakerConfig) -> bool:
+    return (
+        config.workflow.mode != "direct-scf"
+        and _selection_enabled(config)
+        and not _sampling_enabled(config)
+    )
+
+
+def _existing_trajectory_selection(config: PESMakerConfig) -> bool:
+    return (
+        config.workflow.mode != "direct-scf"
+        and _selection_enabled(config)
+        and _sampling_enabled(config)
+        and not sampling_manifest_path(config).exists()
+        and not _sampling_setup_inputs_available(config)
+    )
+
+
+def _selection_flow_label(config: PESMakerConfig) -> str:
+    selection = config.sampling.options.get("selection", {})
+    if not isinstance(selection, dict):
+        return "select"
+    raw_method = selection.get(
+        "method",
+        selection.get("strategy", selection.get("mode")),
+    )
+    if raw_method is None and any(
+        key in selection for key in ("interval", "stride", "step", "frame_interval")
+    ):
+        raw_method = "interval"
+    method = str(raw_method or "fps").lower().replace("-", "_")
+    if method in {"interval", "stride", "uniform", "even", "every_n"}:
+        return "interval-select"
+    return "FPS-select"
 
 
 def _labeling_enabled(config: PESMakerConfig) -> bool:

@@ -117,6 +117,38 @@ Because MACE and NEP descriptor distances have different numerical scales,
 start a new MACE selection with `min_distance: 0.0` and use `max_count` as the
 initial limit. Inspect the distance curve before choosing a nonzero threshold.
 
+## Interval Sampling
+
+Use interval sampling when you want frames at a fixed trajectory stride and do
+not want PESMaker to calculate descriptors. This mode does not require
+`sampling.potential`, Calorine, MACE, `min_distance`, or a descriptor model.
+
+```yaml
+sampling:
+  selection:
+    method: interval
+    trajectory_pattern: /path/to/XDATCAR
+    output_dir: selected
+    interval: 10
+```
+
+This keeps frames `0, 10, 20, ...`. Optional `offset` starts from a later frame,
+and optional `max_count` caps the number of kept frames:
+
+```yaml
+sampling:
+  selection:
+    method: interval
+    trajectory_pattern: sampling/**/movie.xyz
+    output_dir: selected
+    interval: 20
+    offset: 5
+    max_count: 50
+```
+
+The aliases `strategy` or `mode` may be used instead of `method`, and `stride`,
+`step`, or `frame_interval` may be used instead of `interval`.
+
 ## Outputs
 
 ```text
@@ -148,6 +180,9 @@ descriptor separates different trajectory regions.
 `fps_selection.png` is the diagnostic plot. PESMaker uses a seaborn-styled
 plot: all MD frames are shown as light points, while selected frames are drawn
 smaller on top so you can see how they sit inside the full cloud.
+
+For interval sampling, PESMaker writes only `selected.xyz` and `manifest.jsonl`
+because no descriptor matrix or FPS diagnostic plot is calculated.
 
 ## Next Step
 

@@ -373,6 +373,8 @@ def _print_scf_retry_steps(event: NextEvent, *, config_path: Path) -> None:
 
 
 def _waiting_message(stage: str) -> str:
+    if stage == "selection":
+        return "Trajectory files are not ready."
     if stage == "sampling":
         return "Sampling trajectory files are not ready."
     if stage == "training":
@@ -400,6 +402,8 @@ def _current_next_label(event: NextEvent | None, status: str) -> str:
 
 
 def _stage_display(stage: str) -> str:
+    if stage == "selection":
+        return "selection"
     if stage == "sampling":
         return "MD-sampling"
     if stage == "training":
@@ -424,6 +428,8 @@ def _next_action_kind(event) -> str:
 
 
 def _event_stage(event: NextEvent) -> str:
+    if event.stage:
+        return event.stage
     if event.command and "--stage sampling" in event.command:
         return "sampling"
     if event.command and "--stage training" in event.command:
