@@ -2328,6 +2328,74 @@ sampling:
     assert {record["interval"] for record in records} == {3}
 
 
+def test_select_can_sample_each_trajectory_separately(tmp_path, monkeypatch, capsys):
+    """Separate trajectory selection should apply max_count per trajectory."""
+    from ase import Atoms
+    from ase.io import write
+
+    trajectory_a = tmp_path / "mp-1_temp_300K" / "movie.xyz"
+    trajectory_b = tmp_path / "mp-2_temp_300K" / "movie.xyz"
+    trajectory_a.parent.mkdir()
+    trajectory_b.parent.mkdir()
+    frames_a = [
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[3, 3, 20], pbc=True),
+        Atoms("Te", positions=[(0.1, 0.0, 0.0)], cell=[3, 3, 20], pbc=True),
+        Atoms("Te", positions=[(1.5, 0.0, 0.0)], cell=[3, 3, 20], pbc=True),
+    ]
+    frames_b = [
+        Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[4, 4, 20], pbc=True),
+        Atoms("Te", positions=[(0.2, 0.0, 0.0)], cell=[4, 4, 20], pbc=True),
+        Atoms("Te", positions=[(2.5, 0.0, 0.0)], cell=[4, 4, 20], pbc=True),
+    ]
+    write(trajectory_a, frames_a, format="extxyz")
+    write(trajectory_b, frames_b, format="extxyz")
+    selected_dir = tmp_path / "selected"
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: separate_select_test
+sampling:
+  engine: gpumd
+  selection:
+    trajectory_pattern: {(tmp_path / '*' / 'movie.xyz').as_posix()}
+    output_dir: {selected_dir.as_posix()}
+    separate_trajectories: true
+    descriptor: simple
+    min_distance: 0.2
+    max_count: 2
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["select", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Separate trajectory selection" in output
+    assert "Mode             : separate_trajectories" in output
+    assert "Trajectories     : 2" in output
+    assert "Per trajectory   : max_count=2, min_distance=0.2" in output
+    assert "Separate selection completed: Selected 4 of 6 frame(s)" in output
+    assert (selected_dir / "mp-1_temp_300K" / "selected.xyz").exists()
+    assert (selected_dir / "mp-2_temp_300K" / "selected.xyz").exists()
+    assert (selected_dir / "mp-1_temp_300K" / "selection_features.npy").exists()
+    assert (selected_dir / "mp-2_temp_300K" / "selection_features.npy").exists()
+    records = [
+        json.loads(line)
+        for line in (selected_dir / "manifest.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert len(records) == 4
+    assert [record["index"] for record in records] == [0, 1, 2, 3]
+    assert [record["source_frame"] for record in records] == [0, 2, 0, 2]
+    assert [record["frame_index"] for record in records] == [0, 1, 0, 1]
+    assert {record["trajectory_name"] for record in records} == {
+        "mp-1_temp_300K",
+        "mp-2_temp_300K",
+    }
+    assert {record["descriptor"] for record in records} == {"simple"}
+
+
 def test_selection_warning_suggests_lower_min_distance():
     """Min-distance warnings should suggest a smaller threshold."""
     from pesmaker.samplers.selection import _suggest_lower_min_distance
