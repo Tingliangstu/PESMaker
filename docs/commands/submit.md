@@ -105,10 +105,16 @@ The electronic self-consistency was not achieved in
 `check_scf_convergence` defaults to `true`. Set it to `false` only when the
 normal VASP timing and accounting footer alone should count as completion.
 
-For every VASP folder that will be submitted or retried, PESMaker rewrites
+For every VASP folder that will be submitted or retried, PESMaker can refresh
 `submit.sh` from the current `jobs.sub_file`, resource settings, and
 `labeling.command`. Completed folders are not modified. This refresh also
 happens during `--dry-run`, while the scheduler itself is not called.
+
+If `jobs.sub_file` is provided without resource fields such as `cores_cpu`,
+`nodes`, `gpus`, `vasp_kpar`, or `vasp_ncore`, PESMaker keeps the user submit
+script content unchanged except for explicit placeholders such as `{command}`,
+`{job_name}`, or `{workdir}`. Add resource fields only when you want PESMaker
+to update matching scheduler lines and VASP launch commands.
 
 To intentionally submit every prepared VASP folder again:
 
@@ -178,14 +184,17 @@ jobs:
 ```
 
 For one-GPU-per-job VASP SCF submissions, set `jobs.gpus: 1` and keep the CPU
-task count in `jobs.cores_cpu` aligned with the template:
+task count in `jobs.cores_cpu` aligned with the template. If `labeling.command`
+is only the VASP executable, PESMaker runs it with one MPI rank per requested
+GPU, for example `mpirun -np 1 /path/to/vasp_std`. Commands that already start
+with `mpirun`, `mpiexec`, or `srun` are kept unchanged.
 
 ```yaml
 labeling:
   engine: vasp
   output_dir: run_vasp_scf
   input_dir: selected
-  command: "mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std"
+  command: /data/software/vasp6.4-gpu/bin/vasp_std
 
 jobs:
   submit_command: sbatch
@@ -202,8 +211,9 @@ For this example, `sub_gpu.sh` should request one GPU and six CPU tasks:
 #SBATCH --gres=gpu:1
 ```
 
-PESMaker refreshes VASP SCF submit scripts from `jobs.sub_file` before
-submission. Put `{command}` where the VASP command should run:
+When resource fields are present, PESMaker refreshes VASP SCF submit scripts
+from `jobs.sub_file` before submission. Put `{command}` where the VASP command
+should run:
 
 ```bash
 {command}

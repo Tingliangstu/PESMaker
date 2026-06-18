@@ -24,9 +24,13 @@ from typing import Any
 
 from pesmaker.config.schema import PESMakerConfig
 
-STRUCTURE_INPUT_SUFFIXES = {".cif", ".extxyz", ".poscar", ".vasp", ".xyz"}
+STRUCTURE_INPUT_SUFFIXES = {".cif", ".extxyz", ".poscar", ".traj", ".vasp", ".xyz"}
 
-STRUCTURE_INPUT_NAMES = {"CONTCAR", "POSCAR"}
+STRUCTURE_INPUT_NAMES = {"CONTCAR", "POSCAR", "XDATCAR"}
+
+MULTI_FRAME_INPUT_SUFFIXES = {".extxyz", ".traj", ".xyz"}
+
+MULTI_FRAME_INPUT_NAMES = {"XDATCAR"}
 
 
 def _section_output_dir(
@@ -76,15 +80,16 @@ def _load_input_dir_records(
     paths = _discover_input_structure_files(input_dir)
     if not paths:
         raise ValueError(f"no structure files found in {input_dir}")
-    return [
-        {
-            "path": str(path),
-            "input_dir": str(input_dir),
-            "input_mode": f"{input_mode}_scan",
-            "input_relative_path": path.relative_to(input_dir).as_posix(),
-        }
-        for path in paths
-    ]
+    records = []
+    for path in paths:
+        records.extend(
+            _scanned_structure_records(
+                path,
+                input_dir=input_dir,
+                input_mode=f"{input_mode}_scan",
+            )
+        )
+    return records
 
 
 def _mark_input_records(
@@ -129,6 +134,51 @@ def _is_input_structure_file(path: Path) -> bool:
     if path.name.upper() in STRUCTURE_INPUT_NAMES:
         return True
     return path.suffix.lower() in STRUCTURE_INPUT_SUFFIXES
+
+
+def _scanned_structure_records(
+    path: Path,
+    *,
+    input_dir: Path,
+    input_mode: str,
+) -> list[dict[str, Any]]:
+    record = {
+        "path": str(path),
+        "input_dir": str(input_dir),
+        "input_mode": input_mode,
+        "input_relative_path": path.relative_to(input_dir).as_posix(),
+    }
+    frame_count = _scanned_structure_frame_count(path)
+    if frame_count <= 1:
+        return [record]
+    return [
+        {
+            **record,
+            "frame_index": frame_index,
+            "source_frame": frame_index,
+        }
+        for frame_index in range(frame_count)
+    ]
+
+
+def _scanned_structure_frame_count(path: Path) -> int:
+    if not _is_multi_frame_input_file(path):
+        return 1
+    try:
+        from ase.io import read
+    except ImportError as exc:
+        raise RuntimeError("Reading multi-frame structure files requires ASE") from exc
+
+    frames = read(path, index=":")
+    if isinstance(frames, list):
+        return len(frames)
+    return 1
+
+
+def _is_multi_frame_input_file(path: Path) -> bool:
+    if path.name.upper() in MULTI_FRAME_INPUT_NAMES:
+        return True
+    return path.suffix.lower() in MULTI_FRAME_INPUT_SUFFIXES
 
 
 def _generated_structures_dir(config: PESMakerConfig) -> Path:

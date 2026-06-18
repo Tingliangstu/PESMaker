@@ -446,6 +446,49 @@ jobs:
     assert "${SLURM_NODELIST:-unknown}" in submit_text
 
 
+def test_labeling_setup_preserves_literal_submit_template_without_resources(
+    tmp_path,
+):
+    """Literal user submit scripts should stay untouched without resource fields."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "perturb_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    sub_file = tmp_path / "sub.sh"
+    template_text = """#!/bin/bash
+#SBATCH --job-name=manual_vasp
+#SBATCH --ntasks=12
+mpirun /cluster/vasp_std
+"""
+    sub_file.write_text(template_text, encoding="utf-8")
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: preserve_submit_template_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: /new/vasp_std
+jobs:
+  sub_file: {sub_file.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "perturb_000000"
+    assert (workdir / "submit.sh").read_text(encoding="utf-8") == template_text
+
+
 def test_labeling_setup_scans_explicit_input_dir_without_manifest(tmp_path):
     """Users can point SCF setup at a folder of generated structure files."""
     input_dir = tmp_path / "generated"
@@ -527,6 +570,57 @@ labeling:
         "mp-105_Te/manual_candidate.xyz"
     )
     assert (tmp_path / "labeling" / "mp-105_Te" / "manual_candidate").exists()
+
+
+def test_labeling_setup_expands_multiframe_extxyz_without_manifest(tmp_path):
+    """Manual multi-frame structure files should become one SCF job per frame."""
+    from ase import Atoms
+    from ase.io import read, write
+
+    input_dir = tmp_path / "selected"
+    input_dir.mkdir()
+    source_path = input_dir / "manual_selected_frames.extxyz"
+    write(
+        source_path,
+        [
+            Atoms("Te", positions=[(0.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+            Atoms("Te", positions=[(2.0, 0.0, 0.0)], cell=[5, 5, 5], pbc=True),
+        ],
+        format="extxyz",
+    )
+    config_path = tmp_path / "sub.yaml"
+    config_path.write_text(
+        f"""project: manual_selected_frames
+labeling:
+  engine: vasp
+  input_dir: {input_dir.as_posix()}
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    poscar_0 = tmp_path / "labeling" / "manual_selected_frames_000000" / "POSCAR"
+    poscar_1 = tmp_path / "labeling" / "manual_selected_frames_000001" / "POSCAR"
+    assert read(poscar_0).get_positions()[0, 0] == 0.0
+    assert read(poscar_1).get_positions()[0, 0] == 2.0
+    manifest_records = [
+        json.loads(line)
+        for line in (tmp_path / "labeling" / "labeling_manifest.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(manifest_records) == 2
+    assert [record["source"] for record in manifest_records] == [
+        str(source_path),
+        str(source_path),
+    ]
+    assert [record["frame_index"] for record in manifest_records] == [0, 1]
+    assert [record["source_frame"] for record in manifest_records] == [0, 1]
+    assert {record["input_mode"] for record in manifest_records} == {
+        "input_dir_scan"
+    }
 
 
 def test_labeling_setup_writes_cpu_resources_to_incar_and_submit(tmp_path):
@@ -725,6 +819,96 @@ jobs:
     assert "NCORE =" not in incar_text
     assert "#SBATCH --ntasks=8" in submit_text
     assert "#SBATCH --gres=gpu:2" in submit_text
+    assert "mpirun -np 2 /opt/vasp/vasp_std" in submit_text
+
+
+def test_labeling_setup_wraps_gpu_vasp_command_in_submit_template(tmp_path):
+    """GPU VASP templates should run one MPI rank per requested GPU."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    sub_file = tmp_path / "sub_gpu.sh"
+    sub_file.write_text(
+        """#!/bin/bash
+#SBATCH --job-name=old_name
+#SBATCH --ntasks=1
+#SBATCH --gres=gpu:1
+{command}
+""",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: gpu_template_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: /data/software/vasp6.4-gpu/bin/vasp_std
+jobs:
+  cores_cpu: 6
+  gpus: 1
+  sub_file: {sub_file.as_posix()}
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert "#SBATCH --ntasks=6" in submit_text
+    assert "#SBATCH --gres=gpu:1" in submit_text
+    assert "mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std" in submit_text
+
+
+def test_labeling_setup_keeps_explicit_gpu_vasp_mpirun_command(tmp_path):
+    """Explicit GPU VASP launch commands should not be wrapped twice."""
+    generated_dir = tmp_path / "generated"
+    source_dir = generated_dir / "mp-105_Te"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "structure_000000.vasp"
+    source_path.write_text(
+        "Te\n1.0\n1 0 0\n0 1 0\n0 0 1\nTe\n1\nDirect\n0 0 0\n",
+        encoding="utf-8",
+    )
+    (generated_dir / "manifest.jsonl").write_text(
+        json.dumps({"path": str(source_path)}) + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "pesmaker.yaml"
+    config_path.write_text(
+        f"""project: gpu_explicit_mpirun_test
+generation:
+  output_dir: {generated_dir.as_posix()}
+labeling:
+  output_dir: {(tmp_path / 'labeling').as_posix()}
+  command: mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std
+jobs:
+  cores_cpu: 6
+  gpus: 1
+""",
+        encoding="utf-8",
+    )
+
+    assert main(["scf-setup", str(config_path)]) == 0
+
+    workdir = tmp_path / "labeling" / "mp-105_Te" / "structure_000000"
+    submit_text = (workdir / "submit.sh").read_text(encoding="utf-8")
+    assert (
+        submit_text.count("mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std")
+        == 1
+    )
+    assert "mpirun -np 1 mpirun" not in submit_text
 
 
 def test_labeling_setup_can_generate_potcar_from_library(tmp_path):

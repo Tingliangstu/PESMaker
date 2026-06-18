@@ -39,6 +39,28 @@ PESMaker looks for structures in this order:
 4. local `generated/`
 5. `runs/<project>/generated`
 
+When an input directory contains `manifest.jsonl`, PESMaker uses that manifest
+because it preserves exact frame indices for multi-frame files created by
+`select`. If no manifest is present, PESMaker recursively scans the directory
+for structure files and prepares one SCF folder per discovered structure.
+
+Scanned input files can be named `POSCAR`, `CONTCAR`, or `XDATCAR`, or use one
+of these suffixes:
+
+```text
+.cif
+.extxyz
+.poscar
+.traj
+.vasp
+.xyz
+```
+
+For scanned multi-frame `.xyz`, `.extxyz`, `.traj`, or `XDATCAR` files,
+PESMaker prepares one SCF job per frame. This lets users point
+`labeling.input_dir` at a manually prepared folder even when the folder was not
+created by PESMaker and has no `manifest.jsonl`.
+
 ## Outputs
 
 ```text
@@ -65,9 +87,19 @@ jobs:
 If `vasp_kpar` and `vasp_ncore` are omitted, PESMaker chooses conservative
 values from `cores_cpu`.
 
+When `jobs.sub_file` is provided without resource fields such as `cores_cpu`,
+`nodes`, `gpus`, `vasp_kpar`, or `vasp_ncore`, PESMaker keeps the user submit
+script content unchanged except for explicit placeholders such as `{command}`,
+`{job_name}`, or `{workdir}`. Add resource fields only when you want PESMaker
+to refresh matching scheduler lines and VASP launch commands in the generated
+`submit.sh`.
+
 For GPU VASP, request GPUs with `jobs.gpus` and usually omit `vasp_kpar` and
 `vasp_ncore`. When `gpus` is greater than zero, PESMaker does not add CPU VASP
-parallel tags to `INCAR`.
+parallel tags to `INCAR`. If `labeling.command` is only the VASP executable,
+PESMaker runs it as `mpirun -np <jobs.gpus> <labeling.command>`. If
+`labeling.command` already starts with `mpirun`, `mpiexec`, or `srun`, PESMaker
+keeps it unchanged.
 
 ```yaml
 project: 2D_Te_MD
@@ -78,7 +110,7 @@ labeling:
   input_dir: selected
   incar: /home/a4s5d/LT/yixiu/MLP_structure/1.Te/1.Material_project_structure/INCAR
   potcar_library: /home/a4s5d/software/VASP/potentials
-  command: "mpirun -np 1 /data/software/vasp6.4-gpu/bin/vasp_std"
+  command: /data/software/vasp6.4-gpu/bin/vasp_std
 
 jobs:
   submit_command: sbatch
