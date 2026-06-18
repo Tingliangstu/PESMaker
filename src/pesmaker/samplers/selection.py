@@ -56,7 +56,7 @@ def select_sampling_frames(config: PESMakerConfig) -> StageResult:
     output_dir = Path(str(options.get("output_dir", "selected")))
 
     frame_groups = _read_trajectory_frame_groups(pattern)
-    if _separate_trajectories(options) and len(frame_groups) > 1:
+    if _separate_trajectories(options):
         return _select_separate_trajectory_frames(
             config,
             frame_groups,
@@ -151,7 +151,7 @@ def _select_separate_trajectory_frames(
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / "manifest.jsonl"
 
-    print("Separate trajectory selection", flush=True)
+    print("Trajectory selection", flush=True)
     print("Mode             : separate_trajectories")
     print(f"Trajectories     : {len(frame_groups)}")
     print(f"Method           : {_selection_method_label(method)}")
@@ -161,17 +161,19 @@ def _select_separate_trajectory_frames(
     print(f"Output directory : {output_dir}", flush=True)
     print(flush=True)
 
-    files: list[Path] = [manifest_path]
+    files: list[Path] = []
     records: list[dict[str, Any]] = []
     warnings: list[str] = []
+    run_messages: list[str] = []
     used_names: set[str] = set()
+    single_trajectory = len(frame_groups) == 1
     total_selected = 0
     total_frames = 0
     for trajectory_index, (trajectory_path, frames) in enumerate(
         frame_groups, start=1
     ):
         group_name = _trajectory_group_name(trajectory_path, used_names)
-        group_output_dir = output_dir / group_name
+        group_output_dir = output_dir if single_trajectory else output_dir / group_name
         print(
             f"Trajectory       : {trajectory_index}/{len(frame_groups)} {trajectory_path}",
             flush=True,
@@ -198,6 +200,7 @@ def _select_separate_trajectory_frames(
                 source_path=trajectory_path,
                 show_descriptor_header=False,
             )
+        run_messages.append(run.message)
         files.extend(run.files)
         for warning in run.warnings:
             warnings.append(f"{trajectory_path}: {warning}")
@@ -221,7 +224,7 @@ def _select_separate_trajectory_frames(
     _write_manifest(manifest_path, records)
     print(
         (
-            "Separate selection completed: "
+            "Selection completed: "
             f"Selected {total_selected} of {total_frames} frame(s) from "
             f"{len(frame_groups)} trajectory file(s)."
         ),
@@ -230,14 +233,27 @@ def _select_separate_trajectory_frames(
     print(flush=True)
     return StageResult(
         output_dir,
-        tuple(files),
-        (
+        _unique_paths([manifest_path, *files]),
+        run_messages[0]
+        if single_trajectory and run_messages
+        else (
             f"Selected {total_selected} of {total_frames} MD frame(s) from "
-            f"{len(frame_groups)} trajectory file(s) using separate "
+            f"{len(frame_groups)} trajectory file(s) using "
             f"{_selection_method_label(method)} per trajectory"
         ),
         warnings=tuple(warnings),
     )
+
+
+def _unique_paths(paths: list[Path]) -> tuple[Path, ...]:
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        if path in seen:
+            continue
+        unique.append(path)
+        seen.add(path)
+    return tuple(unique)
 
 
 def _selection_method_label(method: str) -> str:
