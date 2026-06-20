@@ -176,6 +176,87 @@ def test_surface_and_defect_variants_are_generated():
     assert [len(variant.atoms) for variant in variants] == [4, 3, 2, 2]
 
 
+def test_line_defects_can_split_rows_by_layer():
+    """Line defects can be limited to one layer before removing a row."""
+    from ase import Atoms
+
+    atoms = Atoms(
+        "Pd8",
+        scaled_positions=[
+            (0.0, 0.0, 0.25),
+            (0.0, 0.5, 0.25),
+            (0.5, 0.0, 0.25),
+            (0.5, 0.5, 0.25),
+            (0.0, 0.0, 0.75),
+            (0.0, 0.5, 0.75),
+            (0.5, 0.0, 0.75),
+            (0.5, 0.5, 0.75),
+        ],
+        cell=[2.0, 2.0, 10.0],
+        pbc=[True, True, False],
+    )
+
+    unsplit = generate_defect_variants(
+        atoms,
+        {
+            "include_pristine": False,
+            "line_defects": {
+                "elements": ["Pd"],
+                "coordinate_axis": 0,
+                "max_count": 1,
+            },
+        },
+    )
+    split = generate_defect_variants(
+        atoms,
+        {
+            "include_pristine": False,
+            "line_defects": {
+                "elements": ["Pd"],
+                "coordinate_axis": 0,
+                "split_by_axis": 2,
+                "max_count": 1,
+            },
+        },
+    )
+
+    assert unsplit[0].name == "line_defect_Pd_const_a_000001"
+    assert "remove atoms [0, 1, 4, 5]" in unsplit[0].description
+    assert len(unsplit[0].atoms) == 4
+    assert split[0].name == "line_defect_Pd_const_a_split_c_000001"
+    assert "split by fractional c coordinate" in split[0].description
+    assert "remove atoms [0, 1]" in split[0].description
+    assert len(split[0].atoms) == 6
+
+
+def test_line_defects_reject_split_axis_matching_line_axis():
+    """The split axis must be different from the fixed line coordinate."""
+    from ase import Atoms
+
+    atoms = Atoms(
+        "Pd2",
+        scaled_positions=[(0.0, 0.0, 0.25), (0.0, 0.5, 0.25)],
+        cell=[2.0, 2.0, 10.0],
+        pbc=[True, True, False],
+    )
+
+    try:
+        generate_defect_variants(
+            atoms,
+            {
+                "line_defects": {
+                    "elements": ["Pd"],
+                    "coordinate_axis": 0,
+                    "split_by_axis": 0,
+                },
+            },
+        )
+    except ValueError as exc:
+        assert "split_by_axis must differ from coordinate_axis" in str(exc)
+    else:
+        raise AssertionError("matching line and split axes should fail")
+
+
 def test_surface_vacuum_replaces_existing_vacuum():
     """Surface vacuum is total empty space, not vacuum added on both sides."""
     from ase import Atoms

@@ -205,12 +205,17 @@ def _line_defects(atoms, settings: Any) -> list[StructureVariant]:
     candidates = _candidate_indices(atoms, options)
     scaled = atoms.get_scaled_positions(wrap=True)
     coordinate_axis = options.get("coordinate_axis")
+    split_axis = _line_split_axis(options)
     if coordinate_axis is None:
         coordinate_axis, rows = _infer_line_rows(scaled, candidates, options)
     else:
         coordinate_axis = int(coordinate_axis)
         if coordinate_axis not in {0, 1, 2}:
             raise ValueError("line_defects.coordinate_axis must be 0, 1, or 2")
+        if split_axis is not None and split_axis == coordinate_axis:
+            raise ValueError(
+                "line_defects.split_by_axis must differ from coordinate_axis"
+            )
         rows = _group_line_rows(scaled, candidates, coordinate_axis, options)
 
     variants: list[StructureVariant] = []
@@ -220,6 +225,7 @@ def _line_defects(atoms, settings: Any) -> list[StructureVariant]:
     else:
         selected_rows = ordered_rows[: options["max_count"]]
     axis_label = _coordinate_axis_label(coordinate_axis)
+    split_label = _split_axis_label(split_axis)
     for serial, row in enumerate(selected_rows, start=1):
         variant = atoms.copy()
         symbols = [variant[index].symbol for index in row]
@@ -227,11 +233,15 @@ def _line_defects(atoms, settings: Any) -> list[StructureVariant]:
             del variant[index]
         variants.append(
             StructureVariant(
-                f"line_defect_{_element_label(symbols)}_{axis_label}_{serial:06d}",
+                (
+                    f"line_defect_{_element_label(symbols)}_{axis_label}"
+                    f"{split_label}_{serial:06d}"
+                ),
                 variant,
                 (
                     f"line defect: fixed fractional "
                     f"{axis_label.removeprefix('const_')} coordinate, "
+                    f"{_split_description(split_axis)}"
                     f"remove atoms {sorted(row)}"
                 ),
             )
@@ -261,11 +271,14 @@ def _infer_line_rows(
     scaled: np.ndarray,
     candidates: list[int],
     options: dict[str, Any],
-) -> tuple[int, dict[int, list[int]]]:
+) -> tuple[int, dict[Any, list[int]]]:
     best_axis = 1
-    best_rows: dict[int, list[int]] = {}
+    best_rows: dict[Any, list[int]] = {}
     best_score = (-1, 0)
+    split_axis = _line_split_axis(options)
     for axis in (0, 1):
+        if axis == split_axis:
+            continue
         rows = _group_line_rows(scaled, candidates, axis, options)
         score = (max((len(row) for row in rows.values()), default=0), -len(rows))
         if score > best_score:
@@ -280,21 +293,70 @@ def _group_line_rows(
     candidates: list[int],
     coordinate_axis: int,
     options: dict[str, Any],
-) -> dict[int, list[int]]:
-    tolerance = options.get("tolerance")
-    tolerance = float(tolerance) if tolerance is not None else _infer_tolerance(
+) -> dict[Any, list[int]]:
+    tolerance = _line_axis_tolerance(
         scaled,
         candidates,
         coordinate_axis,
+        options,
+        option_name="tolerance",
     )
-    if tolerance <= 0:
-        raise ValueError("line_defects.tolerance must be positive")
+    split_axis = _line_split_axis(options)
+    split_tolerance = (
+        _line_axis_tolerance(
+            scaled,
+            candidates,
+            split_axis,
+            options,
+            option_name="split_tolerance",
+        )
+        if split_axis is not None
+        else None
+    )
 
-    rows: dict[int, list[int]] = {}
+    rows: dict[Any, list[int]] = {}
     for index in candidates:
-        row_key = int(round(scaled[index][coordinate_axis] / tolerance))
+        row_key = _axis_row_key(scaled[index][coordinate_axis], tolerance)
+        if split_axis is not None and split_tolerance is not None:
+            row_key = (
+                _axis_row_key(scaled[index][split_axis], split_tolerance),
+                row_key,
+            )
         rows.setdefault(row_key, []).append(index)
     return rows
+
+
+def _line_axis_tolerance(
+    scaled: np.ndarray,
+    candidates: list[int],
+    axis: int,
+    options: dict[str, Any],
+    *,
+    option_name: str,
+) -> float:
+    tolerance = options.get(option_name)
+    tolerance = float(tolerance) if tolerance is not None else _infer_tolerance(
+        scaled,
+        candidates,
+        axis,
+    )
+    if tolerance <= 0:
+        raise ValueError(f"line_defects.{option_name} must be positive")
+    return tolerance
+
+
+def _axis_row_key(value: float, tolerance: float) -> int:
+    return int(round(float(value) / tolerance))
+
+
+def _line_split_axis(options: dict[str, Any]) -> int | None:
+    split_axis = options.get("split_by_axis")
+    if split_axis is None:
+        return None
+    split_axis = int(split_axis)
+    if split_axis not in {0, 1, 2}:
+        raise ValueError("line_defects.split_by_axis must be 0, 1, or 2")
+    return split_axis
 
 
 def _infer_tolerance(
@@ -348,6 +410,18 @@ def _element_label(symbols: list[str] | tuple[str, ...]) -> str:
 
 def _coordinate_axis_label(axis: int) -> str:
     return ("const_a", "const_b", "const_c")[axis]
+
+
+def _split_axis_label(axis: int | None) -> str:
+    if axis is None:
+        return ""
+    return f"_split_{'abc'[axis]}"
+
+
+def _split_description(axis: int | None) -> str:
+    if axis is None:
+        return ""
+    return f"split by fractional {'abc'[axis]} coordinate, "
 
 
 def _sample_items(items: list[Any], options: dict[str, Any]) -> list[Any]:
