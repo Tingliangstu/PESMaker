@@ -138,11 +138,12 @@ def test_md_sampling_alias_selects_sampling_section():
     assert config.sampling.options["selection"]["max_count"] == 200
 
 
-def test_collecting_alias_selects_labeling_section():
-    """Collect-only configs can use a clearer `collecting` section name."""
+def test_collecting_section_is_independent_from_labeling():
+    """Collect-only configs should use the dedicated `collecting` section."""
     config = PESMakerConfig.from_mapping(
         {
             "project": "demo",
+            "labeling": {"output_dir": "run_vasp_scf"},
             "collecting": {
                 "dataset_path": "train.xyz",
                 "test_data_frames": 0,
@@ -151,25 +152,11 @@ def test_collecting_alias_selects_labeling_section():
     )
 
     assert config.labeling_configured is True
-    assert config.labeling.engine == "vasp"
-    assert config.labeling.options["dataset_path"] == "train.xyz"
-    assert config.labeling.options["test_data_frames"] == 0
-
-
-def test_collecting_and_labeling_alias_conflicts_are_rejected():
-    """Users should choose one collection/labeling section name."""
-    try:
-        PESMakerConfig.from_mapping(
-            {
-                "project": "demo",
-                "labeling": {"dataset_path": "train.xyz"},
-                "collecting": {"dataset_path": "other.xyz"},
-            }
-        )
-    except ValueError as exc:
-        assert "use only one of these config sections" in str(exc)
-    else:
-        raise AssertionError("duplicate labeling section aliases should fail")
+    assert config.collecting_configured is True
+    assert config.labeling.options["output_dir"] == "run_vasp_scf"
+    assert config.collecting.engine == "vasp"
+    assert config.collecting.options["dataset_path"] == "train.xyz"
+    assert config.collecting.options["test_data_frames"] == 0
 
 
 def test_sampling_alias_conflicts_are_rejected():
@@ -376,10 +363,12 @@ def test_config_tracks_optional_workflow_sections():
 
     assert generation_only.sampling_configured is False
     assert generation_only.labeling_configured is False
+    assert generation_only.collecting_configured is False
     assert generation_only.training_configured is False
     assert generation_only.labeling.engine == "vasp"
     assert full.sampling_configured is True
     assert full.labeling_configured is True
+    assert full.collecting_configured is False
     assert full.training_configured is True
 
 

@@ -58,8 +58,8 @@ def test_collect_writes_summary_grouped_by_sub_yaml_child_dir(tmp_path, monkeypa
 
     config_path = tmp_path / "collect.yaml"
     config_path.write_text(
-        """project: collect_stats
-labeling:
+"""project: collect_stats
+collecting:
   dataset_path: train.xyz
   summary_path: stats.txt
 """,
@@ -115,8 +115,8 @@ def test_collect_can_skip_nonconverged_outcars_and_write_test_split(
 
     config_path = tmp_path / "collect.yaml"
     config_path.write_text(
-        """project: collect_options
-labeling:
+"""project: collect_options
+collecting:
   outcar_pattern: labeling/**/OUTCAR
   dataset_path: train.xyz
   test_dataset_path: test.xyz

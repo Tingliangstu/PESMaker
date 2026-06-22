@@ -23,9 +23,7 @@ project: collect_initial_structure
 
 By default, `collect` recursively finds every `OUTCAR` below the directory where
 you run the YAML. Use `outcar_pattern` or `outcar_patterns` only when you want
-to restrict the search. `collecting` is the recommended section name for
-collect-only configs; the older `labeling` section name is still accepted for
-backward compatibility.
+to restrict the search.
 
 For example:
 

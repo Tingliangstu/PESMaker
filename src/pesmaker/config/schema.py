@@ -274,12 +274,14 @@ class PESMakerConfig:
         generation: Supercell and perturbation settings.
         sampling: Optional sampling engine configuration.
         labeling: DFT labeling engine configuration.
+        collecting: Labeled dataset collection configuration.
         dataset: Dataset export configuration.
         training: Potential training engine configuration.
         jobs: Cluster submission and machine-specific template options.
         workflow: Optional advanced smart-next override.
         sampling_configured: Whether the user wrote a `sampling` section.
         labeling_configured: Whether the user wrote a `labeling` section.
+        collecting_configured: Whether the user wrote a `collecting` section.
         training_configured: Whether the user wrote a `training` section.
     """
 
@@ -292,6 +294,9 @@ class PESMakerConfig:
     labeling: EngineConfig = field(
         default_factory=lambda: EngineConfig(engine="vasp", options={})
     )
+    collecting: EngineConfig = field(
+        default_factory=lambda: EngineConfig(engine="vasp", options={})
+    )
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
     training: EngineConfig = field(
         default_factory=lambda: EngineConfig(engine="nep", options={})
@@ -302,6 +307,7 @@ class PESMakerConfig:
     workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
     sampling_configured: bool = False
     labeling_configured: bool = False
+    collecting_configured: bool = False
     training_configured: bool = False
 
     @classmethod
@@ -327,11 +333,8 @@ class PESMakerConfig:
             "sampling",
             aliases=("MD_sampling", "md_sampling"),
         )
-        labeling = _optional_alias_mapping(
-            data,
-            "labeling",
-            aliases=("collecting",),
-        )
+        labeling = _optional_mapping(data.get("labeling"), "labeling")
+        collecting = _optional_mapping(data.get("collecting"), "collecting")
         training = _optional_mapping(data.get("training"), "training")
 
         return cls(
@@ -346,6 +349,10 @@ class PESMakerConfig:
             ),
             labeling=EngineConfig.from_mapping(
                 labeling,
+                default_engine="vasp",
+            ),
+            collecting=EngineConfig.from_mapping(
+                collecting,
                 default_engine="vasp",
             ),
             dataset=DatasetConfig.from_mapping(
@@ -364,6 +371,7 @@ class PESMakerConfig:
             workflow=WorkflowConfig.from_value(data.get("workflow")),
             sampling_configured=sampling is not None,
             labeling_configured=labeling is not None,
+            collecting_configured=collecting is not None,
             training_configured=training is not None,
         )
 

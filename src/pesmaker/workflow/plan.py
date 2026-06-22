@@ -57,17 +57,19 @@ def training_submit_path(config: PESMakerConfig) -> Path:
 def dataset_path(config: PESMakerConfig) -> Path:
     output_dir = _section_output_dir(config, config.dataset.__dict__, "dataset")
     return Path(
-        str(config.labeling.options.get("dataset_path", output_dir / "train.xyz"))
+        str(config.collecting.options.get("dataset_path", output_dir / "train.xyz"))
     )
 
 
 def outcar_pattern(config: PESMakerConfig) -> str:
+    if "outcar_pattern" in config.collecting.options:
+        return str(config.collecting.options["outcar_pattern"])
     default_pattern = (
         _section_output_dir(config, config.labeling.options, "labeling")
         / "**"
         / "OUTCAR"
     )
-    return str(config.labeling.options.get("outcar_pattern", default_pattern))
+    return str(default_pattern)
 
 
 def matched_outcars(config: PESMakerConfig) -> list[Path]:

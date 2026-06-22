@@ -52,16 +52,17 @@ class LabeledFrame:
 
 def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
     """Collect completed VASP SCF calculations into `train.xyz`."""
+    options = config.collecting.options
     output_dir = _section_output_dir(config, config.dataset.__dict__, "dataset")
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = Path(
-        str(config.labeling.options.get("dataset_path", output_dir / "train.xyz"))
+        str(options.get("dataset_path", output_dir / "train.xyz"))
     )
-    outputs = _matched_outcars(config.labeling.options)
+    outputs = _matched_outcars(options)
     if not outputs:
         raise ValueError(
             "no VASP outputs matched pattern(s): "
-            f"{', '.join(_outcar_patterns(config.labeling.options))}"
+            f"{', '.join(_outcar_patterns(options))}"
         )
 
     frames: list[LabeledFrame] = []
@@ -76,7 +77,7 @@ def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
             warnings.append(f"Skipped nonconverged VASP OUTCAR: {output}")
             continue
         try:
-            frame = _read_vasp_labeled_frame(output, config.labeling.options)
+            frame = _read_vasp_labeled_frame(output, options)
         except ValueError as exc:
             unreadable_records.append(output)
             warnings.append(f"Skipped unreadable VASP OUTCAR: {output} ({exc})")
@@ -86,17 +87,17 @@ def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
     if not frames:
         raise ValueError("no converged VASP frames were available for collection")
 
-    train_frames, test_frames = _split_test_frames(frames, config.labeling.options)
-    _write_labeled_xyz(output_path, train_frames, config.labeling.options)
+    train_frames, test_frames = _split_test_frames(frames, options)
+    _write_labeled_xyz(output_path, train_frames, options)
     files = [output_path]
-    test_path = _test_dataset_path(config.labeling.options)
+    test_path = _test_dataset_path(options)
     if test_frames:
-        _write_labeled_xyz(test_path, test_frames, config.labeling.options)
+        _write_labeled_xyz(test_path, test_frames, options)
         files.append(test_path)
 
     summary_path = Path(
         str(
-            config.labeling.options.get(
+            options.get(
                 "summary_path",
                 output_path.with_name(f"{output_path.stem}_collection_summary.txt"),
             )
@@ -360,33 +361,33 @@ def _labeled_comment_line(
 
 def _check_scf_convergence(config: PESMakerConfig) -> bool:
     """Return whether nonconverged VASP OUTCAR files should be skipped."""
-    value = config.labeling.options.get(
+    value = config.collecting.options.get(
         "check_scf_convergence",
         config.jobs.options.get("check_scf_convergence", True),
     )
     if not isinstance(value, bool):
-        raise ValueError("labeling.check_scf_convergence must be true or false")
+        raise ValueError("collecting.check_scf_convergence must be true or false")
     return value
 
 
 def _include_virial(options: dict[str, Any]) -> bool:
     value = options.get("include_virial", True)
     if not isinstance(value, bool):
-        raise ValueError("labeling.include_virial must be true or false")
+        raise ValueError("collecting.include_virial must be true or false")
     return value
 
 
 def _include_config_type(options: dict[str, Any]) -> bool:
     value = options.get("config_type", True)
     if not isinstance(value, bool):
-        raise ValueError("labeling.config_type must be true or false")
+        raise ValueError("collecting.config_type must be true or false")
     return value
 
 
 def _include_weight(options: dict[str, Any]) -> bool:
     value = options.get("include_weight", False)
     if not isinstance(value, bool):
-        raise ValueError("labeling.include_weight must be true or false")
+        raise ValueError("collecting.include_weight must be true or false")
     return value
 
 
@@ -451,7 +452,7 @@ def _split_test_frames(
         return frames, []
     if test_count >= len(frames):
         raise ValueError(
-            "labeling.test_data_frames must be smaller than the collected frame count"
+            "collecting.test_data_frames must be smaller than the collected frame count"
         )
     seed = int(options.get("test_seed", 1000))
     test_indices = set(random.Random(seed).sample(range(len(frames)), test_count))
@@ -465,9 +466,11 @@ def _split_test_frames(
 def _test_data_frames(options: dict[str, Any]) -> int:
     value = options.get("test_data_frames", 0)
     if not isinstance(value, int):
-        raise ValueError("labeling.test_data_frames must be an integer")
+        raise ValueError("collecting.test_data_frames must be an integer")
     if value < 0:
-        raise ValueError("labeling.test_data_frames must be greater than or equal to 0")
+        raise ValueError(
+            "collecting.test_data_frames must be greater than or equal to 0"
+        )
     return value
 
 

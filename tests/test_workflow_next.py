@@ -559,6 +559,7 @@ def test_next_continues_from_finished_scf_to_training_preview(
         """project: smooth_next
 labeling:
   output_dir: labeling
+collecting:
   dataset_path: train.xyz
 training:
   model: nep
