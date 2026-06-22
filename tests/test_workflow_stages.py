@@ -27,6 +27,7 @@ import numpy as np
 
 from pesmaker.cli import _print_submit_result, main
 from pesmaker.config.io import load_config
+from pesmaker.dataset.extxyz import collect_labeled_dataset
 from pesmaker.workflow.stages import (
     RECOMMENDED_GW_POTCARS,
     RECOMMENDED_PBE_POTCARS,
@@ -35,6 +36,134 @@ from pesmaker.workflow.stages import (
     _vasp_parallel_factors,
     submit_jobs,
 )
+
+
+def test_collect_writes_summary_grouped_by_sub_yaml_child_dir(tmp_path, monkeypatch):
+    """Collection should report frame counts for each sub.yaml child tree."""
+    root_a = tmp_path / "1.Te" / "1.Material_project_structure"
+    root_b = tmp_path / "2.Pb" / "3.Pd-bulk_MD"
+    for root in (root_a, root_b):
+        root.mkdir(parents=True)
+        (root / "sub.yaml").write_text("project: existing\n", encoding="utf-8")
+
+    outcars = [
+        root_a / "run_vasp_scf" / "mp-1" / "calc_000000" / "OUTCAR",
+        root_a / "run_vasp_scf" / "mp-2" / "calc_000001" / "OUTCAR",
+        root_b / "run_vasp_scf" / "bulk" / "calc_000000" / "OUTCAR",
+    ]
+    for outcar in outcars:
+        outcar.parent.mkdir(parents=True)
+        _write_fake_outcar(outcar)
+    monkeypatch.chdir(tmp_path)
+
+    config_path = tmp_path / "collect.yaml"
+    config_path.write_text(
+        """project: collect_stats
+labeling:
+  dataset_path: train.xyz
+  summary_path: stats.tsv
+""",
+        encoding="utf-8",
+    )
+
+    result = collect_labeled_dataset(load_config(config_path))
+    summary = (tmp_path / "stats.tsv").read_text(encoding="utf-8")
+
+    assert result.files == (Path("train.xyz"), Path("stats.tsv"))
+    train_text = (tmp_path / "train.xyz").read_text(encoding="utf-8")
+    assert 'Virial="' in train_text
+    assert "Config_type=1.Te_1.Material_project_structure_mp-1" in train_text
+    assert "Config_type=1.Te_1.Material_project_structure_mp-2" in train_text
+    assert "Structures:" in result.message
+    assert "1.Te_1.Material_project_structure_mp-1" in result.message
+    assert "1.Te_1.Material_project_structure_mp-2" in result.message
+    assert "2.Pb_3.Pd-bulk_MD_bulk" in result.message
+    assert "Total structures : 3" in result.message
+    assert "Train structures : 3" in result.message
+    assert "VDW/MBD detected : yes" in result.message
+    assert "3/3 OUTCAR files use the extra VDW/MBD virial line" in result.message
+    root_a_label = root_a.relative_to(tmp_path).as_posix()
+    root_b_label = root_b.relative_to(tmp_path).as_posix()
+    assert f"{root_a_label}\trun_vasp_scf\t2\t2" in summary
+    assert f"{root_b_label}\trun_vasp_scf\t1\t1" in summary
+
+
+def test_collect_can_skip_nonconverged_outcars_and_write_test_split(
+    tmp_path,
+    monkeypatch,
+):
+    """Collection options should mirror common vasp2nep data-quality toggles."""
+    converged_a = tmp_path / "labeling" / "calc_000000" / "OUTCAR"
+    converged_b = tmp_path / "labeling" / "calc_000001" / "OUTCAR"
+    nonconverged = tmp_path / "labeling" / "calc_000002" / "OUTCAR"
+    for outcar in (converged_a, converged_b, nonconverged):
+        outcar.parent.mkdir(parents=True)
+    _write_fake_outcar(converged_a, energy=-1.0)
+    _write_fake_outcar(converged_b, energy=-2.0)
+    nonconverged.write_text(
+        "The electronic self-consistency was not achieved in\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    config_path = tmp_path / "collect.yaml"
+    config_path.write_text(
+        """project: collect_options
+labeling:
+  outcar_pattern: labeling/**/OUTCAR
+  dataset_path: train.xyz
+  test_dataset_path: test.xyz
+  test_data_frames: 1
+  test_seed: 1
+  include_virial: false
+  check_scf_convergence: true
+""",
+        encoding="utf-8",
+    )
+
+    result = collect_labeled_dataset(load_config(config_path))
+    train_text = (tmp_path / "train.xyz").read_text(encoding="utf-8")
+    test_text = (tmp_path / "test.xyz").read_text(encoding="utf-8")
+
+    assert train_text.count("\nLattice=") == 1
+    assert test_text.count("\nLattice=") == 1
+    assert "Virial=" not in train_text
+    assert "Virial=" not in test_text
+    assert "Total structures : 2" in result.message
+    assert "Train structures : 1" in result.message
+    assert "Test structures  : 1" in result.message
+    assert "Skipped OUTCAR   : 1" in result.message
+    assert len(result.warnings) == 1
+    assert "calc_000002" in result.warnings[0]
+
+
+def _write_fake_outcar(path: Path, *, energy: float = -1.23456789) -> None:
+    """Write the minimal OUTCAR fields used by the labeled-data collector."""
+    virial_block = "\n".join(
+        ["FORCE on cell =-STRESS in cart. coord.  units (eV):"]
+        + [f"filler {index}" for index in range(13)]
+        + ["Total    1.0 2.0 3.0 4.0 5.0 6.0"]
+    )
+    path.write_text(
+        f"""TITEL  = PAW_PBE Te 08Apr2002
+ions per type = 1
+VOLUME and BASIS-vectors are now :
+filler
+filler
+filler
+filler
+   3.000000000 0.000000000 0.000000000
+   0.000000000 3.000000000 0.000000000
+   0.000000000 0.000000000 20.000000000
+{virial_block}
+TOTAL-FORCE (eV/Angst)
+ -------------------------------------------------------------------
+   0.00000000 0.00000000 0.00000000 0.10000000 0.20000000 0.30000000
+free  energy   TOTEN  =      {energy:.8f} eV
+General timing and accounting informations for this job:
+""",
+        encoding="utf-8",
+    )
 
 
 def test_sampling_labeling_and_training_setup_write_stage_files(tmp_path):
