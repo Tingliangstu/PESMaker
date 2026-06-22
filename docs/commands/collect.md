@@ -35,6 +35,15 @@ pesmaker validate collect.yaml
 pesmaker next collect.yaml
 ```
 
+For large folders, collection may take a while. Before parsing starts, PESMaker
+prints:
+
+```text
+Starting collection:
+  - PESMaker is scanning OUTCAR files and parsing VASP results.
+  - For many calculations this can take several minutes. Please wait.
+```
+
 This writes:
 
 ```text

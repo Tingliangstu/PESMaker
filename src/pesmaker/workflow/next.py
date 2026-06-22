@@ -317,6 +317,7 @@ def determine_next_step(
             return NextStep(
                 action="collect",
                 kind="run",
+                stage="collect",
                 message="Collect finished SCF outputs into the training dataset.",
             )
 
@@ -324,6 +325,7 @@ def determine_next_step(
         return NextStep(
             action="collect",
             kind="run",
+            stage="collect",
             message="Collect finished VASP OUTCAR files into the training dataset.",
         )
 

@@ -668,10 +668,14 @@ collecting:
     output = capsys.readouterr().out
 
     assert (tmp_path / "train.xyz").exists()
+    assert "Starting collection:" in output
+    assert "PESMaker is scanning OUTCAR files and parsing VASP results." in output
+    assert "Please wait." in output
     assert "Flow             : dataset-collect" in output
     assert "Current          : complete" in output
     assert "Work done:" in output
     assert "Collected OUTCAR files." in output
+    assert output.index("Starting collection:") < output.index("Work done:")
 
 
 def test_next_reports_complete_without_running_when_no_task_exists(

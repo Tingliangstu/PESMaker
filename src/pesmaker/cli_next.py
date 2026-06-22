@@ -79,6 +79,19 @@ def print_next_status(result: NextResult, *, config_path: Path) -> None:
     print_next_diagnostics(result, config_path=config_path)
 
 
+def print_next_starting(result: NextResult) -> None:
+    """Print an immediate progress message before a long local `next` stage."""
+    event = result.events[0] if result.events else None
+    if _next_action_kind(event) != "run":
+        return
+    if _event_stage(event) != "collect":
+        return
+    print("Starting collection:")
+    print("  - PESMaker is scanning OUTCAR files and parsing VASP results.")
+    print("  - For many calculations this can take several minutes. Please wait.")
+    print(flush=True)
+
+
 def print_next_verbose(
     preflight: NextResult,
     result: NextResult,
