@@ -16,21 +16,23 @@ pesmaker collect run.yaml
 ```yaml
 project: collect_initial_structure
 
-labeling:
+ collecting:
   dataset_path: train.xyz
   test_data_frames: 0
 ```
 
 By default, `collect` recursively finds every `OUTCAR` below the directory where
 you run the YAML. Use `outcar_pattern` or `outcar_patterns` only when you want
-to restrict the search.
+to restrict the search. `collecting` is the recommended section name for
+collect-only configs; the older `labeling` section name is still accepted for
+backward compatibility.
 
 For example:
 
 ```yaml
 project: collect_existing_scf
 
-labeling:
+collecting:
   outcar_patterns:
     - "1.Te/**/run_vasp_scf/**/OUTCAR"
     - "2.Pb/**/run_vasp_scf/**/OUTCAR"
@@ -115,7 +117,7 @@ Nonconverged OUTCAR skipped : 0
 or the path set by:
 
 ```yaml
-labeling:
+collecting:
   dataset_path: path/to/train.xyz
 ```
 

@@ -138,6 +138,40 @@ def test_md_sampling_alias_selects_sampling_section():
     assert config.sampling.options["selection"]["max_count"] == 200
 
 
+def test_collecting_alias_selects_labeling_section():
+    """Collect-only configs can use a clearer `collecting` section name."""
+    config = PESMakerConfig.from_mapping(
+        {
+            "project": "demo",
+            "collecting": {
+                "dataset_path": "train.xyz",
+                "test_data_frames": 0,
+            },
+        }
+    )
+
+    assert config.labeling_configured is True
+    assert config.labeling.engine == "vasp"
+    assert config.labeling.options["dataset_path"] == "train.xyz"
+    assert config.labeling.options["test_data_frames"] == 0
+
+
+def test_collecting_and_labeling_alias_conflicts_are_rejected():
+    """Users should choose one collection/labeling section name."""
+    try:
+        PESMakerConfig.from_mapping(
+            {
+                "project": "demo",
+                "labeling": {"dataset_path": "train.xyz"},
+                "collecting": {"dataset_path": "other.xyz"},
+            }
+        )
+    except ValueError as exc:
+        assert "use only one of these config sections" in str(exc)
+    else:
+        raise AssertionError("duplicate labeling section aliases should fail")
+
+
 def test_sampling_alias_conflicts_are_rejected():
     """Configs should not define the same stage with two section names."""
     try:

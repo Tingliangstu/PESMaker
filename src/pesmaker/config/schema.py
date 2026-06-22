@@ -327,7 +327,11 @@ class PESMakerConfig:
             "sampling",
             aliases=("MD_sampling", "md_sampling"),
         )
-        labeling = _optional_mapping(data.get("labeling"), "labeling")
+        labeling = _optional_alias_mapping(
+            data,
+            "labeling",
+            aliases=("collecting",),
+        )
         training = _optional_mapping(data.get("training"), "training")
 
         return cls(

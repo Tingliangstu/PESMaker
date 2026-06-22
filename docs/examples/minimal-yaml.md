@@ -272,7 +272,7 @@ Use this when VASP calculations are already finished.
 ```yaml
 project: collect_initial_structure
 
-labeling:
+collecting:
   dataset_path: train.xyz
   test_data_frames: 0
 ```
@@ -283,7 +283,7 @@ Use explicit patterns only when you want to restrict the collection:
 ```yaml
 project: collect_existing
 
-labeling:
+collecting:
   outcar_patterns:
     - "1.Te/**/run_vasp_scf/**/OUTCAR"
     - "2.Pb/**/run_vasp_scf/**/OUTCAR"
