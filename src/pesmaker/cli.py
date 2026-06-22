@@ -412,7 +412,8 @@ def _print_generate_summary(result: GenerateResult) -> None:
 def _print_stage_result(result: StageResult) -> None:
     """Print a concise setup or collection result summary."""
     print(result.message)
-    print(f"Output directory : {result.output_dir}")
+    if result.output_dir != Path("."):
+        print(f"Output directory : {result.output_dir}")
     print(f"Files written    : {len(result.files)}")
     print()
     if result.warnings:

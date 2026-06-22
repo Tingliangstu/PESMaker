@@ -124,7 +124,14 @@ def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
 
         if step.action == "collect":
             result = collect_labeled_dataset(config)
-            events.append(NextEvent(kind="run", message=result.message, result=result))
+            events.append(
+                NextEvent(
+                    kind="run",
+                    message=result.message,
+                    result=result,
+                    stage=step.stage,
+                )
+            )
             continue
 
         if step.action == "setup_training":
@@ -344,6 +351,14 @@ def determine_next_step(
                 command=submit_command_text(config_path, "training"),
                 message="Preview training job submission.",
             )
+
+    if _collecting_enabled(config) and dataset_path(config).exists():
+        return NextStep(
+            action="training_config_needed",
+            kind="training-config-needed",
+            stage="training",
+            message="The dataset is ready; configure model training next.",
+        )
 
     return NextStep(
         action="complete",

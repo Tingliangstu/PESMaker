@@ -672,9 +672,11 @@ collecting:
     assert "PESMaker is scanning OUTCAR files and parsing VASP results." in output
     assert "Please wait." in output
     assert "Flow             : dataset-collect" in output
-    assert "Current          : complete" in output
+    assert "Current          : waiting for training settings" in output
     assert "Work done:" in output
     assert "Collected OUTCAR files." in output
+    assert "The dataset is ready; configure model training next." in output
+    assert "Add a `training` section to the YAML." in output
     assert output.index("Starting collection:") < output.index("Work done:")
 
 

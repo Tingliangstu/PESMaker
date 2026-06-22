@@ -28,9 +28,11 @@ from typing import Any
 
 import numpy as np
 
-from pesmaker.artifacts import _section_output_dir
 from pesmaker.config.schema import PESMakerConfig
-from pesmaker.jobs.submit import VASP_SCF_NOT_CONVERGED_MARKER
+from pesmaker.jobs.submit import (
+    VASP_COMPLETION_MARKER,
+    VASP_SCF_NOT_CONVERGED_MARKER,
+)
 from pesmaker.results import StageResult
 
 
@@ -53,11 +55,8 @@ class LabeledFrame:
 def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
     """Collect completed VASP SCF calculations into `train.xyz`."""
     options = config.collecting.options
-    output_dir = _section_output_dir(config, config.dataset.__dict__, "dataset")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = Path(
-        str(options.get("dataset_path", output_dir / "train.xyz"))
-    )
+    output_path = Path(str(options.get("dataset_path", "train.xyz")))
+    output_dir = output_path.parent
     outputs = _matched_outcars(options)
     if not outputs:
         raise ValueError(
@@ -67,14 +66,20 @@ def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
 
     frames: list[LabeledFrame] = []
     collection_records: list[tuple[Path, int]] = []
+    incomplete_records: list[Path] = []
     nonconverged_records: list[Path] = []
     unreadable_records: list[Path] = []
     warnings: list[str] = []
     check_scf_convergence = _check_scf_convergence(config)
+    check_vasp_completion = _check_vasp_completion(config)
     for output in outputs:
         if check_scf_convergence and _outcar_is_nonconverged(output):
             nonconverged_records.append(output)
             warnings.append(f"Skipped nonconverged VASP OUTCAR: {output}")
+            continue
+        if check_vasp_completion and not _outcar_is_complete(output):
+            incomplete_records.append(output)
+            warnings.append(f"Skipped incomplete VASP OUTCAR: {output}")
             continue
         try:
             frame = _read_vasp_labeled_frame(output, options)
@@ -106,6 +111,7 @@ def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
     _write_collection_summary(
         summary_path,
         collected_records=collection_records,
+        incomplete_records=incomplete_records,
         nonconverged_records=nonconverged_records,
         unreadable_records=unreadable_records,
         matched_count=len(outputs),
@@ -120,9 +126,12 @@ def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
             test_path=test_path,
             test_count=len(test_frames),
             summary_path=summary_path,
+            source_counts=_source_counts(collection_records),
+            matched_count=len(outputs),
+            collected_count=len(collection_records),
+            incomplete_count=len(incomplete_records),
             nonconverged_count=len(nonconverged_records),
             unreadable_count=len(unreadable_records),
-            config_type_counts=_config_type_counts(frames),
             virial_offset_counts=_virial_offset_counts(frames),
         ),
         warnings=tuple(warnings),
@@ -370,6 +379,14 @@ def _check_scf_convergence(config: PESMakerConfig) -> bool:
     return value
 
 
+def _check_vasp_completion(config: PESMakerConfig) -> bool:
+    """Return whether VASP normal termination is required for collection."""
+    value = config.collecting.options.get("check_vasp_completion", True)
+    if not isinstance(value, bool):
+        raise ValueError("collecting.check_vasp_completion must be true or false")
+    return value
+
+
 def _include_virial(options: dict[str, Any]) -> bool:
     value = options.get("include_virial", True)
     if not isinstance(value, bool):
@@ -401,6 +418,14 @@ def _outcar_is_nonconverged(path: Path) -> bool:
             return any(VASP_SCF_NOT_CONVERGED_MARKER in line for line in handle)
     except OSError:
         return True
+
+
+def _outcar_is_complete(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return any(VASP_COMPLETION_MARKER in line for line in handle)
+    except OSError:
+        return False
 
 
 def _config_type(path: Path, options: dict[str, Any]) -> str:
@@ -487,46 +512,46 @@ def _collection_message(
     test_path: Path,
     test_count: int,
     summary_path: Path,
+    source_counts: dict[str, dict[str, int]],
+    matched_count: int,
+    collected_count: int,
+    incomplete_count: int,
     nonconverged_count: int,
     unreadable_count: int,
-    config_type_counts: dict[str, int],
     virial_offset_counts: dict[int, int],
 ) -> str:
     total_count = train_count + test_count
     lines = [
         "Labeled dataset collection complete.",
         "",
-        "Structures:",
+        "Totals:",
+        f"  OUTCAR matched       : {matched_count}",
+        f"  OUTCAR collected     : {collected_count}",
+        f"  Structures written   : {total_count}",
+        f"  Incomplete skipped   : {incomplete_count}",
+        f"  Nonconverged skipped : {nonconverged_count}",
+        f"  Unreadable skipped   : {unreadable_count}",
+        "",
+        "Datasets:",
+        f"  Train : {train_path} ({train_count} structures)",
     ]
-    label_width = max(
-        [len("Config_type"), *(len(label) for label in config_type_counts)]
-    )
-    lines.append(f"  {'Config_type'.ljust(label_width)}  Frames")
-    lines.append(f"  {'-' * label_width}  ------")
-    for label, count in sorted(config_type_counts.items()):
-        lines.append(f"  {label.ljust(label_width)}  {count}")
+    if test_count:
+        lines.append(f"  Test  : {test_path} ({test_count} structures)")
+    else:
+        lines.append("  Test  : not written (test_data_frames = 0)")
     lines.extend(
         [
             "",
-            f"Total structures : {total_count}",
-            f"Train structures : {train_count}",
-            f"Test structures  : {test_count}",
-            f"Train dataset    : {train_path}",
+            f"Summary file : {summary_path}",
+            "",
+            "Sources:",
+            *_format_source_overview(source_counts),
         ]
     )
-    if test_count:
-        lines.append(f"Test dataset     : {test_path}")
-    lines.append(f"Summary          : {summary_path}")
     if virial_offset_counts:
+        lines.append("")
         lines.append(_vdw_summary_line(virial_offset_counts))
-    lines.append(f"Nonconverged OUTCAR skipped : {nonconverged_count}")
-    if unreadable_count:
-        lines.append(f"Unreadable OUTCAR skipped   : {unreadable_count}")
     return "\n".join(lines)
-
-
-def _config_type_counts(frames: list[LabeledFrame]) -> dict[str, int]:
-    return dict(Counter(frame.config_type for frame in frames))
 
 
 def _virial_offset_counts(frames: list[LabeledFrame]) -> dict[int, int]:
@@ -546,27 +571,27 @@ def _vdw_summary_line(counts: dict[int, int]) -> str:
     vdw = counts.get(14, 0)
     unknown = total - standard - vdw
     if total == 0:
-        return "VDW/MBD detected : not checked (no virial blocks parsed)"
+        return "Van der Waals correction : not checked (no virial blocks parsed)"
     if vdw == total:
         return (
-            "VDW/MBD detected : yes "
-            f"({vdw}/{total} OUTCAR files use the extra VDW/MBD virial line)"
+            "Van der Waals correction : detected "
+            f"({vdw}/{total} parsed OUTCAR virial blocks include VDW/MBD terms)"
         )
     if standard == total:
         return (
-            "VDW/MBD detected : no "
-            f"({standard}/{total} OUTCAR files use the standard virial block)"
+            "Van der Waals correction : not detected "
+            f"({standard}/{total} parsed OUTCAR virial blocks are standard)"
         )
     if unknown:
         return (
-            "VDW/MBD detected : unknown "
-            f"({unknown}/{total} OUTCAR files use a non-standard virial block; "
-            f"{vdw} look VDW/MBD, {standard} look standard)"
+            "Van der Waals correction : uncertain "
+            f"({unknown}/{total} parsed OUTCAR virial blocks are non-standard; "
+            f"{vdw} include VDW/MBD terms, {standard} are standard)"
         )
     return (
-        "VDW/MBD detected : mixed "
-        f"({vdw}/{total} OUTCAR files look VDW/MBD, "
-        f"{standard}/{total} look standard; check INCAR consistency)"
+        "Van der Waals correction : mixed "
+        f"({vdw}/{total} parsed OUTCAR virial blocks include VDW/MBD terms, "
+        f"{standard}/{total} are standard; check INCAR consistency)"
     )
 
 
@@ -574,12 +599,14 @@ def _write_collection_summary(
     path: Path,
     *,
     collected_records: list[tuple[Path, int]],
+    incomplete_records: list[Path],
     nonconverged_records: list[Path],
     unreadable_records: list[Path],
     matched_count: int,
 ) -> None:
     """Write a human-readable collection report."""
     collected_grouped = _group_collected_records(collected_records)
+    incomplete_grouped = _group_path_records(incomplete_records)
     nonconverged_grouped = _group_path_records(nonconverged_records)
     unreadable_grouped = _group_path_records(unreadable_records)
     collected_count = sum(counts["outcars"] for counts in collected_grouped.values())
@@ -592,12 +619,21 @@ def _write_collection_summary(
         f"  OUTCAR files matched          : {matched_count}",
         f"  OUTCAR files collected        : {collected_count}",
         f"  Structures written            : {frame_count}",
+        f"  Incomplete OUTCAR skipped     : {len(incomplete_records)}",
         f"  Nonconverged OUTCAR skipped   : {len(nonconverged_records)}",
         f"  Unreadable OUTCAR skipped     : {len(unreadable_records)}",
         "",
         "Collected structures by source",
     ]
     lines.extend(_format_grouped_counts(collected_grouped, include_frames=True))
+    if incomplete_records:
+        lines.extend(
+            [
+                "",
+                "Incomplete OUTCAR by source",
+                *_format_grouped_counts(incomplete_grouped, include_frames=False),
+            ]
+        )
     if nonconverged_records:
         lines.extend(
             [
@@ -621,47 +657,73 @@ def _write_collection_summary(
 
 def _group_collected_records(
     records: list[tuple[Path, int]],
-) -> dict[tuple[str, str], dict[str, int]]:
-    grouped: dict[tuple[str, str], dict[str, int]] = {}
+) -> dict[str, dict[str, int]]:
+    grouped: dict[str, dict[str, int]] = {}
     for outcar, frame_count in records:
-        sub_yaml_dir = _nearest_sub_yaml_dir(outcar)
-        if sub_yaml_dir is None:
-            sub_yaml_label = "<no-sub-yaml>"
-            child_label = outcar.parent.as_posix()
-        else:
-            sub_yaml_label = sub_yaml_dir.as_posix()
-            child_label = _child_dir_under(sub_yaml_dir, outcar)
-
-        key = (sub_yaml_label, child_label)
+        key = _source_label(outcar)
         item = grouped.setdefault(key, {"outcars": 0, "frames": 0})
         item["outcars"] += 1
         item["frames"] += frame_count
     return grouped
 
 
-def _group_path_records(paths: list[Path]) -> dict[tuple[str, str], dict[str, int]]:
+def _group_path_records(paths: list[Path]) -> dict[str, dict[str, int]]:
     return _group_collected_records([(path, 0) for path in paths])
 
 
 def _format_grouped_counts(
-    grouped: dict[tuple[str, str], dict[str, int]],
+    grouped: dict[str, dict[str, int]],
     *,
     include_frames: bool,
 ) -> list[str]:
     if not grouped:
         return ["  none"]
-    lines = []
-    for (sub_yaml_dir, child_dir), counts in sorted(grouped.items()):
-        lines.extend(
-            [
-                f"  - sub.yaml directory : {sub_yaml_dir}",
-                f"    child directory    : {child_dir}",
-                f"    OUTCAR files       : {counts['outcars']}",
-            ]
+    name_width = max(len("source"), *(len(name) for name in grouped))
+    lines = [f"  {'source'.ljust(name_width)}  OUTCARs  structures"]
+    lines.append(f"  {'-' * name_width}  ------  ----------")
+    for source, counts in sorted(grouped.items()):
+        frame_text = str(counts["frames"]) if include_frames else "-"
+        lines.append(
+            f"  {source.ljust(name_width)}  {counts['outcars']:>6}  {frame_text:>10}"
         )
-        if include_frames:
-            lines.append(f"    structures         : {counts['frames']}")
     return lines
+
+
+def _format_source_overview(
+    grouped: dict[str, dict[str, int]],
+    *,
+    limit: int = 12,
+) -> list[str]:
+    if not grouped:
+        return ["  none"]
+    sorted_items = sorted(
+        grouped.items(),
+        key=lambda item: (-item[1]["frames"], item[0]),
+    )
+    shown = sorted_items[:limit]
+    name_width = max(len("source"), *(len(name) for name, _ in shown))
+    lines = [f"  Source groups : {len(grouped)}"]
+    if len(grouped) > limit:
+        lines.append(f"  Showing top {limit} groups by structure count.")
+    lines.append(f"  {'source'.ljust(name_width)}  structures")
+    lines.append(f"  {'-' * name_width}  ----------")
+    for source, counts in shown:
+        lines.append(f"  {source.ljust(name_width)}  {counts['frames']:>10}")
+    if len(grouped) > limit:
+        remaining = len(grouped) - limit
+        lines.append(f"  ... {remaining} more group(s); see summary file.")
+    return lines
+
+
+def _source_counts(records: list[tuple[Path, int]]) -> dict[str, dict[str, int]]:
+    return _group_collected_records(records)
+
+
+def _source_label(path: Path) -> str:
+    sub_yaml_dir = _nearest_sub_yaml_dir(path)
+    if sub_yaml_dir is not None:
+        return _relative_label(sub_yaml_dir)
+    return _fallback_source_label(path)
 
 
 def _nearest_sub_yaml_dir(path: Path) -> Path | None:
@@ -671,11 +733,44 @@ def _nearest_sub_yaml_dir(path: Path) -> Path | None:
     return None
 
 
-def _child_dir_under(root: Path, path: Path) -> str:
+def _fallback_source_label(path: Path) -> str:
     try:
-        relative = path.relative_to(root)
+        parts = path.parent.relative_to(_collection_root({})).parts
     except ValueError:
-        return path.parent.as_posix()
-    if len(relative.parts) <= 1:
+        parts = path.parent.parts
+    if not parts:
         return "."
-    return relative.parts[0]
+    calculation_index = _first_calculation_dir_index(parts)
+    if calculation_index is not None and calculation_index > 0:
+        return "/".join(parts[:calculation_index])
+    semantic_parts = [part for part in parts if _is_source_group_part(part)]
+    if semantic_parts:
+        return "/".join(semantic_parts)
+    return "/".join(parts)
+
+
+def _relative_label(path: Path) -> str:
+    try:
+        return path.relative_to(_collection_root({})).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _first_calculation_dir_index(parts: tuple[str, ...]) -> int | None:
+    for index, part in enumerate(parts):
+        if _is_calculation_dir(part):
+            return index
+    return None
+
+
+def _is_calculation_dir(part: str) -> bool:
+    lower = part.lower()
+    return (
+        lower == "run_vasp_scf"
+        or lower.endswith("_run_vasp_scf")
+        or lower.startswith("calc_")
+    )
+
+
+def _is_source_group_part(part: str) -> bool:
+    return _is_config_type_part(part) and not _is_calculation_dir(part)

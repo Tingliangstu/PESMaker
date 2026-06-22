@@ -84,12 +84,16 @@ labeled extended xyz format.
 The second line of each frame contains `Lattice`, `Energy`,
 `Properties=species:S:1:pos:R:3:force:R:3`, optional `Virial`, `pbc`,
 `Config_type`, and optional `weight`. It also writes a plain text summary report
-with collected counts and skipped nonconverged OUTCAR counts, grouped by the
-closest ancestor directory containing `sub.yaml` and the first child directory
-below it.
+with collected counts and skipped OUTCAR counts, grouped by source directory.
+For grouping, PESMaker first uses the closest ancestor directory containing
+`sub.yaml`. If no `sub.yaml` is found, it falls back to the path before the
+first calculation folder such as `run_vasp_scf` or `calc_000000`.
 
 Defaults:
 
+- `check_vasp_completion: true`, so OUTCAR files without VASP's normal
+  completion marker, `General timing and accounting informations for this job`,
+  are skipped as incomplete.
 - `check_scf_convergence: true`, so OUTCAR files containing VASP's electronic
   self-consistency failure marker are skipped.
 - `include_virial: true`, so PESMaker writes `Virial` when the OUTCAR contains
@@ -101,8 +105,9 @@ Defaults:
 
 The virial parser automatically detects whether the OUTCAR virial block looks
 standard or VDW/MBD-adjusted. The command prints a dataset-level
-`VDW/MBD detected` line so users can see whether the collected calculations are
-consistent.
+`Van der Waals correction` line inferred from the parsed virial block layout.
+This is a consistency check from OUTCAR content; the INCAR remains the final
+source of truth for how the VASP calculations were configured.
 
 `Config_type` is inferred from the OUTCAR path. PESMaker keeps meaningful path
 parts such as element/system names, `Material_project_structure`, `perturbed`,
@@ -128,28 +133,39 @@ collecting:
 
 The summary report is a normal text file. It records matched OUTCAR files,
 collected OUTCAR files, total structures, train/test structures, skipped
-nonconverged OUTCAR files, unreadable OUTCAR files, and structure counts grouped
-by inferred `Config_type`.
+incomplete OUTCAR files, skipped nonconverged OUTCAR files, unreadable OUTCAR
+files, and structure counts grouped by source directory.
 
-The command also prints the same high-level structure count table on screen:
+The command prints a compact screen summary:
 
 ```text
 Labeled dataset collection complete.
 
-Structures:
-  Config_type                                      Frames
-  -----------                                      ------
-  1.Te_1.Material_project_structure_mp-105_Te         128
-  2.Pb_3.Pd-bulk_MD_bulk                               96
-  3.Te-Pd_2.2D-Te-Pd_1.perturbed_beta                 240
+Totals:
+  OUTCAR matched       : 669
+  OUTCAR collected     : 669
+  Structures written   : 669
+  Incomplete skipped   : 0
+  Nonconverged skipped : 0
+  Unreadable skipped   : 0
 
-Total structures : 464
-Train structures : 464
-Test structures  : 0
-Train dataset    : train.xyz
-Summary          : train_collection_summary.txt
-VDW/MBD detected : no (464/464 OUTCAR files use the standard virial block)
-Nonconverged OUTCAR skipped : 0
+Datasets:
+  Train : train.xyz (669 structures)
+  Test  : not written (test_data_frames = 0)
+
+Summary file : train_collection_summary.txt
+
+Sources:
+  Source groups : 19
+  Showing top 12 groups by structure count.
+  source                         structures
+  -----------------------------  ----------
+  1.Te/2.2D-Te/1.perturbed              147
+  2.Pb/2.2D_Pb/1.perturbed               98
+  3.Te-Pd/2.2D-Te-Pd/1.perturbed         98
+  ... 7 more group(s); see summary file.
+
+Van der Waals correction : not detected (669/669 parsed OUTCAR virial blocks are standard)
 ```
 
 The output is not tied to one training code. It is labeled extended xyz. GPUMD
@@ -168,10 +184,19 @@ mace_run_train \
 
 ## Next Step
 
-Prepare training:
+Add a `training` section to the YAML, then continue with `next`. For example:
 
-```bash
-pesmaker train-setup run.yaml
+```yaml
+training:
+  model: nep
+  output_dir: training
+  dataset: train.xyz
+  command: nep
 ```
 
-With `next`, training setup runs automatically when `training` is configured.
+Then run:
+
+```bash
+pesmaker validate collect.yaml
+pesmaker next collect.yaml
+```

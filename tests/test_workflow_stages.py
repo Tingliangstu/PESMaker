@@ -38,8 +38,8 @@ from pesmaker.workflow.stages import (
 )
 
 
-def test_collect_writes_summary_grouped_by_sub_yaml_child_dir(tmp_path, monkeypatch):
-    """Collection should report frame counts for each sub.yaml child tree."""
+def test_collect_writes_concise_summary_grouped_by_source(tmp_path, monkeypatch):
+    """Collection should report frame counts by stable source directory."""
     root_a = tmp_path / "1.Te" / "1.Material_project_structure"
     root_b = tmp_path / "2.Pb" / "3.Pd-bulk_MD"
     for root in (root_a, root_b):
@@ -70,29 +70,30 @@ collecting:
     summary = (tmp_path / "stats.txt").read_text(encoding="utf-8")
 
     assert result.files == (Path("train.xyz"), Path("stats.txt"))
+    assert result.output_dir == Path(".")
+    assert not (tmp_path / "runs").exists()
     train_text = (tmp_path / "train.xyz").read_text(encoding="utf-8")
     assert 'Virial="' in train_text
     assert "Config_type=1.Te_1.Material_project_structure_mp-1" in train_text
     assert "Config_type=1.Te_1.Material_project_structure_mp-2" in train_text
-    assert "Structures:" in result.message
-    assert "1.Te_1.Material_project_structure_mp-1" in result.message
-    assert "1.Te_1.Material_project_structure_mp-2" in result.message
-    assert "2.Pb_3.Pd-bulk_MD_bulk" in result.message
-    assert "Total structures : 3" in result.message
-    assert "Train structures : 3" in result.message
-    assert "VDW/MBD detected : yes" in result.message
-    assert "3/3 OUTCAR files use the extra VDW/MBD virial line" in result.message
-    assert "Nonconverged OUTCAR skipped : 0" in result.message
+    assert "Totals:" in result.message
+    assert "OUTCAR matched       : 3" in result.message
+    assert "Structures written   : 3" in result.message
+    assert "Sources:" in result.message
+    assert "1.Te/1.Material_project_structure" in result.message
+    assert "2.Pb/3.Pd-bulk_MD" in result.message
+    assert "mp-1" not in result.message
+    assert "Van der Waals correction : detected" in result.message
+    assert "3/3 parsed OUTCAR virial blocks include VDW/MBD terms" in result.message
     root_a_label = root_a.relative_to(tmp_path).as_posix()
     root_b_label = root_b.relative_to(tmp_path).as_posix()
     assert "PESMaker collection summary" in summary
     assert "OUTCAR files matched          : 3" in summary
+    assert "Incomplete OUTCAR skipped     : 0" in summary
     assert "Nonconverged OUTCAR skipped   : 0" in summary
-    assert f"  - sub.yaml directory : {root_a_label}" in summary
-    assert "    child directory    : run_vasp_scf" in summary
-    assert "    OUTCAR files       : 2" in summary
-    assert "    structures         : 2" in summary
-    assert f"  - sub.yaml directory : {root_b_label}" in summary
+    assert root_a_label in summary
+    assert root_b_label in summary
+    assert "       2           2" in summary
 
 
 def test_collect_can_skip_nonconverged_outcars_and_write_test_split(
@@ -103,10 +104,12 @@ def test_collect_can_skip_nonconverged_outcars_and_write_test_split(
     converged_a = tmp_path / "labeling" / "calc_000000" / "OUTCAR"
     converged_b = tmp_path / "labeling" / "calc_000001" / "OUTCAR"
     nonconverged = tmp_path / "labeling" / "calc_000002" / "OUTCAR"
-    for outcar in (converged_a, converged_b, nonconverged):
+    incomplete = tmp_path / "labeling" / "calc_000003" / "OUTCAR"
+    for outcar in (converged_a, converged_b, nonconverged, incomplete):
         outcar.parent.mkdir(parents=True)
     _write_fake_outcar(converged_a, energy=-1.0)
     _write_fake_outcar(converged_b, energy=-2.0)
+    _write_fake_outcar(incomplete, energy=-3.0, include_completion=False)
     nonconverged.write_text(
         "The electronic self-consistency was not achieved in\n",
         encoding="utf-8",
@@ -137,22 +140,36 @@ collecting:
     assert test_text.count("\nLattice=") == 1
     assert "Virial=" not in train_text
     assert "Virial=" not in test_text
-    assert "Total structures : 2" in result.message
-    assert "Train structures : 1" in result.message
-    assert "Test structures  : 1" in result.message
-    assert "Nonconverged OUTCAR skipped : 1" in result.message
-    assert len(result.warnings) == 1
-    assert "calc_000002" in result.warnings[0]
+    assert "Structures written   : 2" in result.message
+    assert "Train : train.xyz (1 structures)" in result.message
+    assert "Test  : test.xyz (1 structures)" in result.message
+    assert "Incomplete skipped   : 1" in result.message
+    assert "Nonconverged skipped : 1" in result.message
+    assert len(result.warnings) == 2
+    assert any("calc_000002" in warning for warning in result.warnings)
+    assert any("calc_000003" in warning for warning in result.warnings)
+    assert "Incomplete OUTCAR skipped     : 1" in summary
     assert "Nonconverged OUTCAR skipped   : 1" in summary
+    assert "Incomplete OUTCAR by source" in summary
     assert "Nonconverged OUTCAR by source" in summary
 
 
-def _write_fake_outcar(path: Path, *, energy: float = -1.23456789) -> None:
+def _write_fake_outcar(
+    path: Path,
+    *,
+    energy: float = -1.23456789,
+    include_completion: bool = True,
+) -> None:
     """Write the minimal OUTCAR fields used by the labeled-data collector."""
     virial_block = "\n".join(
         ["FORCE on cell =-STRESS in cart. coord.  units (eV):"]
         + [f"filler {index}" for index in range(13)]
         + ["Total    1.0 2.0 3.0 4.0 5.0 6.0"]
+    )
+    completion = (
+        "General timing and accounting informations for this job:\n"
+        if include_completion
+        else ""
     )
     path.write_text(
         f"""TITEL  = PAW_PBE Te 08Apr2002
@@ -170,7 +187,7 @@ TOTAL-FORCE (eV/Angst)
  -------------------------------------------------------------------
    0.00000000 0.00000000 0.00000000 0.10000000 0.20000000 0.30000000
 free  energy   TOTEN  =      {energy:.8f} eV
-General timing and accounting informations for this job:
+{completion}
 """,
         encoding="utf-8",
     )

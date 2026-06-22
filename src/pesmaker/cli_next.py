@@ -58,6 +58,9 @@ def print_next_concise(result: NextResult, *, config_path: Path) -> None:
         if event.kind == "config-needed":
             _print_config_needed(event, config_path=config_path)
             continue
+        if event.kind == "training-config-needed":
+            _print_training_config_needed(event, config_path=config_path)
+            continue
         if event.kind == "scf-retry":
             _print_scf_retry(event, config_path=config_path)
             continue
@@ -137,6 +140,8 @@ def print_next_diagnostics(result: NextResult, *, config_path: Path) -> None:
             print("What you should do next:")
             if _next_action_kind(event) == "scf-retry":
                 _print_scf_retry_steps(event, config_path=config_path)
+            elif _next_action_kind(event) == "training-config-needed":
+                _print_training_config_steps(config_path=config_path)
             else:
                 print(f"  - Run: pesmaker next {config_path}")
             if _next_action_kind(event) == "config-needed" and event.template_path:
@@ -183,6 +188,12 @@ def print_next_diagnostics(result: NextResult, *, config_path: Path) -> None:
             )
             print(f"  2. Check it: pesmaker validate {template_path}")
             print(f"  3. Continue: pesmaker next {template_path}")
+            continue
+        if event.kind == "training-config-needed":
+            print(f"  - {event.message}")
+            print()
+            print("What you should do next:")
+            _print_training_config_steps(config_path=config_path)
             continue
         if event.kind == "scf-retry":
             print(f"  - {event.message}")
@@ -262,6 +273,10 @@ def print_next_preflight(result: NextResult, *, config_path: Path) -> None:
         print("Stop rule        : wait for the user to edit the follow-up YAML")
         if event.template_path is not None:
             print(f"Template         : {event.template_path}")
+    elif step_kind == "training-config-needed":
+        print("No local stage will run now.")
+        print("Reason           : the dataset exists but training is not configured")
+        print("Stop rule        : wait for the user to add a training section")
     elif step_kind == "scf-retry":
         print("No SCF setup will run.")
         print(f"Detected         : {event.message}")
@@ -289,8 +304,13 @@ def submit_action_label(stage: str) -> str:
 def _print_run_event(event: NextEvent) -> None:
     print(f"  - {event.message}")
     if event.result is not None:
-        print(f"Output directory : {event.result.output_dir}")
+        if not _hide_output_dir(event):
+            print(f"Output directory : {event.result.output_dir}")
         _print_result_warnings(event.result)
+
+
+def _hide_output_dir(event: NextEvent) -> bool:
+    return _event_stage(event) == "collect" and event.result.output_dir == Path(".")
 
 
 def _run_events_include_output_dir(
@@ -352,6 +372,19 @@ def _print_config_needed(event: NextEvent, *, config_path: Path) -> None:
     print()
 
 
+def _print_training_config_needed(event: NextEvent, *, config_path: Path) -> None:
+    print("Next:")
+    print(f"  - {event.message}")
+    _print_training_config_steps(config_path=config_path)
+    print()
+
+
+def _print_training_config_steps(*, config_path: Path) -> None:
+    print("  1. Add a `training` section to the YAML.")
+    print(f"  2. Run: pesmaker validate {config_path}")
+    print(f"  3. Run: pesmaker next {config_path}")
+
+
 def _print_waiting(event: NextEvent, *, config_path: Path) -> None:
     stage = _event_stage(event)
     print("Waiting:")
@@ -403,6 +436,8 @@ def _current_next_label(event: NextEvent | None, status: str) -> str:
         return event.message
     if step_kind == "config-needed":
         return "waiting for SCF settings"
+    if step_kind == "training-config-needed":
+        return "waiting for training settings"
     if step_kind == "scf-retry":
         return "SCF retry submission"
     if step_kind == "submit-preview":
