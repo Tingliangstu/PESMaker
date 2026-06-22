@@ -119,7 +119,7 @@ def test_collect_can_skip_nonconverged_outcars_and_write_test_split(
 collecting:
   outcar_pattern: labeling/**/OUTCAR
   dataset_path: train.xyz
-  test_dataset_path: test.xyz
+  test_path: test.xyz
   test_data_frames: 1
   test_seed: 1
   include_virial: false

@@ -475,7 +475,9 @@ def _test_data_frames(options: dict[str, Any]) -> int:
 
 
 def _test_dataset_path(options: dict[str, Any]) -> Path:
-    return Path(str(options.get("test_dataset_path", "test.xyz")))
+    return Path(
+        str(options.get("test_path", options.get("test_dataset_path", "test.xyz")))
+    )
 
 
 def _collection_message(

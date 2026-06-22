@@ -274,7 +274,9 @@ project: collect_initial_structure
 
 collecting:
   dataset_path: train.xyz
+  test_path: test.xyz
   test_data_frames: 0
+  include_virial: true
 ```
 
 By default this recursively collects every `OUTCAR` below the current directory.

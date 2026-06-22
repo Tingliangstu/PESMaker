@@ -18,7 +18,9 @@ project: collect_initial_structure
 
 collecting:
   dataset_path: train.xyz
+  test_path: test.xyz
   test_data_frames: 0
+  include_virial: true
 ```
 
 By default, `collect` recursively finds every `OUTCAR` below the directory where
@@ -37,9 +39,10 @@ train.xyz
 train_collection_summary.txt
 ```
 
-`test_data_frames: 0` means no `test.xyz` is written. Set it to a positive
-integer only when you want PESMaker to randomly move that many structures into
-`test.xyz`.
+`test_data_frames: 0` means no `test.xyz` is written. `test_path` is the test
+dataset file name that will be used only when `test_data_frames` is positive.
+Set `test_data_frames` to a positive integer only when you want PESMaker to
+randomly move that many structures into `test.xyz`.
 
 ## Optional Filters
 
