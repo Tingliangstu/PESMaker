@@ -11,19 +11,40 @@ exist.
 pesmaker collect run.yaml
 ```
 
-## Minimal YAML
+## Recommended YAML
 
 ```yaml
 project: collect_initial_structure
 
- collecting:
+collecting:
   dataset_path: train.xyz
   test_data_frames: 0
 ```
 
 By default, `collect` recursively finds every `OUTCAR` below the directory where
-you run the YAML. Use `outcar_pattern` or `outcar_patterns` only when you want
-to restrict the search.
+you run the YAML. Save the file as `collect.yaml` in the directory that contains
+your finished VASP calculation folders, then run:
+
+```bash
+pesmaker validate collect.yaml
+pesmaker collect collect.yaml
+```
+
+This writes:
+
+```text
+train.xyz
+train_collection_summary.txt
+```
+
+`test_data_frames: 0` means no `test.xyz` is written. Set it to a positive
+integer only when you want PESMaker to randomly move that many structures into
+`test.xyz`.
+
+## Optional Filters
+
+Use `outcar_pattern` or `outcar_patterns` only when you want to restrict the
+search.
 
 For example:
 
@@ -52,13 +73,16 @@ with collected counts and skipped nonconverged OUTCAR counts, grouped by the
 closest ancestor directory containing `sub.yaml` and the first child directory
 below it.
 
-By default, `check_scf_convergence` is `true`, so OUTCAR files containing VASP's
-electronic self-consistency failure marker are skipped. `include_virial: false`
-removes virial fields from the written extxyz frames. `test_data_frames`
-randomly moves that many collected frames from `dataset_path` into
-`test_dataset_path`, using `test_seed` for reproducibility. `include_weight`
-defaults to `false`; write it only when you intentionally need a per-frame
-`weight` field.
+Defaults:
+
+- `check_scf_convergence: true`, so OUTCAR files containing VASP's electronic
+  self-consistency failure marker are skipped.
+- `include_virial: true`, so PESMaker writes `Virial` when the OUTCAR contains
+  the `FORCE on cell =-STRESS` block.
+- `config_type: true`, so PESMaker writes a source label inferred from the
+  OUTCAR path.
+- `include_weight: false`; write it only when you intentionally need a
+  per-frame `weight` field.
 
 The virial parser automatically detects whether the OUTCAR virial block looks
 standard or VDW/MBD-adjusted. The command prints a dataset-level
@@ -79,29 +103,30 @@ train.xyz
 train_collection_summary.txt
 ```
 
-The command also prints a structure count table:
+`dataset_path` is the output dataset file name. If you set it to another path,
+PESMaker writes the training dataset there:
 
-For MACE, this same extxyz file can be used by setting its data keys. MACE
-defaults to `energy` and `forces`, but supports `--energy_key`, `--forces_key`,
-`--stress_key`, and `--virials_key`.
-
-```bash
-mace_run_train \
-  --train_file train.xyz \
-  --energy_key Energy \
-  --forces_key force \
-  --virials_key Virial
+```yaml
+collecting:
+  dataset_path: path/to/train.xyz
 ```
+
+The summary report is a normal text file. It records matched OUTCAR files,
+collected OUTCAR files, total structures, train/test structures, skipped
+nonconverged OUTCAR files, unreadable OUTCAR files, and structure counts grouped
+by inferred `Config_type`.
+
+The command also prints the same high-level structure count table on screen:
 
 ```text
 Labeled dataset collection complete.
 
 Structures:
-  Config_type                         Frames
-  -----------                         ------
-  1.Te_1.Material_project_structure_mp-105_Te   128
-  2.Pb_3.Pd-bulk_MD_bulk                        96
-  3.Te-Pd_2.2D-Te-Pd_1.perturbed_beta           240
+  Config_type                                      Frames
+  -----------                                      ------
+  1.Te_1.Material_project_structure_mp-105_Te         128
+  2.Pb_3.Pd-bulk_MD_bulk                               96
+  3.Te-Pd_2.2D-Te-Pd_1.perturbed_beta                 240
 
 Total structures : 464
 Train structures : 464
@@ -112,11 +137,18 @@ VDW/MBD detected : no (464/464 OUTCAR files use the standard virial block)
 Nonconverged OUTCAR skipped : 0
 ```
 
-or the path set by:
+The output is not tied to one training code. It is labeled extended xyz. GPUMD
+can read the `Energy`, `force`, `Virial`, `Config_type`, and optional `weight`
+fields used by NEP training. MACE can use the same file by setting its data keys.
+MACE defaults to `energy` and `forces`, but supports `--energy_key`,
+`--forces_key`, `--stress_key`, and `--virials_key`.
 
-```yaml
-collecting:
-  dataset_path: path/to/train.xyz
+```bash
+mace_run_train \
+  --train_file train.xyz \
+  --energy_key Energy \
+  --forces_key force \
+  --virials_key Virial
 ```
 
 ## Next Step
