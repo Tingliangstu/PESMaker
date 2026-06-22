@@ -638,6 +638,42 @@ jobs:
     assert f"pesmaker submit {config_path} --stage training" in output
 
 
+def test_next_runs_collect_only_config(tmp_path, monkeypatch, capsys):
+    """A config with only `collecting` should be runnable through `next`."""
+    config_path = tmp_path / "collect.yaml"
+    config_path.write_text(
+        """project: collect_initial_structure
+collecting:
+  dataset_path: train.xyz
+  test_path: test.xyz
+  test_data_frames: 0
+  include_virial: true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    def fake_collect(config):
+        dataset = tmp_path / "train.xyz"
+        dataset.write_text("dataset\n", encoding="utf-8")
+        return StageResult(
+            output_dir=tmp_path,
+            files=(dataset,),
+            message="Collected OUTCAR files.",
+        )
+
+    monkeypatch.setattr("pesmaker.workflow.next.collect_labeled_dataset", fake_collect)
+
+    assert main(["next", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert (tmp_path / "train.xyz").exists()
+    assert "Flow             : dataset-collect" in output
+    assert "Current          : complete" in output
+    assert "Work done:" in output
+    assert "Collected OUTCAR files." in output
+
+
 def test_next_reports_complete_without_running_when_no_task_exists(
     tmp_path,
     monkeypatch,

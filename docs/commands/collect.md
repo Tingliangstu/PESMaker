@@ -8,8 +8,11 @@ exist.
 ## Use
 
 ```bash
-pesmaker collect run.yaml
+pesmaker next collect.yaml
 ```
+
+`pesmaker collect collect.yaml` is the manual single-stage command. The normal
+workflow entry point is `pesmaker next collect.yaml`.
 
 ## Recommended YAML
 
@@ -29,7 +32,7 @@ your finished VASP calculation folders, then run:
 
 ```bash
 pesmaker validate collect.yaml
-pesmaker collect collect.yaml
+pesmaker next collect.yaml
 ```
 
 This writes:

@@ -82,6 +82,30 @@ Complete:
 
 and exits without writing `.pesmaker/` state.
 
+## Collect-Only Example
+
+Use this when VASP `OUTCAR` files already exist and you only want to build the
+labeled extxyz dataset:
+
+```yaml
+project: collect_initial_structure
+
+collecting:
+  dataset_path: train.xyz
+  test_path: test.xyz
+  test_data_frames: 0
+  include_virial: true
+```
+
+Run:
+
+```bash
+pesmaker validate collect.yaml
+pesmaker next collect.yaml
+```
+
+`next` runs the collection stage when `train.xyz` does not already exist.
+
 ## Generate-Only Example
 
 If your YAML only contains `structures` and `generation`, `next` generates the

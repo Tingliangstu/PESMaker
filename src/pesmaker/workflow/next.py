@@ -320,6 +320,13 @@ def determine_next_step(
                 message="Collect finished SCF outputs into the training dataset.",
             )
 
+    if _collecting_enabled(config) and not dataset_path(config).exists():
+        return NextStep(
+            action="collect",
+            kind="run",
+            message="Collect finished VASP OUTCAR files into the training dataset.",
+        )
+
     if _training_enabled(config):
         if not training_submit_path(config).exists():
             return NextStep(
@@ -360,6 +367,8 @@ def inferred_flow(config: PESMakerConfig) -> str:
         stages.append(_selection_flow_label(config))
     if _labeling_enabled(config):
         stages.extend(["SCF-labeling", "dataset-collect"])
+    elif _collecting_enabled(config):
+        stages.append("dataset-collect")
     if _training_enabled(config):
         stages.append("train")
     if (
@@ -476,6 +485,12 @@ def _labeling_enabled(config: PESMakerConfig) -> bool:
     if not config.labeling_configured:
         return False
     return config.labeling.engine.strip().lower() not in {"", "none"}
+
+
+def _collecting_enabled(config: PESMakerConfig) -> bool:
+    if not config.collecting_configured:
+        return False
+    return config.collecting.engine.strip().lower() not in {"", "none"}
 
 
 def _is_migrated_scf_submission(config: PESMakerConfig) -> bool:

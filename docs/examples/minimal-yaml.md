@@ -297,8 +297,8 @@ collecting:
 Run:
 
 ```bash
-pesmaker validate run.yaml
-pesmaker collect run.yaml
+pesmaker validate collect.yaml
+pesmaker next collect.yaml
 ```
 
 ## Training From Existing Dataset
