@@ -14,43 +14,592 @@
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
 
-"""Collect labeled structures into extxyz datasets."""
+"""Collect VASP OUTCAR files into labeled extxyz train/test datasets."""
 
 from __future__ import annotations
 
+from collections import Counter
+from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
+import random
+import re
+from typing import Any
+
+import numpy as np
 
 from pesmaker.artifacts import _section_output_dir
 from pesmaker.config.schema import PESMakerConfig
-from pesmaker.parsers.ase import write_extxyz_many
-from pesmaker.parsers.vasp import read_outcar_frames
+from pesmaker.jobs.submit import VASP_SCF_NOT_CONVERGED_MARKER
 from pesmaker.results import StageResult
+
+
+@dataclass(frozen=True)
+class LabeledFrame:
+    """One labeled training frame parsed from a VASP OUTCAR."""
+
+    outcar: Path
+    natoms: int
+    atom_symbols: list[str]
+    cell: np.ndarray
+    energy: float
+    positions_forces: np.ndarray
+    virial: np.ndarray | None
+    virial_offset: int | None
+    config_type: str
+    weight: float
 
 
 def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
     """Collect completed VASP SCF calculations into `train.xyz`."""
     output_dir = _section_output_dir(config, config.dataset.__dict__, "dataset")
     output_dir.mkdir(parents=True, exist_ok=True)
-    default_pattern = (
-        _section_output_dir(config, config.labeling.options, "labeling")
-        / "**"
-        / "OUTCAR"
-    )
-    pattern = str(config.labeling.options.get("outcar_pattern", default_pattern))
     output_path = Path(
         str(config.labeling.options.get("dataset_path", output_dir / "train.xyz"))
     )
-    outputs = [Path(path) for path in sorted(glob(pattern, recursive=True))]
+    outputs = _matched_outcars(config.labeling.options)
     if not outputs:
-        raise ValueError(f"no VASP outputs matched pattern: {pattern}")
+        raise ValueError(
+            "no VASP outputs matched pattern(s): "
+            f"{', '.join(_outcar_patterns(config.labeling.options))}"
+        )
 
-    frames = []
+    frames: list[LabeledFrame] = []
+    collection_records: list[tuple[Path, int]] = []
+    warnings: list[str] = []
+    check_scf_convergence = _check_scf_convergence(config)
     for output in outputs:
-        frames.extend(read_outcar_frames(output))
-    write_extxyz_many(output_path, frames)
+        if check_scf_convergence and _outcar_is_nonconverged(output):
+            warnings.append(f"Skipped nonconverged VASP OUTCAR: {output}")
+            continue
+        try:
+            frame = _read_vasp_labeled_frame(output, config.labeling.options)
+        except ValueError as exc:
+            warnings.append(f"Skipped unreadable VASP OUTCAR: {output} ({exc})")
+            continue
+        frames.append(frame)
+        collection_records.append((output, 1))
+    if not frames:
+        raise ValueError("no converged VASP frames were available for collection")
+
+    train_frames, test_frames = _split_test_frames(frames, config.labeling.options)
+    _write_labeled_xyz(output_path, train_frames, config.labeling.options)
+    files = [output_path]
+    test_path = _test_dataset_path(config.labeling.options)
+    if test_frames:
+        _write_labeled_xyz(test_path, test_frames, config.labeling.options)
+        files.append(test_path)
+
+    summary_path = Path(
+        str(
+            config.labeling.options.get(
+                "summary_path",
+                output_path.with_name(f"{output_path.stem}_collection_summary.tsv"),
+            )
+        )
+    )
+    _write_collection_summary(summary_path, collection_records)
+    files.append(summary_path)
     return StageResult(
         output_dir,
-        (output_path,),
-        f"Collected {len(frames)} labeled frame(s) into {output_path}",
+        tuple(files),
+        _collection_message(
+            train_path=output_path,
+            train_count=len(train_frames),
+            test_path=test_path,
+            test_count=len(test_frames),
+            summary_path=summary_path,
+            skipped_count=len(warnings),
+            config_type_counts=_config_type_counts(frames),
+            virial_offset_counts=_virial_offset_counts(frames),
+        ),
+        warnings=tuple(warnings),
     )
+
+
+def _matched_outcars(options: dict[str, Any]) -> list[Path]:
+    """Return sorted unique OUTCAR paths from one or more glob patterns."""
+    outputs: list[Path] = []
+    seen = set()
+    for pattern in _outcar_patterns(options):
+        for match in sorted(glob(pattern, recursive=True)):
+            path = Path(match)
+            if path.name != "OUTCAR":
+                continue
+            key = str(path)
+            if key not in seen:
+                outputs.append(path)
+                seen.add(key)
+    return outputs
+
+
+def _outcar_patterns(options: dict[str, Any]) -> list[str]:
+    """Read optional OUTCAR globs, defaulting to every OUTCAR below cwd."""
+    if "outcar_patterns" in options:
+        patterns = options["outcar_patterns"]
+        if not isinstance(patterns, list) or not patterns:
+            raise ValueError("labeling.outcar_patterns must be a non-empty list")
+        return [str(pattern) for pattern in patterns]
+    return [str(options.get("outcar_pattern", "**/OUTCAR"))]
+
+
+def _read_vasp_labeled_frame(path: Path, options: dict[str, Any]) -> LabeledFrame:
+    """Parse one VASP OUTCAR with vasp2nep-style labeled-data logic."""
+    lines = path.read_text(errors="replace").splitlines()
+    atom_names, atom_nums = _parse_system_info(lines)
+    atom_symbols = [
+        symbol for symbol, count in zip(atom_names, atom_nums) for _ in range(count)
+    ]
+    natoms = sum(atom_nums)
+    cell = _parse_cell(lines)
+    positions_forces = _parse_positions_forces(lines, natoms)
+    energy = _parse_energy(lines)
+    virial = None
+    virial_offset = None
+    if _include_virial(options):
+        virial, virial_offset = _parse_virial(lines)
+    return LabeledFrame(
+        outcar=path,
+        natoms=natoms,
+        atom_symbols=atom_symbols,
+        cell=cell,
+        energy=energy,
+        positions_forces=positions_forces,
+        virial=virial,
+        virial_offset=virial_offset,
+        config_type=_config_type(path, options),
+        weight=_weight_value(options),
+    )
+
+
+def _parse_system_info(lines: list[str]) -> tuple[list[str], list[int]]:
+    atom_names = []
+    atom_nums = None
+    for line in lines:
+        if "TITEL" in line:
+            parts = line.split()
+            if len(parts) >= 4:
+                symbol = parts[3].split("_", 1)[0]
+                atom_names.append(symbol)
+        if "ions per type" in line:
+            atom_nums = [int(value) for value in line.split()[4:]]
+    if atom_nums is None:
+        raise ValueError("could not find 'ions per type'")
+    atom_names = atom_names[: len(atom_nums)]
+    if len(atom_names) != len(atom_nums):
+        raise ValueError("could not match POTCAR TITEL entries to atom counts")
+    return atom_names, atom_nums
+
+
+def _parse_cell(lines: list[str]) -> np.ndarray:
+    token = "VOLUME and BASIS-vectors are now"
+    for index, line in enumerate(lines):
+        if token in line:
+            return _parse_cell_rows(lines, index + 5)
+    token = "direct lattice vectors"
+    for index, line in enumerate(lines):
+        if token in line:
+            return _parse_cell_rows(lines, index + 1)
+    raise ValueError("could not find cell vectors")
+
+
+def _parse_cell_rows(lines: list[str], start: int) -> np.ndarray:
+    cell = []
+    for offset in range(3):
+        parts = _float_tokens(lines[start + offset])
+        if len(parts) < 3:
+            raise ValueError("could not parse cell vector")
+        cell.append(parts[:3])
+    return np.array(cell)
+
+
+def _parse_positions_forces(lines: list[str], natoms: int) -> np.ndarray:
+    token = "TOTAL-FORCE (eV/Angst)"
+    positions_forces = None
+    for index, line in enumerate(lines):
+        if token not in line:
+            continue
+        values = []
+        for offset in range(natoms):
+            parts = _float_tokens(lines[index + 2 + offset])
+            if len(parts) < 6:
+                raise ValueError("could not parse position/force line")
+            values.append(parts[:6])
+        positions_forces = np.array(values)
+    if positions_forces is None:
+        raise ValueError("could not find TOTAL-FORCE block")
+    return positions_forces
+
+
+def _parse_energy(lines: list[str]) -> float:
+    energy = None
+    for line in lines:
+        if "free  energy   TOTEN" in line:
+            parts = line.split()
+            if len(parts) >= 5:
+                energy = float(parts[4])
+    if energy is None:
+        raise ValueError("could not find TOTEN energy")
+    return energy
+
+
+def _parse_virial(lines: list[str]) -> tuple[np.ndarray, int]:
+    token = "FORCE on cell =-STRESS"
+    for index, line in enumerate(lines):
+        if token not in line:
+            continue
+        offset, values = _find_virial_values(lines, index)
+        return _vasp_virial_to_matrix(values), offset
+    raise ValueError("could not find FORCE on cell =-STRESS virial block")
+
+
+def _find_virial_values(lines: list[str], start: int) -> tuple[int, np.ndarray]:
+    """Find VASP's six virial values after a FORCE-on-cell block."""
+    candidates: list[tuple[int, np.ndarray]] = []
+    for offset in range(1, 25):
+        line_index = start + offset
+        if line_index >= len(lines):
+            break
+        parts = _float_tokens(lines[line_index])
+        if len(parts) >= 6:
+            candidates.append((offset, np.array(parts[:6])))
+
+    for preferred_offset in (13, 14):
+        for offset, values in candidates:
+            if offset == preferred_offset:
+                return offset, values
+    if candidates:
+        return candidates[0]
+    raise ValueError("could not parse VASP virial line")
+
+
+def _vasp_virial_to_matrix(values: np.ndarray) -> np.ndarray:
+    return np.array(
+        [
+            [values[0], values[3], values[5]],
+            [values[3], values[1], values[4]],
+            [values[5], values[4], values[2]],
+        ]
+    )
+
+
+def _float_tokens(line: str) -> list[float]:
+    text = line.replace("-", " -")
+    values = []
+    for token in text.split():
+        try:
+            values.append(float(token))
+        except ValueError:
+            continue
+    return values
+
+
+def _write_labeled_xyz(
+    path: Path,
+    frames: list[LabeledFrame],
+    options: dict[str, Any],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    include_virial = _include_virial(options)
+    include_config_type = _include_config_type(options)
+    include_weight = _include_weight(options)
+    with path.open("w", encoding="utf-8") as handle:
+        for frame in frames:
+            handle.write(f"{frame.natoms}\n")
+            comment = _labeled_comment_line(
+                frame,
+                include_virial=include_virial,
+                include_config_type=include_config_type,
+                include_weight=include_weight,
+            )
+            handle.write(f"{comment}\n")
+            for symbol, row in zip(frame.atom_symbols, frame.positions_forces):
+                handle.write(
+                    f"{symbol} "
+                    f"{row[0]:15.8f} {row[1]:15.8f} {row[2]:15.8f} "
+                    f"{row[3]:15.8f} {row[4]:15.8f} {row[5]:15.8f}\n"
+                )
+
+
+def _labeled_comment_line(
+    frame: LabeledFrame,
+    *,
+    include_virial: bool,
+    include_config_type: bool,
+    include_weight: bool,
+) -> str:
+    lattice = " ".join(f"{value:10.9f}" for value in frame.cell.reshape(-1))
+    parts = [
+        f'Lattice="{lattice}"',
+        f"Energy={frame.energy:10.9f}",
+        "Properties=species:S:1:pos:R:3:force:R:3",
+    ]
+    if include_virial:
+        if frame.virial is None:
+            raise ValueError(f"missing virial for frame: {frame.outcar}")
+        virial = " ".join(f"{value:10.8f}" for value in frame.virial.reshape(-1))
+        parts.append(f'Virial="{virial}"')
+    parts.append('pbc="T T T"')
+    if include_config_type:
+        parts.append(f"Config_type={frame.config_type}")
+    if include_weight:
+        parts.append(f"weight={frame.weight}")
+    return " ".join(parts)
+
+
+def _check_scf_convergence(config: PESMakerConfig) -> bool:
+    """Return whether nonconverged VASP OUTCAR files should be skipped."""
+    value = config.labeling.options.get(
+        "check_scf_convergence",
+        config.jobs.options.get("check_scf_convergence", True),
+    )
+    if not isinstance(value, bool):
+        raise ValueError("labeling.check_scf_convergence must be true or false")
+    return value
+
+
+def _include_virial(options: dict[str, Any]) -> bool:
+    value = options.get("include_virial", True)
+    if not isinstance(value, bool):
+        raise ValueError("labeling.include_virial must be true or false")
+    return value
+
+
+def _include_config_type(options: dict[str, Any]) -> bool:
+    value = options.get("config_type", True)
+    if not isinstance(value, bool):
+        raise ValueError("labeling.config_type must be true or false")
+    return value
+
+
+def _include_weight(options: dict[str, Any]) -> bool:
+    value = options.get("include_weight", False)
+    if not isinstance(value, bool):
+        raise ValueError("labeling.include_weight must be true or false")
+    return value
+
+
+def _weight_value(options: dict[str, Any]) -> float:
+    return float(options.get("weight_value", 1.0))
+
+
+def _outcar_is_nonconverged(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return any(VASP_SCF_NOT_CONVERGED_MARKER in line for line in handle)
+    except OSError:
+        return True
+
+
+def _config_type(path: Path, options: dict[str, Any]) -> str:
+    root = _collection_root(options)
+    try:
+        relative_parts = path.parent.relative_to(root).parts
+    except ValueError:
+        relative_parts = path.parent.parts
+    semantic_parts = [
+        part for part in relative_parts if _is_config_type_part(part)
+    ]
+    if not semantic_parts:
+        semantic_parts = [path.parent.name]
+    return _safe_config_type("_".join(semantic_parts))
+
+
+def _is_config_type_part(part: str) -> bool:
+    name = part.strip()
+    lowered = name.lower()
+    if not name:
+        return False
+    if "run_vasp_scf" in lowered:
+        return False
+    if lowered in {"labeling", "vasp", "scf"}:
+        return False
+    if re.fullmatch(r"(calc|job|task|frame|structure|selected)[_-]?\d+", lowered):
+        return False
+    return True
+
+
+def _safe_config_type(value: str) -> str:
+    safe = "".join(
+        char if char.isalnum() or char in {"-", "_", "."} else "_" for char in value
+    )
+    safe = safe.strip("_")
+    return safe or "unknown"
+
+
+def _collection_root(options: dict[str, Any]) -> Path:
+    return Path(str(options.get("collection_root", "."))).resolve()
+
+
+def _split_test_frames(
+    frames: list[LabeledFrame],
+    options: dict[str, Any],
+) -> tuple[list[LabeledFrame], list[LabeledFrame]]:
+    test_count = _test_data_frames(options)
+    if test_count == 0:
+        return frames, []
+    if test_count >= len(frames):
+        raise ValueError(
+            "labeling.test_data_frames must be smaller than the collected frame count"
+        )
+    seed = int(options.get("test_seed", 1000))
+    test_indices = set(random.Random(seed).sample(range(len(frames)), test_count))
+    train_frames = [
+        frame for index, frame in enumerate(frames) if index not in test_indices
+    ]
+    test_frames = [frame for index, frame in enumerate(frames) if index in test_indices]
+    return train_frames, test_frames
+
+
+def _test_data_frames(options: dict[str, Any]) -> int:
+    value = options.get("test_data_frames", 0)
+    if not isinstance(value, int):
+        raise ValueError("labeling.test_data_frames must be an integer")
+    if value < 0:
+        raise ValueError("labeling.test_data_frames must be greater than or equal to 0")
+    return value
+
+
+def _test_dataset_path(options: dict[str, Any]) -> Path:
+    return Path(str(options.get("test_dataset_path", "test.xyz")))
+
+
+def _collection_message(
+    *,
+    train_path: Path,
+    train_count: int,
+    test_path: Path,
+    test_count: int,
+    summary_path: Path,
+    skipped_count: int,
+    config_type_counts: dict[str, int],
+    virial_offset_counts: dict[int, int],
+) -> str:
+    total_count = train_count + test_count
+    lines = [
+        "Labeled dataset collection complete.",
+        "",
+        "Structures:",
+    ]
+    label_width = max(
+        [len("Config_type"), *(len(label) for label in config_type_counts)]
+    )
+    lines.append(f"  {'Config_type'.ljust(label_width)}  Frames")
+    lines.append(f"  {'-' * label_width}  ------")
+    for label, count in sorted(config_type_counts.items()):
+        lines.append(f"  {label.ljust(label_width)}  {count}")
+    lines.extend(
+        [
+            "",
+            f"Total structures : {total_count}",
+            f"Train structures : {train_count}",
+            f"Test structures  : {test_count}",
+            f"Train dataset    : {train_path}",
+        ]
+    )
+    if test_count:
+        lines.append(f"Test dataset     : {test_path}")
+    lines.append(f"Summary          : {summary_path}")
+    if virial_offset_counts:
+        lines.append(_vdw_summary_line(virial_offset_counts))
+    if skipped_count:
+        lines.append(f"Skipped OUTCAR   : {skipped_count}")
+    return "\n".join(lines)
+
+
+def _config_type_counts(frames: list[LabeledFrame]) -> dict[str, int]:
+    return dict(Counter(frame.config_type for frame in frames))
+
+
+def _virial_offset_counts(frames: list[LabeledFrame]) -> dict[int, int]:
+    return dict(
+        Counter(
+            frame.virial_offset
+            for frame in frames
+            if frame.virial_offset is not None
+        )
+    )
+
+
+def _vdw_summary_line(counts: dict[int, int]) -> str:
+    """Summarize whether OUTCAR virial blocks look VDW/MBD-adjusted."""
+    total = sum(counts.values())
+    standard = counts.get(13, 0)
+    vdw = counts.get(14, 0)
+    unknown = total - standard - vdw
+    if total == 0:
+        return "VDW/MBD detected : not checked (no virial blocks parsed)"
+    if vdw == total:
+        return (
+            "VDW/MBD detected : yes "
+            f"({vdw}/{total} OUTCAR files use the extra VDW/MBD virial line)"
+        )
+    if standard == total:
+        return (
+            "VDW/MBD detected : no "
+            f"({standard}/{total} OUTCAR files use the standard virial block)"
+        )
+    if unknown:
+        return (
+            "VDW/MBD detected : unknown "
+            f"({unknown}/{total} OUTCAR files use a non-standard virial block; "
+            f"{vdw} look VDW/MBD, {standard} look standard)"
+        )
+    return (
+        "VDW/MBD detected : mixed "
+        f"({vdw}/{total} OUTCAR files look VDW/MBD, "
+        f"{standard}/{total} look standard; check INCAR consistency)"
+    )
+
+
+def _write_collection_summary(
+    path: Path,
+    records: list[tuple[Path, int]],
+) -> None:
+    """Write frame counts grouped by nearest sub.yaml directory and child path."""
+    grouped: dict[tuple[str, str], dict[str, int]] = {}
+    for outcar, frame_count in records:
+        sub_yaml_dir = _nearest_sub_yaml_dir(outcar)
+        if sub_yaml_dir is None:
+            sub_yaml_label = "<no-sub-yaml>"
+            child_label = outcar.parent.as_posix()
+        else:
+            sub_yaml_label = sub_yaml_dir.as_posix()
+            child_label = _child_dir_under(sub_yaml_dir, outcar)
+
+        key = (sub_yaml_label, child_label)
+        item = grouped.setdefault(key, {"outcars": 0, "frames": 0})
+        item["outcars"] += 1
+        item["frames"] += frame_count
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["sub_yaml_dir\tchild_dir\toutcar_count\tframe_count"]
+    for (sub_yaml_dir, child_dir), counts in sorted(grouped.items()):
+        lines.append(
+            "\t".join(
+                [
+                    sub_yaml_dir,
+                    child_dir,
+                    str(counts["outcars"]),
+                    str(counts["frames"]),
+                ]
+            )
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _nearest_sub_yaml_dir(path: Path) -> Path | None:
+    for directory in (path.parent, *path.parents):
+        if (directory / "sub.yaml").exists():
+            return directory
+    return None
+
+
+def _child_dir_under(root: Path, path: Path) -> str:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return path.parent.as_posix()
+    if len(relative.parts) <= 1:
+        return "."
+    return relative.parts[0]

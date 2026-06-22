@@ -270,10 +270,27 @@ pesmaker next run.yaml
 Use this when VASP calculations are already finished.
 
 ```yaml
+project: collect_initial_structure
+
+labeling:
+  dataset_path: train.xyz
+  test_data_frames: 0
+  include_virial: true
+  config_type: true
+```
+
+By default this recursively collects every `OUTCAR` below the current directory.
+Use explicit patterns only when you want to restrict the collection:
+
+```yaml
 project: collect_existing
 
 labeling:
-  outcar_pattern: labeling/**/OUTCAR
+  outcar_patterns:
+    - "1.Te/**/run_vasp_scf/**/OUTCAR"
+    - "2.Pb/**/run_vasp_scf/**/OUTCAR"
+    - "3.Te-Pd/**/run_vasp_scf/**/OUTCAR"
+    - "4.bulk_pristine/**/run_vasp_scf/**/OUTCAR"
   dataset_path: train.xyz
 ```
 
