@@ -87,7 +87,7 @@ collecting:
     assert "external/manual_batch" in result.message
     assert "OUTCARs" in result.message
     assert "mp-1" not in result.message
-    assert "Collected OUTCARs total : 4" in result.message
+    assert "Detected OUTCARs total : 4" in result.message
     assert "Collected structures total : 4" in result.message
     assert "Van der Waals correction : detected" in result.message
     assert "in 4/4 collected calculation(s)" in result.message
@@ -103,7 +103,7 @@ collecting:
     assert root_b_label in summary
     assert root_c_label in summary
     assert "       2           2" in summary
-    assert "Collected OUTCARs total : 4" in summary
+    assert "Detected OUTCARs total : 4" in summary
     assert "Collected structures total : 4" in summary
     assert "Collected structures by Config_type" in summary
     assert "Config_type=external_manual_batch" in train_text
