@@ -208,6 +208,7 @@ def test_nep_plot_axes_are_closed_and_scaled():
     fig, ax = plt.subplots()
     _plot_simple_parity(ax, panel)
     assert ax.get_xlim() == ax.get_ylim()
+    assert ax.get_aspect() == "auto"
     assert all(spine.get_visible() for spine in ax.spines.values())
     plt.close(fig)
 
@@ -215,6 +216,8 @@ def test_nep_plot_axes_are_closed_and_scaled():
     _plot_marginal_parity(ax, panel)
     assert len(fig.axes) == 3
     assert fig.axes[0].get_xlim() == fig.axes[0].get_ylim()
+    assert fig.axes[0].get_aspect() == "auto"
+    assert all(patch.get_edgecolor()[3] == 0 for patch in fig.axes[1].patches)
     assert not fig.axes[0].spines["top"].get_visible()
     assert not fig.axes[0].spines["right"].get_visible()
     plt.close(fig)

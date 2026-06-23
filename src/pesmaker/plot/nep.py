@@ -190,7 +190,7 @@ def _write_train_overview(
 
     apply_plot_style()
     loss = _load_matrix(source / "loss.out")
-    fig, axes = plt.subplots(2, 2, figsize=(9.0, 7.35))
+    fig, axes = plt.subplots(2, 2, figsize=(10.2, 7.0))
     _plot_loss_panel(axes[0, 0], loss, panels)
     _label_panel(axes[0, 0], 0)
     for index, (ax, panel) in enumerate(zip(axes.flat[1:], panels), start=1):
@@ -201,10 +201,10 @@ def _write_train_overview(
     fig.subplots_adjust(
         top=0.965,
         bottom=0.09,
-        left=0.085,
+        left=0.075,
         right=0.985,
-        hspace=0.27,
-        wspace=0.18,
+        hspace=0.30,
+        wspace=0.16,
     )
     path = output / "nep_train.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -236,7 +236,6 @@ def _plot_loss_panel(
     ax.set_ylabel("Loss")
     ax.set_title("Training loss", pad=6)
     ax.legend(frameon=False, fontsize=8, loc="best")
-    ax.set_box_aspect(1)
     _close_axes(ax)
 
 
@@ -260,8 +259,6 @@ def _plot_simple_parity(ax, panel: ParityData) -> None:
     ax.plot([xmin, xmax], [xmin, xmax], color="#7f7f7f", linestyle="--", linewidth=1.6)
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
-    ax.set_aspect("equal", adjustable="box")
-    ax.set_box_aspect(1)
     ax.set_xlabel(panel.xlabel, labelpad=2)
     ax.set_ylabel(panel.ylabel)
     ax.set_title(panel.title, pad=6)
@@ -281,7 +278,7 @@ def _write_parity_with_marginals(
     import matplotlib.pyplot as plt
 
     apply_plot_style()
-    fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 4.4))
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.6 * len(panels), 3.75))
     if len(panels) == 1:
         axes = [axes]
     for index, (ax, panel) in enumerate(zip(axes, panels)):
@@ -289,10 +286,10 @@ def _write_parity_with_marginals(
         _label_panel(ax, index, x=-0.16, y=1.06)
     fig.subplots_adjust(
         top=0.86,
-        bottom=0.16,
-        left=0.06,
+        bottom=0.18,
+        left=0.055,
         right=0.985,
-        wspace=0.20,
+        wspace=0.16,
     )
     path = output / "nep_parity.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -316,24 +313,30 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
     ax.plot([xmin, xmax], [xmin, xmax], color="#8c8c8c", linestyle="--", linewidth=2.0)
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
-    ax.set_aspect("equal", adjustable="box")
-    ax.set_box_aspect(1)
     ax.set_xlabel(panel.xlabel, labelpad=2)
     ax.set_ylabel(panel.ylabel)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
     _open_axes(ax)
 
     divider = make_axes_locatable(ax)
-    ax_top = divider.append_axes("top", size="18%", pad=0.06, sharex=ax)
-    ax_right = divider.append_axes("right", size="18%", pad=0.06, sharey=ax)
-    ax_top.hist(panel.true, bins=34, color=panel.color, alpha=0.5, edgecolor="#777777")
+    ax_top = divider.append_axes("top", size="15%", pad=0.04, sharex=ax)
+    ax_right = divider.append_axes("right", size="14%", pad=0.04, sharey=ax)
+    ax_top.hist(
+        panel.true,
+        bins=34,
+        color=panel.color,
+        alpha=0.5,
+        edgecolor="none",
+        linewidth=0,
+    )
     ax_right.hist(
         panel.pred,
         bins=34,
         orientation="horizontal",
         color=panel.color,
         alpha=0.5,
-        edgecolor="#777777",
+        edgecolor="none",
+        linewidth=0,
     )
     _clean_marginal_axis(ax_top, axis="x")
     _clean_marginal_axis(ax_right, axis="y")
