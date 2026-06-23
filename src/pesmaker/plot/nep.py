@@ -193,12 +193,13 @@ def _tensor_panel(
     tensor_unit: str,
 ) -> ParityData:
     decimals = 4 if tensor_unit in {"GPa", "eV/atom"} else 3
+    axis_label = tensor_label.capitalize() if tensor_label == "virial" else tensor_label
     return ParityData(
         true=tensor[:, 6:12].reshape(-1),
         pred=tensor[:, 0:6].reshape(-1),
         title=tensor_label.capitalize(),
-        xlabel=f"DFT {tensor_label} ({tensor_unit})",
-        ylabel=f"NEP {tensor_label} ({tensor_unit})",
+        xlabel=f"DFT {axis_label} ({tensor_unit})",
+        ylabel=f"NEP {axis_label} ({tensor_unit})",
         mae_scale=1.0,
         rmse_scale=1.0,
         unit=tensor_unit,
@@ -320,6 +321,7 @@ def _write_parity_with_marginals(
             f"({chr(97 + index)})",
             transform=ax.transAxes,
             fontsize=15,
+            fontweight="bold",
             ha="left",
             va="bottom",
         )

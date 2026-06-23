@@ -193,6 +193,13 @@ def test_nep_plot_uses_virial_in_train_panel_and_keeps_stress_parity(
     assert captured["train"] == ["Energy", "Force", "Virial"]
     assert captured["parity"] == ["Energy", "Force", "Stress"]
     assert any(line.startswith("Virial") for line in result.summary_lines)
+    virial_panel = nep._tensor_panel(
+        nep._load_matrix(tmp_path / "virial_train.out"),
+        "virial",
+        "eV/atom",
+    )
+    assert virial_panel.xlabel == "DFT Virial (eV/atom)"
+    assert virial_panel.ylabel == "NEP Virial (eV/atom)"
 
 
 def test_nep_plot_axes_are_closed_and_scaled():
