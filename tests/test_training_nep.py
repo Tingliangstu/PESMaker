@@ -140,15 +140,25 @@ jobs:
     assert manifest["workdir"] == str(step2)
 
 
-def test_plot_train_writes_nep_training_figures(tmp_path, monkeypatch):
+def test_plot_train_writes_nep_training_figures(tmp_path, monkeypatch, capsys):
     """`pesmaker plot train` should write high-resolution training plots."""
     _write_training_outputs(tmp_path)
     monkeypatch.chdir(tmp_path)
 
     assert main(["plot", "train"]) == 0
+    output = capsys.readouterr().out
 
     assert (tmp_path / "plot" / "nep_train.png").is_file()
     assert (tmp_path / "plot" / "nep_parity.png").is_file()
+    assert "Summary:" in output
+    assert "Total generations : 3" in output
+    assert "Quantity" in output
+    assert "Energy" in output
+    assert "Force" in output
+    assert "Stress" in output
+    assert "meV/atom" in output
+    assert "meV/A" in output
+    assert "GPa" in output
 
 
 def test_nep_plot_axes_are_closed_and_scaled():

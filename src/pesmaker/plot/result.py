@@ -28,3 +28,4 @@ class PlotResult:
     output_dir: Path
     files: tuple[Path, ...]
     message: str
+    summary_lines: tuple[str, ...] = ()

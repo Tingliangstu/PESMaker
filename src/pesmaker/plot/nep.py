@@ -84,6 +84,7 @@ def plot_nep_training(
         output,
         tuple(files),
         f"Wrote {len(files)} NEP training plot(s) from {source}",
+        _training_summary_lines(source, panels),
     )
 
 
@@ -336,6 +337,55 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
     )
     _clean_marginal_axis(ax_top, axis="x")
     _clean_marginal_axis(ax_right, axis="y")
+
+
+def _training_summary_lines(
+    source: Path,
+    panels: list[ParityData],
+) -> tuple[str, ...]:
+    lines: list[str] = []
+    loss_path = source / "loss.out"
+    if loss_path.exists():
+        loss = _load_matrix(loss_path)
+        lines.append(f"Total generations : {_format_generation(loss[:, 0])}")
+    rows = [_metric_row(panel) for panel in panels]
+    if rows:
+        lines.append("")
+        lines.append(_format_table_row("Quantity", "R^2", "MAE", "RMSE"))
+        for row in rows:
+            lines.append(_format_table_row(*row))
+    return tuple(lines)
+
+
+def _format_generation(generation: np.ndarray) -> str:
+    total = float(np.max(generation))
+    if total.is_integer():
+        return str(int(total))
+    return f"{total:g}"
+
+
+def _metric_row(panel: ParityData) -> tuple[str, str, str, str]:
+    mae = _mae(panel.pred, panel.true) * panel.mae_scale
+    rmse = _rmse(panel.pred, panel.true) * panel.rmse_scale
+    return (
+        panel.title,
+        f"{_r2(panel.true, panel.pred):.4f}",
+        f"{mae:.{panel.decimals}f} {_plain_unit(panel.unit)}",
+        f"{rmse:.{panel.decimals}f} {_plain_unit(panel.unit)}",
+    )
+
+
+def _plain_unit(unit: str) -> str:
+    return unit.replace(r"$\mathrm{\AA}$", "A")
+
+
+def _format_table_row(
+    quantity: str,
+    r2: str,
+    mae: str,
+    rmse: str,
+) -> str:
+    return f"{quantity:<8} {r2:>7}  {mae:<17} {rmse}"
 
 
 def _clean_marginal_axis(ax, *, axis: str) -> None:

@@ -480,6 +480,11 @@ def _print_stage_result(result: StageResult) -> None:
 
 def _print_plot_result(result) -> None:
     print(result.message)
+    if result.summary_lines:
+        print("Summary:")
+        for line in result.summary_lines:
+            print(f"  {line}" if line else "")
+        print()
     print(f"Output directory : {result.output_dir}")
     print(f"Files written    : {len(result.files)}")
     for path in result.files:

@@ -17,6 +17,8 @@ The command looks for `energy_train.out` and `force_train.out` in the current
 directory first. If they are not there, it checks `training/step2`,
 `training/step1`, and `training`.
 Figures are written at 650 dpi.
+The terminal summary reports the total training generation count plus
+R², MAE, and RMSE for energy, force, and stress or virial data.
 
 ## Options
 
