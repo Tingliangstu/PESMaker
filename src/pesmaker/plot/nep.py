@@ -190,7 +190,7 @@ def _write_train_overview(
 
     apply_plot_style()
     loss = _load_matrix(source / "loss.out")
-    fig, axes = plt.subplots(2, 2, figsize=(10.0, 7.2))
+    fig, axes = plt.subplots(2, 2, figsize=(9.4, 7.8))
     _plot_loss_panel(axes[0, 0], loss, panels)
     _label_panel(axes[0, 0], 0)
     for index, (ax, panel) in enumerate(zip(axes.flat[1:], panels), start=1):
@@ -340,7 +340,6 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
     )
     _clean_marginal_axis(ax_top, axis="x")
     _clean_marginal_axis(ax_right, axis="y")
-    _add_residual_inset(ax, panel)
 
 
 def _training_summary_lines(
@@ -402,36 +401,6 @@ def _clean_marginal_axis(ax, *, axis: str) -> None:
     for spine in ax.spines.values():
         spine.set_visible(False)
     ax.grid(False)
-
-
-def _add_residual_inset(ax, panel: ParityData) -> None:
-    inset = ax.inset_axes([0.58, 0.18, 0.28, 0.19])
-    residual = panel.pred - panel.true
-    inset.hist(
-        residual,
-        bins=28,
-        color=panel.color,
-        alpha=0.72,
-        edgecolor="#777777",
-        linewidth=0.5,
-    )
-    mean_residual = float(np.mean(residual))
-    inset.axvline(mean_residual, color="black", linestyle="--", linewidth=0.9)
-    inset.text(
-        0.58,
-        0.78,
-        f"{mean_residual:.2f}",
-        color=panel.color,
-        fontsize=8.5,
-        fontweight="bold",
-        transform=inset.transAxes,
-    )
-    inset.set_xlabel("Residual", fontsize=8.5, labelpad=1)
-    inset.set_yticks([])
-    inset.tick_params(axis="x", labelsize=8, pad=1)
-    for spine in ("top", "right", "left"):
-        inset.spines[spine].set_visible(False)
-    inset.patch.set_alpha(0.0)
 
 
 def _add_metric_text(ax, panel: ParityData, *, x: float, y: float) -> None:
