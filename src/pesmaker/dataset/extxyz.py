@@ -633,7 +633,13 @@ def _write_collection_summary(
         "",
         "Collected structures by source",
     ]
-    lines.extend(_format_grouped_counts(collected_grouped, include_frames=True))
+    lines.extend(
+        _format_grouped_counts(
+            collected_grouped,
+            include_frames=True,
+            total_label="Collected",
+        )
+    )
     lines.extend(
         [
             "",
@@ -646,7 +652,11 @@ def _write_collection_summary(
             [
                 "",
                 "Incomplete OUTCAR by source",
-                *_format_grouped_counts(incomplete_grouped, include_frames=False),
+                *_format_grouped_counts(
+                    incomplete_grouped,
+                    include_frames=False,
+                    total_label="Incomplete",
+                ),
                 "",
                 "Incomplete OUTCAR paths",
                 *_format_path_list(incomplete_records),
@@ -657,7 +667,11 @@ def _write_collection_summary(
             [
                 "",
                 "Nonconverged OUTCAR by source",
-                *_format_grouped_counts(nonconverged_grouped, include_frames=False),
+                *_format_grouped_counts(
+                    nonconverged_grouped,
+                    include_frames=False,
+                    total_label="Nonconverged",
+                ),
                 "",
                 "Nonconverged OUTCAR paths",
                 *_format_path_list(nonconverged_records),
@@ -668,7 +682,11 @@ def _write_collection_summary(
             [
                 "",
                 "Unreadable OUTCAR by source",
-                *_format_grouped_counts(unreadable_grouped, include_frames=False),
+                *_format_grouped_counts(
+                    unreadable_grouped,
+                    include_frames=False,
+                    total_label="Unreadable",
+                ),
                 "",
                 "Unreadable OUTCAR paths",
                 *_format_path_list(unreadable_records),
@@ -699,6 +717,7 @@ def _format_grouped_counts(
     grouped: dict[str, dict[str, int]],
     *,
     include_frames: bool,
+    total_label: str,
 ) -> list[str]:
     if not grouped:
         return ["  none"]
@@ -710,6 +729,12 @@ def _format_grouped_counts(
         lines.append(
             f"  {source.ljust(name_width)}  {counts['outcars']:>6}  {frame_text:>10}"
         )
+    total_outcars = sum(counts["outcars"] for counts in grouped.values())
+    lines.append("")
+    lines.append(f"  {total_label} OUTCARs total : {total_outcars}")
+    if include_frames:
+        total_structures = sum(counts["frames"] for counts in grouped.values())
+        lines.append(f"  {total_label} structures total : {total_structures}")
     return lines
 
 
@@ -745,8 +770,9 @@ def _format_source_overview(
     if not show_all:
         remaining = len(grouped) - limit
         lines.append(f"  ... {remaining} more group(s); see summary file.")
-    lines.append(f"  Total OUTCARs in sources     : {total_outcars}")
-    lines.append(f"  Total structures in sources : {total_structures}")
+    lines.append("")
+    lines.append(f"  Collected OUTCARs total : {total_outcars}")
+    lines.append(f"  Collected structures total : {total_structures}")
     return lines
 
 
