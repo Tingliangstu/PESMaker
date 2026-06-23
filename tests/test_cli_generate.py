@@ -19,6 +19,7 @@ import json
 
 from pesmaker import __version__
 from pesmaker.cli import main
+from pesmaker.workflow.next import NextEvent, NextResult
 
 
 def test_cli_help_shows_simple_public_commands(capsys):
@@ -33,8 +34,41 @@ def test_cli_help_shows_simple_public_commands(capsys):
     assert f"v-{__version__}" in output
     assert "sample-setup" in output
     assert "scf-setup" in output
+    assert "train" in output
     assert "plan" not in output
     assert "Prepare SCF calculation job folders" in output
+
+
+def test_cli_train_command_uses_next_workflow(tmp_path, monkeypatch, capsys):
+    """`pesmaker train train.yaml` should use the smart workflow driver."""
+    config_path = tmp_path / "train.yaml"
+    config_path.write_text(
+        """project: train_cli
+training:
+  model: nep
+  dataset: train.xyz
+  command: nep
+""",
+        encoding="utf-8",
+    )
+    seen = {}
+
+    def fake_run_next(config, path):
+        seen["project"] = config.project
+        seen["path"] = path
+        return NextResult(
+            flow="train",
+            status="complete",
+            events=(NextEvent(kind="complete", message="done"),),
+        )
+
+    monkeypatch.setattr("pesmaker.cli.run_next", fake_run_next)
+
+    assert main(["train", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert seen == {"project": "train_cli", "path": config_path}
+    assert "Flow             : train" in output
 
 
 def test_cli_missing_config_names_the_missing_file(tmp_path, capsys):

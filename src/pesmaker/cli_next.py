@@ -397,9 +397,16 @@ def _print_training_config_needed(event: NextEvent, *, config_path: Path) -> Non
 
 
 def _print_training_config_steps(*, config_path: Path) -> None:
-    print("  1. Add a `training` section to the YAML.")
-    print(f"  2. Run: pesmaker validate {config_path}")
-    print(f"  3. Run: pesmaker next {config_path}")
+    train_config = _training_config_path(config_path)
+    print(f"  1. Create {train_config} with a `training` section.")
+    print(f"  2. Run: pesmaker validate {train_config}")
+    print(f"  3. Run: pesmaker train {train_config}")
+
+
+def _training_config_path(config_path: Path) -> Path:
+    if config_path.parent in {Path("."), Path("")}:
+        return Path("train.yaml")
+    return config_path.with_name("train.yaml")
 
 
 def _print_waiting(event: NextEvent, *, config_path: Path) -> None:

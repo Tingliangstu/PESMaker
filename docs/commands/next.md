@@ -105,8 +105,13 @@ pesmaker next collect.yaml
 ```
 
 `next` runs the collection stage when `train.xyz` does not already exist.
-After collection, it asks you to add a `training` section so the next run can
-prepare machine-learning potential training inputs.
+After collection, it asks you to create `train.yaml` with a `training` section
+so the next run can prepare machine-learning potential training inputs:
+
+```bash
+pesmaker validate train.yaml
+pesmaker train train.yaml
+```
 
 ## Generate-Only Example
 

@@ -10,7 +10,7 @@ pesmaker next run.yaml
 ```
 
 `next` runs the local PESMaker steps that are ready. You do not need to run
-`generate`, `sample-setup`, `select`, `scf-setup`, `collect`, or `train-setup`
+`generate`, `sample-setup`, `select`, `scf-setup`, `collect`, `train`, or `train-setup`
 one by one unless you want manual control.
 
 The one thing `next` does not do is real scheduler submission. When jobs need
@@ -31,6 +31,7 @@ to be submitted, `next` writes a dry-run log and prints the exact
 | [`scf-setup`](scf-setup.md) | Manually prepare VASP SCF folders. |
 | [`submit`](submit.md) | Submit prepared `submit.sh` files. |
 | [`collect`](collect.md) | Build an extxyz dataset from finished VASP outputs. |
+| [`train`](train.md) | Continue from a training YAML. |
 | [`train-setup`](train-setup.md) | Prepare model training inputs. |
 
 ## How `next` Thinks

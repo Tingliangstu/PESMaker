@@ -678,7 +678,11 @@ collecting:
     assert "Work done:" in output
     assert "Collected OUTCAR files." in output
     assert "The dataset is ready; configure model training next." in output
-    assert "Add a `training` section to the YAML." in output
+    assert "Create" in output
+    assert "train.yaml with a `training` section." in output
+    assert "pesmaker validate" in output
+    assert "pesmaker train" in output
+    assert "train.yaml" in output
     assert output.index("Starting dataset collection:") < output.index("Work done:")
 
 

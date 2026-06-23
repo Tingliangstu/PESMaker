@@ -83,8 +83,9 @@ collecting:
     assert "1.Te/1.Material_project_structure" in result.message
     assert "2.Pb/3.Pd-bulk_MD" in result.message
     assert "mp-1" not in result.message
+    assert "Total structures in sources : 3" in result.message
     assert "Van der Waals correction : detected" in result.message
-    assert "3/3 parsed OUTCAR virial blocks include VDW/MBD terms" in result.message
+    assert "in 3/3 collected calculation(s)" in result.message
     root_a_label = root_a.relative_to(tmp_path).as_posix()
     root_b_label = root_b.relative_to(tmp_path).as_posix()
     assert "PESMaker collection summary" in summary

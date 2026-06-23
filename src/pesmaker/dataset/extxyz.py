@@ -575,23 +575,23 @@ def _vdw_summary_line(counts: dict[int, int]) -> str:
     if vdw == total:
         return (
             "Van der Waals correction : detected "
-            f"({vdw}/{total} parsed OUTCAR virial blocks include VDW/MBD terms)"
+            f"in {vdw}/{total} collected calculation(s)"
         )
     if standard == total:
         return (
             "Van der Waals correction : not detected "
-            f"({standard}/{total} parsed OUTCAR virial blocks are standard)"
+            f"in {standard}/{total} collected calculation(s)"
         )
     if unknown:
         return (
             "Van der Waals correction : uncertain "
-            f"({unknown}/{total} parsed OUTCAR virial blocks are non-standard; "
-            f"{vdw} include VDW/MBD terms, {standard} are standard)"
+            f"({vdw}/{total} detected, {standard}/{total} not detected, "
+            f"{unknown}/{total} unclear; check INCAR consistency)"
         )
     return (
         "Van der Waals correction : mixed "
-        f"({vdw}/{total} parsed OUTCAR virial blocks include VDW/MBD terms, "
-        f"{standard}/{total} are standard; check INCAR consistency)"
+        f"({vdw}/{total} detected, {standard}/{total} not detected; "
+        "check INCAR consistency)"
     )
 
 
@@ -692,7 +692,7 @@ def _format_grouped_counts(
 def _format_source_overview(
     grouped: dict[str, dict[str, int]],
     *,
-    limit: int = 12,
+    limit: int = 20,
 ) -> list[str]:
     if not grouped:
         return ["  none"]
@@ -700,18 +700,21 @@ def _format_source_overview(
         grouped.items(),
         key=lambda item: (-item[1]["frames"], item[0]),
     )
-    shown = sorted_items[:limit]
+    show_all = len(grouped) <= limit
+    shown = sorted_items if show_all else sorted_items[:limit]
     name_width = max(len("source"), *(len(name) for name, _ in shown))
     lines = [f"  Source groups : {len(grouped)}"]
-    if len(grouped) > limit:
+    if not show_all:
         lines.append(f"  Showing top {limit} groups by structure count.")
     lines.append(f"  {'source'.ljust(name_width)}  structures")
     lines.append(f"  {'-' * name_width}  ----------")
     for source, counts in shown:
         lines.append(f"  {source.ljust(name_width)}  {counts['frames']:>10}")
-    if len(grouped) > limit:
+    total_structures = sum(counts["frames"] for counts in grouped.values())
+    if not show_all:
         remaining = len(grouped) - limit
         lines.append(f"  ... {remaining} more group(s); see summary file.")
+    lines.append(f"  Total structures in sources : {total_structures}")
     return lines
 
 

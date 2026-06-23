@@ -158,16 +158,29 @@ Datasets:
 Summary file : train_collection_summary.txt
 
 Sources:
-  Source groups : 19
-  Showing top 12 groups by structure count.
+  Source groups : 17
   source                         structures
   -----------------------------  ----------
   1.Te/2.2D-Te/1.perturbed              147
   2.Pb/2.2D_Pb/1.perturbed               98
   3.Te-Pd/2.2D-Te-Pd/1.perturbed         98
-  ... 7 more group(s); see summary file.
+  3.Te-Pd/1.Material_project_structure   42
+  2.Pb/2.2D_Pb/2.MD                      40
+  3.Te-Pd/2.2D-Te-Pd/2.MD                40
+  3.Te-Pd/3.Te-Pd-Bulk_MD                39
+  1.Te/3.bulk_MD                         35
+  2.Pb/3.Pd-bulk_MD                      34
+  1.Te/2.2D-Te/2.MD                      30
+  1.Te/1.Material_project_structure      27
+  2.Pb/1.Material_project_structure      12
+  4.bulk_pristine/1.Te                    9
+  4.bulk_pristine/4.large_Te-Pd           7
+  4.bulk_pristine/3.small_Te-Pd           5
+  4.bulk_pristine/2.Pb                    4
+  4.bulk_pristine/5.1_large_Te-Pd         2
+  Total structures in sources : 669
 
-Van der Waals correction : not detected (669/669 parsed OUTCAR virial blocks are standard)
+Van der Waals correction : not detected in 669/669 collected calculation(s)
 ```
 
 The output is not tied to one training code. It is labeled extended xyz. GPUMD
@@ -186,9 +199,11 @@ mace_run_train \
 
 ## Next Step
 
-Add a `training` section to the YAML, then continue with `next`. For example:
+Create `train.yaml` with a `training` section. For example:
 
 ```yaml
+project: train_initial_structure
+
 training:
   model: nep
   output_dir: training
@@ -199,6 +214,6 @@ training:
 Then run:
 
 ```bash
-pesmaker validate collect.yaml
-pesmaker next collect.yaml
+pesmaker validate train.yaml
+pesmaker train train.yaml
 ```

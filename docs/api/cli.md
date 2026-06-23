@@ -15,6 +15,7 @@ This page is a compact index. The full command explanations are in the
 | `pesmaker scf-setup` | [scf-setup](../commands/scf-setup.md) |
 | `pesmaker submit` | [submit](../commands/submit.md) |
 | `pesmaker collect` | [collect](../commands/collect.md) |
+| `pesmaker train` | [train](../commands/train.md) |
 | `pesmaker train-setup` | [train-setup](../commands/train-setup.md) |
 
 Show help from the terminal:

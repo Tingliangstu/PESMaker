@@ -87,6 +87,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Show detailed flow diagnostics before and after running.",
     )
 
+    train_parser = subparsers.add_parser(
+        "train",
+        help="Continue model training setup from a training YAML.",
+        description=(
+            "Run PESMaker's smart workflow driver for a training YAML. "
+            "This prepares training inputs and prints the next submit step."
+        ),
+    )
+    _add_config_argument(train_parser)
+
     status_parser = subparsers.add_parser(
         "status",
         help="Show the next workflow step without changing files.",
@@ -204,6 +214,10 @@ def main(argv: list[str] | None = None) -> int:
                 print_next_concise(
                     run_next(config, args.config), config_path=args.config
                 )
+            return 0
+
+        if args.command == "train":
+            print_next_concise(run_next(config, args.config), config_path=args.config)
             return 0
 
         if args.command == "status":
