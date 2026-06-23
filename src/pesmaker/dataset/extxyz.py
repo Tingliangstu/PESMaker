@@ -731,7 +731,8 @@ def _format_grouped_counts(
         )
     total_outcars = sum(counts["outcars"] for counts in grouped.values())
     lines.append("")
-    lines.append(f"  {total_label} OUTCARs total : {total_outcars}")
+    outcar_total_label = "Detected" if total_label == "Collected" else total_label
+    lines.append(f"  {outcar_total_label} OUTCARs total : {total_outcars}")
     if include_frames:
         total_structures = sum(counts["frames"] for counts in grouped.values())
         lines.append(f"  {total_label} structures total : {total_structures}")
@@ -771,7 +772,7 @@ def _format_source_overview(
         remaining = len(grouped) - limit
         lines.append(f"  ... {remaining} more group(s); see summary file.")
     lines.append("")
-    lines.append(f"  Collected OUTCARs total : {total_outcars}")
+    lines.append(f"  Detected OUTCARs total : {total_outcars}")
     lines.append(f"  Collected structures total : {total_structures}")
     return lines
 
