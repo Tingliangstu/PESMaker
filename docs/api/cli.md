@@ -17,6 +17,7 @@ This page is a compact index. The full command explanations are in the
 | `pesmaker collect` | [collect](../commands/collect.md) |
 | `pesmaker train` | [train](../commands/train.md) |
 | `pesmaker train-setup` | [train-setup](../commands/train-setup.md) |
+| `pesmaker plot` | [plot](../commands/plot.md) |
 
 Show help from the terminal:
 
@@ -24,4 +25,5 @@ Show help from the terminal:
 pesmaker --help
 pesmaker next --help
 pesmaker submit --help
+pesmaker plot --help
 ```

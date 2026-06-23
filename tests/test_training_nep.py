@@ -141,14 +141,65 @@ jobs:
 
 
 def test_plot_train_writes_nep_training_figures(tmp_path, monkeypatch):
-    """`pesmaker -plt train` should write high-resolution training plots."""
+    """`pesmaker plot train` should write high-resolution training plots."""
     _write_training_outputs(tmp_path)
     monkeypatch.chdir(tmp_path)
 
-    assert main(["-plt", "train"]) == 0
+    assert main(["plot", "train"]) == 0
 
     assert (tmp_path / "plot" / "nep_train.png").is_file()
     assert (tmp_path / "plot" / "nep_parity.png").is_file()
+
+
+def test_nep_plot_axes_are_closed_and_scaled():
+    """NEP plots should use closed frames, log loss axes, and parity limits."""
+    import matplotlib.pyplot as plt
+
+    from pesmaker.plot.nep import (
+        ParityData,
+        _plot_loss_panel,
+        _plot_marginal_parity,
+        _plot_simple_parity,
+    )
+
+    loss = np.array(
+        [
+            [1, 1.0, 0.4, 0.5, 0.1],
+            [10, 0.5, 0.2, 0.25, 0.05],
+            [100, 0.2, 0.1, 0.11, 0.02],
+        ]
+    )
+    fig, ax = plt.subplots()
+    _plot_loss_panel(ax, loss)
+    assert ax.get_xscale() == "log"
+    assert ax.get_yscale() == "log"
+    assert all(spine.get_visible() for spine in ax.spines.values())
+    plt.close(fig)
+
+    panel = ParityData(
+        true=np.array([-1.0, 0.0, 2.0]),
+        pred=np.array([-0.8, 0.1, 2.4]),
+        xlabel="DFT",
+        ylabel="NEP",
+        mae_scale=1.0,
+        rmse_scale=1.0,
+        unit="unit",
+        decimals=2,
+        color="#2878B5",
+    )
+    fig, ax = plt.subplots()
+    _plot_simple_parity(ax, panel, "Parity")
+    assert ax.get_xlim() == ax.get_ylim()
+    assert all(spine.get_visible() for spine in ax.spines.values())
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    _plot_marginal_parity(ax, panel)
+    assert len(fig.axes) == 3
+    assert fig.axes[0].get_xlim() == fig.axes[0].get_ylim()
+    for axis in fig.axes:
+        assert all(spine.get_visible() for spine in axis.spines.values())
+    plt.close(fig)
 
 
 def _write_train_xyz(path):

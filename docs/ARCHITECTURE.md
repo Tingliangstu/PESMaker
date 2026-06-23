@@ -12,7 +12,7 @@ orchestration and compatibility layer.
 - `StageResult`: small return object for setup, submit, collect, and training
   stages.
 - JSON Lines manifests: persistent file records for generated structures,
-  sampling jobs, selected frames, and SCF jobs.
+  sampling jobs, selected frames, SCF jobs, and the active training job.
 
 ## Module Boundaries
 
@@ -35,6 +35,12 @@ orchestration and compatibility layer.
   files.
 - `pesmaker.dataset.extxyz`: labeled-output collection into extxyz datasets.
 - `pesmaker.trainers.nep`: NEP and generic training input setup.
+- `pesmaker.trainers.layout`: shared training output paths, two-step state,
+  and training manifest locations.
+- `pesmaker.plot`: plotting command package. `pesmaker.plot.commands` is the
+  CLI registry, engine-specific plots live in modules such as
+  `pesmaker.plot.nep`, and shared result/style helpers stay in
+  `pesmaker.plot.result` and `pesmaker.plot.style`.
 - `pesmaker.workflow.next`: artifact-driven smart-next state machine.
 - `pesmaker.workflow.plan`: artifact path and file-presence checks.
 - `pesmaker.workflow.state`: `.pesmaker/<project>/next_state.json`.
@@ -58,6 +64,7 @@ Stage data stays file-backed:
 - sampling jobs: `sampling/sampling_manifest.jsonl`;
 - selected frames: `selected/manifest.jsonl`;
 - SCF jobs: `labeling/labeling_manifest.jsonl`;
+- active training job: `training/training_manifest.jsonl`;
 - follow-up config template after generation-only runs: `run.next.yaml`;
 - smart-next dry-run gates: `.pesmaker/<project>/next_state.json`.
 

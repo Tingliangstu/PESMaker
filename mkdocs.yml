@@ -28,7 +28,9 @@ nav:
       - scf-setup: commands/scf-setup.md
       - submit: commands/submit.md
       - collect: commands/collect.md
+      - train: commands/train.md
       - train-setup: commands/train-setup.md
+      - plot: commands/plot.md
   - Examples:
       - Minimal YAML: examples/minimal-yaml.md
   - Reference:

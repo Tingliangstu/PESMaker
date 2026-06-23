@@ -28,6 +28,13 @@ from pesmaker.labelers.vasp import setup_labeling
 from pesmaker.results import StageResult
 from pesmaker.samplers import setup_sampling
 from pesmaker.samplers.selection import select_sampling_frames
+from pesmaker.trainers.layout import (
+    training_dry_run_key,
+    training_step1_complete,
+    training_step2_submit_path,
+    training_submit_path,
+    training_two_step_enabled,
+)
 from pesmaker.trainers.nep import setup_training
 from pesmaker.workflow.plan import (
     dataset_path,
@@ -40,11 +47,6 @@ from pesmaker.workflow.plan import (
     sampling_trajectory_pattern,
     selected_manifest_path,
     submit_command_text,
-    training_dry_run_key,
-    training_step1_complete,
-    training_step2_submit_path,
-    training_submit_path,
-    training_two_step_enabled,
 )
 from pesmaker.workflow.state import (
     dry_run_recorded,

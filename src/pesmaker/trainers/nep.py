@@ -23,10 +23,18 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from pesmaker.artifacts import _read_optional_file, _section_output_dir
+from pesmaker.artifacts import _read_optional_file
 from pesmaker.config.schema import PESMakerConfig
 from pesmaker.jobs.scripts import _write_submit_script
 from pesmaker.results import StageResult
+from pesmaker.trainers.layout import (
+    training_manifest_path,
+    training_root,
+    training_step1_complete,
+    training_step1_dir,
+    training_two_step_enabled,
+    training_workdir,
+)
 
 NEP_DEFAULT_PARAMETERS: dict[str, str] = {
     "version": "4",
@@ -68,9 +76,7 @@ NEP_TWO_STEP_WEIGHTS = {
 
 def setup_training(config: PESMakerConfig) -> StageResult:
     """Prepare potential training inputs and a submission script."""
-    output_root = _section_output_dir(config, config.training.options, "training")
-    output_dir = _training_workdir(config)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _prepare_training_workdir(config)
     dataset_path = Path(str(config.training.options.get("dataset", "train.xyz")))
     target_dataset = output_dir / dataset_path.name
     if dataset_path.exists():
@@ -96,7 +102,7 @@ def setup_training(config: PESMakerConfig) -> StageResult:
         stage="training",
         command=command,
     )
-    manifest_path = _write_training_manifest(output_root, output_dir, submit_path)
+    manifest_path = _write_training_manifest(config, output_dir, submit_path)
     return StageResult(
         output_dir,
         tuple(
@@ -108,26 +114,27 @@ def setup_training(config: PESMakerConfig) -> StageResult:
     )
 
 
-def _training_workdir(config: PESMakerConfig) -> Path:
-    output_root = _section_output_dir(config, config.training.options, "training")
-    if not _two_step_enabled(config):
-        return output_root
-    step1 = output_root / "step1"
-    step2 = output_root / "step2"
-    if _nep_step_complete(step1):
-        if not step2.exists():
-            shutil.copytree(step1, step2)
-        return step2
-    return step1
+def _prepare_training_workdir(config: PESMakerConfig) -> Path:
+    workdir = training_workdir(config)
+    if (
+        training_two_step_enabled(config)
+        and training_step1_complete(config)
+        and not workdir.exists()
+    ):
+        shutil.copytree(training_step1_dir(config), workdir)
+        return workdir
+    workdir.mkdir(parents=True, exist_ok=True)
+    return workdir
 
 
 def _write_training_manifest(
-    output_root: Path,
+    config: PESMakerConfig,
     workdir: Path,
     submit_path: Path,
 ) -> Path:
+    output_root = training_root(config)
     output_root.mkdir(parents=True, exist_ok=True)
-    manifest_path = output_root / "training_manifest.jsonl"
+    manifest_path = training_manifest_path(config)
     record = {
         "workdir": str(workdir),
         "submit_script": str(submit_path),
@@ -140,7 +147,7 @@ def _write_training_manifest(
 
 def _training_message(config: PESMakerConfig, output_dir: Path) -> str:
     engine = config.training.engine
-    if _two_step_enabled(config):
+    if training_two_step_enabled(config):
         return f"Prepared {output_dir.name} training folder for {engine}"
     return f"Prepared training folder for {engine}"
 
@@ -148,8 +155,8 @@ def _training_message(config: PESMakerConfig, output_dir: Path) -> str:
 def _default_nep_input(config: PESMakerConfig, dataset_path: Path) -> str:
     parameters = dict(NEP_DEFAULT_PARAMETERS)
     parameters.update(_nep_parameter_overrides(config.training.options))
-    if _two_step_enabled(config):
-        step = "step2" if _nep_step_complete(_training_root(config) / "step1") else "step1"
+    if training_two_step_enabled(config):
+        step = "step2" if training_step1_complete(config) else "step1"
         parameters.update(NEP_TWO_STEP_WEIGHTS[step])
     else:
         parameters.update(NEP_SINGLE_STEP_WEIGHTS)
@@ -181,7 +188,10 @@ def _parameter_text(value: object) -> str:
 
 
 def _nep_parameter_overrides(options: dict[str, Any]) -> dict[str, str]:
-    nested = options.get("nep", options.get("parameters", options.get("nep_options", {})))
+    nested = options.get(
+        "nep",
+        options.get("parameters", options.get("nep_options", {})),
+    )
     overrides: dict[str, Any] = {}
     if isinstance(nested, dict):
         overrides.update(nested)
@@ -235,17 +245,3 @@ def _elements_from_extxyz(path: Path) -> list[str]:
     except OSError:
         return []
     return elements
-
-
-def _training_root(config: PESMakerConfig) -> Path:
-    return _section_output_dir(config, config.training.options, "training")
-
-
-def _two_step_enabled(config: PESMakerConfig) -> bool:
-    options = config.training.options
-    value = options.get("two_step", options.get("two-step", options.get("two_stage")))
-    return bool(value)
-
-
-def _nep_step_complete(step_dir: Path) -> bool:
-    return (step_dir / "nep.txt").is_file()
