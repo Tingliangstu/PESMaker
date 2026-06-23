@@ -40,7 +40,11 @@ from pesmaker.workflow.plan import (
     sampling_trajectory_pattern,
     selected_manifest_path,
     submit_command_text,
+    training_dry_run_key,
+    training_step1_complete,
+    training_step2_submit_path,
     training_submit_path,
+    training_two_step_enabled,
 )
 from pesmaker.workflow.state import (
     dry_run_recorded,
@@ -85,6 +89,7 @@ class NextStep:
     command: str | None = None
     log_path: Path | None = None
     template_path: Path | None = None
+    stage_key: str | None = None
 
 
 def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
@@ -154,7 +159,13 @@ def run_next(config: PESMakerConfig, config_path: Path) -> NextResult:
             return _result(config, step.kind, events)
 
         if step.action == "preview_submit" and step.stage:
-            event = _preview_submit(config, config_path, state, stage=step.stage)
+            event = _preview_submit(
+                config,
+                config_path,
+                state,
+                stage=step.stage,
+                dry_run_key=step.stage_key,
+            )
             events.append(event)
             return _result(config, step.kind, events)
 
@@ -343,13 +354,39 @@ def determine_next_step(
                 kind="run",
                 message="Prepare model-training inputs.",
             )
-        if not dry_run_recorded(state, "training"):
+        training_key = training_dry_run_key(config)
+        if not dry_run_recorded(state, training_key):
             return NextStep(
                 action="preview_submit",
                 kind="submit-preview",
                 stage="training",
+                stage_key=training_key,
                 command=submit_command_text(config_path, "training"),
                 message="Preview training job submission.",
+            )
+        if (
+            training_two_step_enabled(config)
+            and not training_step1_complete(config)
+        ):
+            return NextStep(
+                action="wait",
+                kind="waiting",
+                stage="training",
+                command=submit_command_text(config_path, "training"),
+                message=(
+                    "Waiting for first-step NEP output "
+                    f"{training_submit_path(config).parent / 'nep.txt'}."
+                ),
+            )
+        if (
+            training_two_step_enabled(config)
+            and training_step1_complete(config)
+            and not training_step2_submit_path(config).exists()
+        ):
+            return NextStep(
+                action="setup_training",
+                kind="run",
+                message="Prepare second-step NEP training inputs.",
             )
 
     if _collecting_enabled(config) and dataset_path(config).exists():
@@ -404,11 +441,18 @@ def _preview_submit(
     state: dict,
     *,
     stage: str,
+    dry_run_key: str | None = None,
 ) -> NextEvent:
     result = submit_jobs(config, stage=stage, dry_run=True)
     command = submit_command_text(config_path, stage)
     log_path = result.files[0] if result.files else result.output_dir
-    record_dry_run(config, state, stage=stage, command=command, log_path=log_path)
+    record_dry_run(
+        config,
+        state,
+        stage=dry_run_key or stage,
+        command=command,
+        log_path=log_path,
+    )
     return NextEvent(
         kind="submit-preview",
         message=result.message,

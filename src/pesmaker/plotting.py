@@ -1,0 +1,409 @@
+# Copyright 2026 Ting Liang and PESMaker development team
+# This file is part of PESMaker.
+#
+# PESMaker is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# PESMaker is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
+"""Plotting helpers for NEP training outputs."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class PlotResult:
+    """Files produced by a plotting command."""
+
+    output_dir: Path
+    files: tuple[Path, ...]
+    message: str
+
+
+@dataclass(frozen=True)
+class ParityData:
+    """Flattened data used by a parity panel."""
+
+    true: np.ndarray
+    pred: np.ndarray
+    xlabel: str
+    ylabel: str
+    mae_scale: float
+    rmse_scale: float
+    unit: str
+    decimals: int
+    color: str
+
+
+def plot_nep_training(
+    source_dir: Path | None = None,
+    *,
+    output_dir: Path | None = None,
+    dpi: int = 450,
+) -> PlotResult:
+    """Write NEP training diagnostic figures from GPUMD output files."""
+    source = _resolve_training_source(source_dir or Path("."))
+    output = output_dir or Path("plot")
+    output.mkdir(parents=True, exist_ok=True)
+
+    energy = _load_matrix(source / "energy_train.out")
+    force = _load_matrix(source / "force_train.out")
+    stress_path = source / "stress_train.out"
+    stress_label = "stress"
+    stress_unit = "GPa"
+    stress = None
+    if stress_path.exists():
+        stress = _load_matrix(stress_path)
+        stress = _filter_invalid_tensor_rows(stress)
+    elif (source / "virial_train.out").exists():
+        stress = _load_matrix(source / "virial_train.out")
+        stress = _filter_invalid_tensor_rows(stress)
+        stress_label = "virial"
+        stress_unit = "eV"
+
+    panels = _parity_panels(energy, force, stress, stress_label, stress_unit)
+    files: list[Path] = []
+    if (source / "loss.out").exists():
+        files.append(_write_train_overview(source, output, panels, dpi=dpi))
+    files.append(_write_parity_with_marginals(output, panels, dpi=dpi))
+    return PlotResult(
+        output,
+        tuple(files),
+        f"Wrote {len(files)} NEP training plot(s) from {source}",
+    )
+
+
+def _resolve_training_source(path: Path) -> Path:
+    if _has_training_outputs(path):
+        return path
+    candidates = [
+        path / "training" / "step2",
+        path / "training" / "step1",
+        path / "training",
+    ]
+    for candidate in candidates:
+        if _has_training_outputs(candidate):
+            return candidate
+    raise ValueError(
+        "could not find NEP training outputs. Expected energy_train.out and "
+        "force_train.out in the current directory, training/, training/step1, "
+        "or training/step2."
+    )
+
+
+def _has_training_outputs(path: Path) -> bool:
+    return (path / "energy_train.out").is_file() and (path / "force_train.out").is_file()
+
+
+def _load_matrix(path: Path) -> np.ndarray:
+    if not path.exists():
+        raise ValueError(f"required NEP output file is missing: {path}")
+    data = np.loadtxt(path)
+    return np.atleast_2d(data)
+
+
+def _filter_invalid_tensor_rows(data: np.ndarray) -> np.ndarray:
+    if data.size == 0:
+        return data
+    columns = min(12, data.shape[1])
+    valid = ~np.any(np.abs(data[:, :columns]) >= 1e6, axis=1)
+    return data[valid]
+
+
+def _parity_panels(
+    energy: np.ndarray,
+    force: np.ndarray,
+    tensor: np.ndarray | None,
+    tensor_label: str,
+    tensor_unit: str,
+) -> list[ParityData]:
+    panels = [
+        ParityData(
+            true=energy[:, 1].reshape(-1),
+            pred=energy[:, 0].reshape(-1),
+            xlabel="DFT energy (eV/atom)",
+            ylabel="NEP energy (eV/atom)",
+            mae_scale=1000.0,
+            rmse_scale=1000.0,
+            unit="meV/atom",
+            decimals=2,
+            color="#2878B5",
+        ),
+        ParityData(
+            true=force[:, 3:6].reshape(-1),
+            pred=force[:, 0:3].reshape(-1),
+            xlabel=r"DFT force (eV/$\mathrm{\AA}$)",
+            ylabel=r"NEP force (eV/$\mathrm{\AA}$)",
+            mae_scale=1000.0,
+            rmse_scale=1000.0,
+            unit=r"meV/$\mathrm{\AA}$",
+            decimals=2,
+            color="#2F9E44",
+        ),
+    ]
+    if tensor is not None and tensor.size and tensor.shape[1] >= 12:
+        panels.append(
+            ParityData(
+                true=tensor[:, 6:12].reshape(-1),
+                pred=tensor[:, 0:6].reshape(-1),
+                xlabel=f"DFT {tensor_label} ({tensor_unit})",
+                ylabel=f"NEP {tensor_label} ({tensor_unit})",
+                mae_scale=1.0,
+                rmse_scale=1.0,
+                unit=tensor_unit,
+                decimals=4 if tensor_unit == "GPa" else 3,
+                color="#F28E2B",
+            )
+        )
+    return panels
+
+
+def _write_train_overview(
+    source: Path,
+    output: Path,
+    panels: list[ParityData],
+    *,
+    dpi: int,
+) -> Path:
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    _apply_plot_style()
+    loss = _load_matrix(source / "loss.out")
+    fig, axes = plt.subplots(2, 2, figsize=(10.5, 8.0))
+    _plot_loss_panel(axes[0, 0], loss)
+    for ax, panel, label in zip(axes.flat[1:], panels, ("Energy", "Force", "Stress")):
+        _plot_simple_parity(ax, panel, label)
+    if len(panels) < 3:
+        axes[1, 1].axis("off")
+    fig.tight_layout()
+    path = output / "nep_train.png"
+    fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_loss_panel(ax, loss: np.ndarray) -> None:
+    x = loss[:, 0]
+    if x[0] == 100:
+        labels = ["Total", "L1-Reg", "L2-Reg", "Energy", "Force", "Virial"]
+        columns = range(1, min(loss.shape[1], 7))
+        ax.set_xlabel("Generation")
+    else:
+        labels = ["Total", "Energy", "Force", "Virial"]
+        columns = range(1, min(loss.shape[1], 5))
+        ax.set_xlabel("Epoch")
+    for column, label in zip(columns, labels):
+        values = loss[:, column]
+        values = np.where(values > 0.0, values, np.nan)
+        ax.plot(x, values, linewidth=1.8, label=label)
+    ax.set_yscale("log")
+    ax.set_ylabel("Loss")
+    ax.set_title("Training loss")
+    ax.legend(frameon=False, fontsize=8)
+
+
+def _plot_simple_parity(ax, panel: ParityData, title: str) -> None:
+    xmin, xmax = _limits(panel.true, panel.pred, padding=0.06)
+    ax.scatter(panel.true, panel.pred, s=18, color=panel.color, alpha=0.38, linewidths=0)
+    ax.plot([xmin, xmax], [xmin, xmax], color="#7f7f7f", linestyle="--", linewidth=1.6)
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(xmin, xmax)
+    ax.set_xlabel(panel.xlabel)
+    ax.set_ylabel(panel.ylabel)
+    ax.set_title(title)
+    _add_metric_text(ax, panel, x=0.05, y=0.95)
+
+
+def _write_parity_with_marginals(
+    output: Path,
+    panels: list[ParityData],
+    *,
+    dpi: int,
+) -> Path:
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    _apply_plot_style()
+    fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 4.4))
+    if len(panels) == 1:
+        axes = [axes]
+    for index, (ax, panel) in enumerate(zip(axes, panels)):
+        _plot_marginal_parity(ax, panel)
+        ax.text(
+            -0.14,
+            1.05,
+            f"({chr(97 + index)})",
+            transform=ax.transAxes,
+            fontsize=15,
+            ha="left",
+            va="bottom",
+        )
+    fig.tight_layout(w_pad=2.4)
+    path = output / "nep_parity.png"
+    fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def _plot_marginal_parity(ax, panel: ParityData) -> None:
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    xmin, xmax = _limits(panel.true, panel.pred, padding=0.05)
+    ax.scatter(
+        panel.true,
+        panel.pred,
+        s=28,
+        c=panel.color,
+        alpha=0.34,
+        edgecolors="none",
+        rasterized=True,
+    )
+    ax.plot([xmin, xmax], [xmin, xmax], color="#8c8c8c", linestyle="--", linewidth=2.0)
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(xmin, xmax)
+    ax.set_xlabel(panel.xlabel)
+    ax.set_ylabel(panel.ylabel)
+    _add_metric_text(ax, panel, x=0.05, y=0.95)
+
+    divider = make_axes_locatable(ax)
+    ax_top = divider.append_axes("top", size="18%", pad=0.06, sharex=ax)
+    ax_right = divider.append_axes("right", size="18%", pad=0.06, sharey=ax)
+    ax_top.hist(panel.true, bins=34, color=panel.color, alpha=0.5, edgecolor="#777777")
+    ax_right.hist(
+        panel.pred,
+        bins=34,
+        orientation="horizontal",
+        color=panel.color,
+        alpha=0.5,
+        edgecolor="#777777",
+    )
+    _clean_marginal_axis(ax_top, axis="x")
+    _clean_marginal_axis(ax_right, axis="y")
+    _add_residual_inset(ax, panel)
+
+
+def _clean_marginal_axis(ax, *, axis: str) -> None:
+    if axis == "x":
+        ax.tick_params(axis="x", labelbottom=False, bottom=False)
+        ax.tick_params(axis="y", left=False, labelleft=False)
+    else:
+        ax.tick_params(axis="y", labelleft=False, left=False)
+        ax.tick_params(axis="x", bottom=False, labelbottom=False)
+    for spine in ("top", "right", "left", "bottom"):
+        ax.spines[spine].set_visible(False)
+    ax.grid(False)
+
+
+def _add_residual_inset(ax, panel: ParityData) -> None:
+    inset = ax.inset_axes([0.58, 0.18, 0.28, 0.19])
+    residual = panel.pred - panel.true
+    inset.hist(
+        residual,
+        bins=28,
+        color=panel.color,
+        alpha=0.72,
+        edgecolor="#777777",
+        linewidth=0.5,
+    )
+    mean_residual = float(np.mean(residual))
+    inset.axvline(mean_residual, color="black", linestyle="--", linewidth=0.9)
+    inset.text(
+        0.58,
+        0.78,
+        f"{mean_residual:.2f}",
+        color=panel.color,
+        fontsize=8.5,
+        fontweight="bold",
+        transform=inset.transAxes,
+    )
+    inset.set_xlabel("Residual", fontsize=8.5, labelpad=1)
+    inset.set_yticks([])
+    inset.tick_params(axis="x", labelsize=8, pad=1)
+    for spine in ("top", "right", "left"):
+        inset.spines[spine].set_visible(False)
+    inset.patch.set_alpha(0.0)
+
+
+def _add_metric_text(ax, panel: ParityData, *, x: float, y: float) -> None:
+    mae = _mae(panel.pred, panel.true) * panel.mae_scale
+    rmse = _rmse(panel.pred, panel.true) * panel.rmse_scale
+    r2 = _r2(panel.true, panel.pred)
+    ax.text(
+        x,
+        y,
+        f"$R^2 = {r2:.4f}$\n"
+        f"MAE = {mae:.{panel.decimals}f} {panel.unit}\n"
+        f"RMSE = {rmse:.{panel.decimals}f} {panel.unit}",
+        transform=ax.transAxes,
+        fontsize=10.5,
+        va="top",
+        ha="left",
+    )
+
+
+def _limits(true: np.ndarray, pred: np.ndarray, *, padding: float) -> tuple[float, float]:
+    data_min = float(min(np.min(true), np.min(pred)))
+    data_max = float(max(np.max(true), np.max(pred)))
+    data_range = data_max - data_min
+    if data_range == 0.0:
+        data_range = 1.0
+    pad = padding * data_range
+    return data_min - pad, data_max + pad
+
+
+def _rmse(pred: np.ndarray, true: np.ndarray) -> float:
+    return float(np.sqrt(np.mean((pred - true) ** 2)))
+
+
+def _mae(pred: np.ndarray, true: np.ndarray) -> float:
+    return float(np.mean(np.abs(pred - true)))
+
+
+def _r2(true: np.ndarray, pred: np.ndarray) -> float:
+    ss_res = float(np.sum((true - pred) ** 2))
+    ss_tot = float(np.sum((true - np.mean(true)) ** 2))
+    if ss_tot == 0.0:
+        return float("nan")
+    return 1.0 - ss_res / ss_tot
+
+
+def _apply_plot_style() -> None:
+    try:
+        import seaborn as sns
+    except ImportError:
+        import matplotlib.pyplot as plt
+
+        plt.style.use("seaborn-v0_8-ticks")
+        return
+    sns.set_theme(
+        style="ticks",
+        context="notebook",
+        font_scale=1.05,
+        rc={
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "axes.grid": False,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.linewidth": 1.25,
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Arial", "DejaVu Sans", "Liberation Sans"],
+        },
+    )

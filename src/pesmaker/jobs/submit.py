@@ -313,6 +313,9 @@ def _stage_prepared_jobs(
                         )
                     )
 
+    if stage == "training" and manifest_path.exists():
+        return _unique_jobs(jobs)
+
     if stage == "scf" and config.labeling.engine.strip().lower() == "vasp":
         jobs.extend(
             PreparedJob(
