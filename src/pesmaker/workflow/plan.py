@@ -49,9 +49,38 @@ def labeling_manifest_path(config: PESMakerConfig) -> Path:
 
 
 def training_submit_path(config: PESMakerConfig) -> Path:
-    return (
-        _section_output_dir(config, config.training.options, "training") / "submit.sh"
-    )
+    return training_workdir(config) / "submit.sh"
+
+
+def training_workdir(config: PESMakerConfig) -> Path:
+    root = _section_output_dir(config, config.training.options, "training")
+    if not training_two_step_enabled(config):
+        return root
+    if training_step1_complete(config):
+        return root / "step2"
+    return root / "step1"
+
+
+def training_step1_complete(config: PESMakerConfig) -> bool:
+    root = _section_output_dir(config, config.training.options, "training")
+    return (root / "step1" / "nep.txt").is_file()
+
+
+def training_step2_submit_path(config: PESMakerConfig) -> Path:
+    root = _section_output_dir(config, config.training.options, "training")
+    return root / "step2" / "submit.sh"
+
+
+def training_two_step_enabled(config: PESMakerConfig) -> bool:
+    options = config.training.options
+    value = options.get("two_step", options.get("two-step", options.get("two_stage")))
+    return bool(value)
+
+
+def training_dry_run_key(config: PESMakerConfig) -> str:
+    if not training_two_step_enabled(config):
+        return "training"
+    return "training_step2" if training_step1_complete(config) else "training_step1"
 
 
 def dataset_path(config: PESMakerConfig) -> Path:

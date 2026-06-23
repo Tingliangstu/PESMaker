@@ -40,6 +40,7 @@ from pesmaker.generators.structures import (
 )
 from pesmaker.jobs.submit import submit_jobs
 from pesmaker.labelers.vasp import setup_labeling
+from pesmaker.plotting import plot_nep_training
 from pesmaker.results import StageResult
 from pesmaker.samplers import setup_sampling
 from pesmaker.samplers.selection import select_sampling_frames
@@ -63,7 +64,29 @@ def main(argv: list[str] | None = None) -> int:
         description="Build application-oriented MLIP datasets and potentials.",
         epilog='Use "pesmaker COMMAND -h" for command-specific help.',
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument(
+        "-plt",
+        "--plot",
+        choices=("train",),
+        help="Plot GPUMD/NEP outputs. Example: pesmaker -plt train",
+    )
+    parser.add_argument(
+        "--plot-source",
+        type=Path,
+        default=Path("."),
+        help=(
+            "Directory containing NEP output files. Defaults to the current "
+            "directory and auto-detects training/, training/step1, or "
+            "training/step2."
+        ),
+    )
+    parser.add_argument(
+        "--plot-output-dir",
+        type=Path,
+        default=Path("plot"),
+        help="Directory for generated figures. Default: plot.",
+    )
+    subparsers = parser.add_subparsers(dest="command")
 
     validate_parser = subparsers.add_parser(
         "validate",
@@ -182,6 +205,24 @@ def main(argv: list[str] | None = None) -> int:
 
     _print_banner()
     args = parser.parse_args(argv)
+
+    if args.plot:
+        try:
+            if args.plot == "train":
+                _print_plot_result(
+                    plot_nep_training(
+                        args.plot_source,
+                        output_dir=args.plot_output_dir,
+                    )
+                )
+                return 0
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        parser.error(f"unknown plot type: {args.plot}")
+
+    if not args.command:
+        parser.error("the following arguments are required: command")
 
     if args.command == "init":
         return _write_starter_config(args.path)
@@ -434,6 +475,15 @@ def _print_stage_result(result: StageResult) -> None:
         if omitted > 0:
             print(f"  - ... {omitted} more warning(s)")
         print()
+
+
+def _print_plot_result(result) -> None:
+    print(result.message)
+    print(f"Output directory : {result.output_dir}")
+    print(f"Files written    : {len(result.files)}")
+    for path in result.files:
+        print(f"  - {path}")
+    print()
 
 
 def _print_labeling_result(result: StageResult, config_path: Path) -> None:
