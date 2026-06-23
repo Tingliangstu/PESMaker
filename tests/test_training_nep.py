@@ -156,7 +156,10 @@ def test_nep_plot_axes_are_closed_and_scaled():
     import matplotlib.pyplot as plt
 
     from pesmaker.plot.nep import (
+        ENERGY_COLOR,
         ParityData,
+        TOTAL_LOSS_COLOR,
+        _loss_colors,
         _plot_loss_panel,
         _plot_marginal_parity,
         _plot_simple_parity,
@@ -175,6 +178,10 @@ def test_nep_plot_axes_are_closed_and_scaled():
     assert ax.get_yscale() == "log"
     assert all(spine.get_visible() for spine in ax.spines.values())
     plt.close(fig)
+    assert TOTAL_LOSS_COLOR != ENERGY_COLOR
+    assert _loss_colors(["Total", "Energy"], [])[0] != _loss_colors(
+        ["Total", "Energy"], []
+    )[1]
 
     panel = ParityData(
         true=np.array([-1.0, 0.0, 2.0]),

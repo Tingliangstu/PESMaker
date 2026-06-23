@@ -45,7 +45,7 @@ class ParityData:
 ENERGY_COLOR = "#2878B5"
 FORCE_COLOR = "#2F9E44"
 TENSOR_COLOR = "#F28E2B"
-TOTAL_LOSS_COLOR = "#4C72B0"
+TOTAL_LOSS_COLOR = "#3D3D3D"
 REG_LOSS_COLORS = ("#8172B3", "#8C564B")
 
 
@@ -189,7 +189,7 @@ def _write_train_overview(
 
     apply_plot_style()
     loss = _load_matrix(source / "loss.out")
-    fig, axes = plt.subplots(2, 2, figsize=(9.6, 7.8))
+    fig, axes = plt.subplots(2, 2, figsize=(9.0, 7.35))
     _plot_loss_panel(axes[0, 0], loss, panels)
     _label_panel(axes[0, 0], 0)
     for index, (ax, panel) in enumerate(zip(axes.flat[1:], panels), start=1):
@@ -198,12 +198,12 @@ def _write_train_overview(
     if len(panels) < 3:
         axes[1, 1].axis("off")
     fig.subplots_adjust(
-        top=0.94,
-        bottom=0.10,
-        left=0.10,
+        top=0.965,
+        bottom=0.09,
+        left=0.085,
         right=0.985,
-        hspace=0.34,
-        wspace=0.30,
+        hspace=0.27,
+        wspace=0.18,
     )
     path = output / "nep_train.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -223,7 +223,7 @@ def _plot_loss_panel(
     else:
         labels = ["Total", "Energy", "Force", "Virial"]
         columns = range(1, min(loss.shape[1], 5))
-    ax.set_xlabel("Generation")
+    ax.set_xlabel("Generation", labelpad=2)
     colors = _loss_colors(labels, panels or [])
     for column, label, color in zip(columns, labels, colors):
         values = loss[:, column]
@@ -233,7 +233,7 @@ def _plot_loss_panel(
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_ylabel("Loss")
-    ax.set_title("Training loss")
+    ax.set_title("Training loss", pad=6)
     ax.legend(frameon=False, fontsize=8, loc="best")
     ax.set_box_aspect(1)
     _close_axes(ax)
@@ -261,9 +261,9 @@ def _plot_simple_parity(ax, panel: ParityData) -> None:
     ax.set_ylim(xmin, xmax)
     ax.set_aspect("equal", adjustable="box")
     ax.set_box_aspect(1)
-    ax.set_xlabel(panel.xlabel)
+    ax.set_xlabel(panel.xlabel, labelpad=2)
     ax.set_ylabel(panel.ylabel)
-    ax.set_title(panel.title)
+    ax.set_title(panel.title, pad=6)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
     _close_axes(ax)
 
@@ -280,18 +280,18 @@ def _write_parity_with_marginals(
     import matplotlib.pyplot as plt
 
     apply_plot_style()
-    fig, axes = plt.subplots(1, len(panels), figsize=(4.1 * len(panels), 3.95))
+    fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 4.4))
     if len(panels) == 1:
         axes = [axes]
     for index, (ax, panel) in enumerate(zip(axes, panels)):
         _plot_marginal_parity(ax, panel)
         _label_panel(ax, index, x=-0.16, y=1.06)
     fig.subplots_adjust(
-        top=0.84,
-        bottom=0.18,
-        left=0.07,
+        top=0.86,
+        bottom=0.16,
+        left=0.06,
         right=0.985,
-        wspace=0.28,
+        wspace=0.20,
     )
     path = output / "nep_parity.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -317,7 +317,7 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
     ax.set_ylim(xmin, xmax)
     ax.set_aspect("equal", adjustable="box")
     ax.set_box_aspect(1)
-    ax.set_xlabel(panel.xlabel)
+    ax.set_xlabel(panel.xlabel, labelpad=2)
     ax.set_ylabel(panel.ylabel)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
     _open_axes(ax)
