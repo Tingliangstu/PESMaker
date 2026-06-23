@@ -32,6 +32,7 @@ class ParityData:
 
     true: np.ndarray
     pred: np.ndarray
+    title: str
     xlabel: str
     ylabel: str
     mae_scale: float
@@ -41,11 +42,18 @@ class ParityData:
     color: str
 
 
+ENERGY_COLOR = "#2878B5"
+FORCE_COLOR = "#2F9E44"
+TENSOR_COLOR = "#F28E2B"
+TOTAL_LOSS_COLOR = "#4C72B0"
+REG_LOSS_COLORS = ("#8172B3", "#8C564B")
+
+
 def plot_nep_training(
     source_dir: Path | None = None,
     *,
     output_dir: Path | None = None,
-    dpi: int = 450,
+    dpi: int = 650,
 ) -> PlotResult:
     """Write NEP training diagnostic figures from GPUMD output files."""
     source = _resolve_training_source(source_dir or Path("."))
@@ -127,24 +135,26 @@ def _parity_panels(
         ParityData(
             true=energy[:, 1].reshape(-1),
             pred=energy[:, 0].reshape(-1),
+            title="Energy",
             xlabel="DFT energy (eV/atom)",
             ylabel="NEP energy (eV/atom)",
             mae_scale=1000.0,
             rmse_scale=1000.0,
             unit="meV/atom",
             decimals=2,
-            color="#2878B5",
+            color=ENERGY_COLOR,
         ),
         ParityData(
             true=force[:, 3:6].reshape(-1),
             pred=force[:, 0:3].reshape(-1),
+            title="Force",
             xlabel=r"DFT force (eV/$\mathrm{\AA}$)",
             ylabel=r"NEP force (eV/$\mathrm{\AA}$)",
             mae_scale=1000.0,
             rmse_scale=1000.0,
             unit=r"meV/$\mathrm{\AA}$",
             decimals=2,
-            color="#2F9E44",
+            color=FORCE_COLOR,
         ),
     ]
     if tensor is not None and tensor.size and tensor.shape[1] >= 12:
@@ -152,13 +162,14 @@ def _parity_panels(
             ParityData(
                 true=tensor[:, 6:12].reshape(-1),
                 pred=tensor[:, 0:6].reshape(-1),
+                title=tensor_label.capitalize(),
                 xlabel=f"DFT {tensor_label} ({tensor_unit})",
                 ylabel=f"NEP {tensor_label} ({tensor_unit})",
                 mae_scale=1.0,
                 rmse_scale=1.0,
                 unit=tensor_unit,
                 decimals=4 if tensor_unit == "GPa" else 3,
-                color="#F28E2B",
+                color=TENSOR_COLOR,
             )
         )
     return panels
@@ -178,52 +189,81 @@ def _write_train_overview(
 
     apply_plot_style()
     loss = _load_matrix(source / "loss.out")
-    fig, axes = plt.subplots(2, 2, figsize=(10.5, 8.0))
-    _plot_loss_panel(axes[0, 0], loss)
-    for ax, panel, label in zip(axes.flat[1:], panels, ("Energy", "Force", "Stress")):
-        _plot_simple_parity(ax, panel, label)
+    fig, axes = plt.subplots(2, 2, figsize=(9.6, 7.8))
+    _plot_loss_panel(axes[0, 0], loss, panels)
+    _label_panel(axes[0, 0], 0)
+    for index, (ax, panel) in enumerate(zip(axes.flat[1:], panels), start=1):
+        _plot_simple_parity(ax, panel)
+        _label_panel(ax, index)
     if len(panels) < 3:
         axes[1, 1].axis("off")
-    fig.tight_layout()
+    fig.subplots_adjust(
+        top=0.94,
+        bottom=0.10,
+        left=0.10,
+        right=0.985,
+        hspace=0.34,
+        wspace=0.30,
+    )
     path = output / "nep_train.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     return path
 
 
-def _plot_loss_panel(ax, loss: np.ndarray) -> None:
+def _plot_loss_panel(
+    ax,
+    loss: np.ndarray,
+    panels: list[ParityData] | None = None,
+) -> None:
     x = loss[:, 0]
     if x[0] == 100:
         labels = ["Total", "L1-Reg", "L2-Reg", "Energy", "Force", "Virial"]
         columns = range(1, min(loss.shape[1], 7))
-        ax.set_xlabel("Generation")
     else:
         labels = ["Total", "Energy", "Force", "Virial"]
         columns = range(1, min(loss.shape[1], 5))
-        ax.set_xlabel("Epoch")
-    for column, label in zip(columns, labels):
+    ax.set_xlabel("Generation")
+    colors = _loss_colors(labels, panels or [])
+    for column, label, color in zip(columns, labels, colors):
         values = loss[:, column]
         mask = (x > 0.0) & (values > 0.0)
         if np.any(mask):
-            ax.plot(x[mask], values[mask], linewidth=1.8, label=label)
+            ax.plot(x[mask], values[mask], linewidth=1.9, color=color, label=label)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_ylabel("Loss")
     ax.set_title("Training loss")
-    ax.legend(frameon=False, fontsize=8)
+    ax.legend(frameon=False, fontsize=8, loc="best")
+    ax.set_box_aspect(1)
     _close_axes(ax)
 
 
-def _plot_simple_parity(ax, panel: ParityData, title: str) -> None:
+def _loss_colors(labels: list[str], panels: list[ParityData]) -> list[str]:
+    panel_colors = {panel.title.lower(): panel.color for panel in panels}
+    colors = {
+        "total": TOTAL_LOSS_COLOR,
+        "l1-reg": REG_LOSS_COLORS[0],
+        "l2-reg": REG_LOSS_COLORS[1],
+        "energy": panel_colors.get("energy", ENERGY_COLOR),
+        "force": panel_colors.get("force", FORCE_COLOR),
+        "virial": panel_colors.get("virial", panel_colors.get("stress", TENSOR_COLOR)),
+        "stress": panel_colors.get("stress", TENSOR_COLOR),
+    }
+    return [colors.get(label.lower(), TOTAL_LOSS_COLOR) for label in labels]
+
+
+def _plot_simple_parity(ax, panel: ParityData) -> None:
     xmin, xmax = _limits(panel.true, panel.pred, padding=0.06)
     ax.scatter(panel.true, panel.pred, s=18, color=panel.color, alpha=0.38, linewidths=0)
     ax.plot([xmin, xmax], [xmin, xmax], color="#7f7f7f", linestyle="--", linewidth=1.6)
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
     ax.set_aspect("equal", adjustable="box")
+    ax.set_box_aspect(1)
     ax.set_xlabel(panel.xlabel)
     ax.set_ylabel(panel.ylabel)
-    ax.set_title(title)
+    ax.set_title(panel.title)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
     _close_axes(ax)
 
@@ -240,21 +280,19 @@ def _write_parity_with_marginals(
     import matplotlib.pyplot as plt
 
     apply_plot_style()
-    fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 4.4))
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.1 * len(panels), 3.95))
     if len(panels) == 1:
         axes = [axes]
     for index, (ax, panel) in enumerate(zip(axes, panels)):
         _plot_marginal_parity(ax, panel)
-        ax.text(
-            -0.14,
-            1.05,
-            f"({chr(97 + index)})",
-            transform=ax.transAxes,
-            fontsize=15,
-            ha="left",
-            va="bottom",
-        )
-    fig.tight_layout(w_pad=2.4)
+        _label_panel(ax, index, x=-0.16, y=1.06)
+    fig.subplots_adjust(
+        top=0.84,
+        bottom=0.18,
+        left=0.07,
+        right=0.985,
+        wspace=0.28,
+    )
     path = output / "nep_parity.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
@@ -278,10 +316,11 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
     ax.set_aspect("equal", adjustable="box")
+    ax.set_box_aspect(1)
     ax.set_xlabel(panel.xlabel)
     ax.set_ylabel(panel.ylabel)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
-    _close_axes(ax)
+    _open_axes(ax)
 
     divider = make_axes_locatable(ax)
     ax_top = divider.append_axes("top", size="18%", pad=0.06, sharex=ax)
@@ -306,7 +345,7 @@ def _clean_marginal_axis(ax, *, axis: str) -> None:
     else:
         ax.tick_params(axis="y", labelleft=False, left=False)
         ax.tick_params(axis="x", bottom=False, labelbottom=False)
-    _close_axes(ax)
+    _open_axes(ax)
     ax.grid(False)
 
 
@@ -356,3 +395,23 @@ def _r2(true: np.ndarray, pred: np.ndarray) -> float:
 def _close_axes(ax) -> None:
     for spine in ax.spines.values():
         spine.set_visible(True)
+
+
+def _open_axes(ax) -> None:
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(True)
+    ax.spines["bottom"].set_visible(True)
+
+
+def _label_panel(ax, index: int, *, x: float = -0.16, y: float = 1.07) -> None:
+    ax.text(
+        x,
+        y,
+        f"({chr(97 + index)})",
+        transform=ax.transAxes,
+        fontsize=13,
+        fontweight="bold",
+        ha="left",
+        va="bottom",
+    )

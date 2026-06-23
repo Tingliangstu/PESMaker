@@ -179,6 +179,7 @@ def test_nep_plot_axes_are_closed_and_scaled():
     panel = ParityData(
         true=np.array([-1.0, 0.0, 2.0]),
         pred=np.array([-0.8, 0.1, 2.4]),
+        title="Energy",
         xlabel="DFT",
         ylabel="NEP",
         mae_scale=1.0,
@@ -188,7 +189,7 @@ def test_nep_plot_axes_are_closed_and_scaled():
         color="#2878B5",
     )
     fig, ax = plt.subplots()
-    _plot_simple_parity(ax, panel, "Parity")
+    _plot_simple_parity(ax, panel)
     assert ax.get_xlim() == ax.get_ylim()
     assert all(spine.get_visible() for spine in ax.spines.values())
     plt.close(fig)
@@ -197,8 +198,8 @@ def test_nep_plot_axes_are_closed_and_scaled():
     _plot_marginal_parity(ax, panel)
     assert len(fig.axes) == 3
     assert fig.axes[0].get_xlim() == fig.axes[0].get_ylim()
-    for axis in fig.axes:
-        assert all(spine.get_visible() for spine in axis.spines.values())
+    assert not fig.axes[0].spines["top"].get_visible()
+    assert not fig.axes[0].spines["right"].get_visible()
     plt.close(fig)
 
 

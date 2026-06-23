@@ -16,6 +16,7 @@ pesmaker plot train
 The command looks for `energy_train.out` and `force_train.out` in the current
 directory first. If they are not there, it checks `training/step2`,
 `training/step1`, and `training`.
+Figures are written at 650 dpi.
 
 ## Options
 
