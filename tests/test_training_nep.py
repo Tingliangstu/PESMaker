@@ -156,9 +156,43 @@ def test_plot_train_writes_nep_training_figures(tmp_path, monkeypatch, capsys):
     assert "Energy" in output
     assert "Force" in output
     assert "Stress" in output
+    assert "Virial" in output
     assert "meV/atom" in output
     assert "meV/A" in output
     assert "GPa" in output
+    assert "eV/atom" in output
+
+
+def test_nep_plot_uses_virial_in_train_panel_and_keeps_stress_parity(
+    tmp_path,
+    monkeypatch,
+):
+    """Training overview should prefer virial while marginal parity keeps stress."""
+    from pesmaker.plot import nep
+
+    _write_training_outputs(tmp_path)
+    captured: dict[str, list[str]] = {}
+
+    def fake_train_overview(source, output, panels, *, dpi):
+        captured["train"] = [panel.title for panel in panels]
+        path = output / "nep_train.png"
+        path.write_text("train\n", encoding="utf-8")
+        return path
+
+    def fake_parity(output, panels, *, dpi):
+        captured["parity"] = [panel.title for panel in panels]
+        path = output / "nep_parity.png"
+        path.write_text("parity\n", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(nep, "_write_train_overview", fake_train_overview)
+    monkeypatch.setattr(nep, "_write_parity_with_marginals", fake_parity)
+
+    result = nep.plot_nep_training(tmp_path, output_dir=tmp_path / "plot")
+
+    assert captured["train"] == ["Energy", "Force", "Virial"]
+    assert captured["parity"] == ["Energy", "Force", "Stress"]
+    assert any(line.startswith("Virial") for line in result.summary_lines)
 
 
 def test_nep_plot_axes_are_closed_and_scaled():
@@ -259,7 +293,14 @@ def _write_training_outputs(path):
             [2.0, 3.0, 4.0, 0.2, 0.3, 0.4, 2.1, 2.9, 4.2, 0.3, 0.3, 0.5],
         ]
     )
+    virial = np.array(
+        [
+            [0.2, 0.3, 0.4, 0.01, 0.02, 0.03, 0.25, 0.35, 0.45, 0.02, 0.03, 0.04],
+            [0.3, 0.4, 0.5, 0.02, 0.03, 0.04, 0.28, 0.38, 0.48, 0.03, 0.04, 0.05],
+        ]
+    )
     np.savetxt(path / "loss.out", loss)
     np.savetxt(path / "energy_train.out", energy)
     np.savetxt(path / "force_train.out", force)
     np.savetxt(path / "stress_train.out", stress)
+    np.savetxt(path / "virial_train.out", virial)
