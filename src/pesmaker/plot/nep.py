@@ -289,8 +289,7 @@ def _plot_simple_parity(ax, panel: ParityData) -> None:
     xmin, xmax = _limits(panel.true, panel.pred, padding=0.06)
     ax.scatter(panel.true, panel.pred, s=18, color=panel.color, alpha=0.38, linewidths=0)
     ax.plot([xmin, xmax], [xmin, xmax], color="#7f7f7f", linestyle="--", linewidth=1.6)
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(xmin, xmax)
+    _set_parity_axes(ax, xmin, xmax)
     ax.set_xlabel(panel.xlabel, labelpad=2)
     ax.set_ylabel(panel.ylabel)
     ax.set_title(panel.title, pad=6)
@@ -346,8 +345,7 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
         rasterized=True,
     )
     ax.plot([xmin, xmax], [xmin, xmax], color="#8c8c8c", linestyle="--", linewidth=2.0)
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(xmin, xmax)
+    _set_parity_axes(ax, xmin, xmax)
     ax.set_xlabel(panel.xlabel)
     ax.set_ylabel(panel.ylabel)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
@@ -461,6 +459,19 @@ def _limits(true: np.ndarray, pred: np.ndarray, *, padding: float) -> tuple[floa
         data_range = 1.0
     pad = padding * data_range
     return data_min - pad, data_max + pad
+
+
+def _set_parity_axes(ax, xmin: float, xmax: float) -> None:
+    from matplotlib.ticker import MaxNLocator
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(xmin, xmax)
+    ticks = MaxNLocator(nbins=5).tick_values(xmin, xmax)
+    ticks = ticks[(ticks >= xmin) & (ticks <= xmax)]
+    if ticks.size < 2:
+        ticks = np.array([xmin, xmax])
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
 
 
 def _rmse(pred: np.ndarray, true: np.ndarray) -> float:
