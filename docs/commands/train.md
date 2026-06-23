@@ -45,7 +45,7 @@ After NEP writes `loss.out`, `energy_train.out`, `force_train.out`, and
 `stress_train.out`, run:
 
 ```bash
-pesmaker -plt train
+pesmaker plot train
 ```
 
 PESMaker writes figures under `plot/`, auto-detecting outputs in the current

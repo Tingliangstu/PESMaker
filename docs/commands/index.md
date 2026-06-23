@@ -33,6 +33,7 @@ to be submitted, `next` writes a dry-run log and prints the exact
 | [`collect`](collect.md) | Build an extxyz dataset from finished VASP outputs. |
 | [`train`](train.md) | Continue from a training YAML. |
 | [`train-setup`](train-setup.md) | Prepare model training inputs. |
+| [`plot`](plot.md) | Plot NEP training diagnostics. |
 
 ## How `next` Thinks
 

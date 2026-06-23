@@ -40,7 +40,7 @@ from pesmaker.generators.structures import (
 )
 from pesmaker.jobs.submit import submit_jobs
 from pesmaker.labelers.vasp import setup_labeling
-from pesmaker.plotting import plot_nep_training
+from pesmaker.plot import available_plot_commands, run_plot_command
 from pesmaker.results import StageResult
 from pesmaker.samplers import setup_sampling
 from pesmaker.samplers.selection import select_sampling_frames
@@ -64,29 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Build application-oriented MLIP datasets and potentials.",
         epilog='Use "pesmaker COMMAND -h" for command-specific help.',
     )
-    parser.add_argument(
-        "-plt",
-        "--plot",
-        choices=("train",),
-        help="Plot GPUMD/NEP outputs. Example: pesmaker -plt train",
-    )
-    parser.add_argument(
-        "--plot-source",
-        type=Path,
-        default=Path("."),
-        help=(
-            "Directory containing NEP output files. Defaults to the current "
-            "directory and auto-detects training/, training/step1, or "
-            "training/step2."
-        ),
-    )
-    parser.add_argument(
-        "--plot-output-dir",
-        type=Path,
-        default=Path("plot"),
-        help="Directory for generated figures. Default: plot.",
-    )
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate_parser = subparsers.add_parser(
         "validate",
@@ -173,6 +151,33 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_config_argument(train_setup_parser)
 
+    plot_parser = subparsers.add_parser(
+        "plot",
+        help="Plot training or simulation outputs.",
+        description="Plot PESMaker-supported output files.",
+    )
+    plot_parser.add_argument(
+        "plot_type",
+        choices=available_plot_commands(),
+        help="Plot type. Use `train` for GPUMD/NEP training outputs.",
+    )
+    plot_parser.add_argument(
+        "--source",
+        type=Path,
+        default=Path("."),
+        help=(
+            "Directory containing output files. For `plot train`, defaults to "
+            "the current directory and auto-detects training/, training/step1, "
+            "or training/step2."
+        ),
+    )
+    plot_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("plot"),
+        help="Directory for generated figures. Default: plot.",
+    )
+
     submit_parser = subparsers.add_parser(
         "submit",
         help="Submit prepared jobs with the configured scheduler.",
@@ -206,23 +211,19 @@ def main(argv: list[str] | None = None) -> int:
     _print_banner()
     args = parser.parse_args(argv)
 
-    if args.plot:
+    if args.command == "plot":
         try:
-            if args.plot == "train":
-                _print_plot_result(
-                    plot_nep_training(
-                        args.plot_source,
-                        output_dir=args.plot_output_dir,
-                    )
+            _print_plot_result(
+                run_plot_command(
+                    args.plot_type,
+                    source_dir=args.source,
+                    output_dir=args.output_dir,
                 )
-                return 0
+            )
+            return 0
         except (OSError, ValueError, RuntimeError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
-        parser.error(f"unknown plot type: {args.plot}")
-
-    if not args.command:
-        parser.error("the following arguments are required: command")
 
     if args.command == "init":
         return _write_starter_config(args.path)

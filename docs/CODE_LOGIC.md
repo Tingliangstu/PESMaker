@@ -22,6 +22,7 @@ flowchart TD
     E -->|"submit"| SUB["jobs.submit.submit_jobs"]
     E -->|"collect"| DATA["dataset.extxyz.collect_labeled_dataset"]
     E -->|"train-setup"| TRAIN["trainers.nep.setup_training"]
+    E -->|"plot"| PLOT["plot.commands.run_plot_command"]
 ```
 
 ## Config Flow
@@ -56,6 +57,7 @@ flowchart LR
     CLI --> Submit["pesmaker.jobs.submit"]
     CLI --> Data["pesmaker.dataset.extxyz"]
     CLI --> Train["pesmaker.trainers.nep"]
+    CLI --> PlotCommands["pesmaker.plot.commands"]
 
     Gen --> Structures["pesmaker.structures"]
     Gpumd --> JobsScripts["pesmaker.jobs.scripts"]
@@ -67,6 +69,9 @@ flowchart LR
     Data --> ParsersAse
     Data --> ParsersVasp["pesmaker.parsers.vasp"]
     Train --> JobsScripts
+    Train --> TrainLayout["pesmaker.trainers.layout"]
+    PlotCommands --> PlotNep["pesmaker.plot.nep"]
+    PlotNep --> PlotStyle["pesmaker.plot.style"]
     Next --> Gen
     Next --> Gpumd
     Next --> Select
@@ -74,6 +79,7 @@ flowchart LR
     Next --> Submit
     Next --> Data
     Next --> Train
+    Next --> TrainLayout
 ```
 
 ## Smart Next Flow
@@ -121,7 +127,12 @@ flowchart TD
     AB --> AA
     AA -->|yes| AC{"training dry-run recorded?"}
     AC -->|no| AD["submit --stage training --dry-run; record state"]
-    AC -->|yes| DONE
+    AC -->|yes| AE{"two-step training and step1 not finished?"}
+    AE -->|yes| AF["wait for training/step1/nep.txt"]
+    AE -->|no| AG{"two-step training and step2 missing?"}
+    AG -->|yes| AH["copy step1 to step2 and setup training"]
+    AH --> AA
+    AG -->|no| DONE
 ```
 
 ## Compatibility

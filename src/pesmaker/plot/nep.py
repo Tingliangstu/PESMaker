@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with PESMaker. If not, see <https://www.gnu.org/licenses/>.
-"""Plotting helpers for NEP training outputs."""
+"""NEP training plot commands."""
 
 from __future__ import annotations
 
@@ -22,14 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
-
-@dataclass(frozen=True)
-class PlotResult:
-    """Files produced by a plotting command."""
-
-    output_dir: Path
-    files: tuple[Path, ...]
-    message: str
+from pesmaker.plot.result import PlotResult
+from pesmaker.plot.style import apply_plot_style
 
 
 @dataclass(frozen=True)
@@ -182,7 +176,7 @@ def _write_train_overview(
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
-    _apply_plot_style()
+    apply_plot_style()
     loss = _load_matrix(source / "loss.out")
     fig, axes = plt.subplots(2, 2, figsize=(10.5, 8.0))
     _plot_loss_panel(axes[0, 0], loss)
@@ -209,12 +203,15 @@ def _plot_loss_panel(ax, loss: np.ndarray) -> None:
         ax.set_xlabel("Epoch")
     for column, label in zip(columns, labels):
         values = loss[:, column]
-        values = np.where(values > 0.0, values, np.nan)
-        ax.plot(x, values, linewidth=1.8, label=label)
+        mask = (x > 0.0) & (values > 0.0)
+        if np.any(mask):
+            ax.plot(x[mask], values[mask], linewidth=1.8, label=label)
+    ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_ylabel("Loss")
     ax.set_title("Training loss")
     ax.legend(frameon=False, fontsize=8)
+    _close_axes(ax)
 
 
 def _plot_simple_parity(ax, panel: ParityData, title: str) -> None:
@@ -223,10 +220,12 @@ def _plot_simple_parity(ax, panel: ParityData, title: str) -> None:
     ax.plot([xmin, xmax], [xmin, xmax], color="#7f7f7f", linestyle="--", linewidth=1.6)
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
+    ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel(panel.xlabel)
     ax.set_ylabel(panel.ylabel)
     ax.set_title(title)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
+    _close_axes(ax)
 
 
 def _write_parity_with_marginals(
@@ -240,7 +239,7 @@ def _write_parity_with_marginals(
     matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
-    _apply_plot_style()
+    apply_plot_style()
     fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 4.4))
     if len(panels) == 1:
         axes = [axes]
@@ -278,9 +277,11 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
     ax.plot([xmin, xmax], [xmin, xmax], color="#8c8c8c", linestyle="--", linewidth=2.0)
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
+    ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel(panel.xlabel)
     ax.set_ylabel(panel.ylabel)
     _add_metric_text(ax, panel, x=0.05, y=0.95)
+    _close_axes(ax)
 
     divider = make_axes_locatable(ax)
     ax_top = divider.append_axes("top", size="18%", pad=0.06, sharex=ax)
@@ -296,7 +297,6 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
     )
     _clean_marginal_axis(ax_top, axis="x")
     _clean_marginal_axis(ax_right, axis="y")
-    _add_residual_inset(ax, panel)
 
 
 def _clean_marginal_axis(ax, *, axis: str) -> None:
@@ -306,39 +306,8 @@ def _clean_marginal_axis(ax, *, axis: str) -> None:
     else:
         ax.tick_params(axis="y", labelleft=False, left=False)
         ax.tick_params(axis="x", bottom=False, labelbottom=False)
-    for spine in ("top", "right", "left", "bottom"):
-        ax.spines[spine].set_visible(False)
+    _close_axes(ax)
     ax.grid(False)
-
-
-def _add_residual_inset(ax, panel: ParityData) -> None:
-    inset = ax.inset_axes([0.58, 0.18, 0.28, 0.19])
-    residual = panel.pred - panel.true
-    inset.hist(
-        residual,
-        bins=28,
-        color=panel.color,
-        alpha=0.72,
-        edgecolor="#777777",
-        linewidth=0.5,
-    )
-    mean_residual = float(np.mean(residual))
-    inset.axvline(mean_residual, color="black", linestyle="--", linewidth=0.9)
-    inset.text(
-        0.58,
-        0.78,
-        f"{mean_residual:.2f}",
-        color=panel.color,
-        fontsize=8.5,
-        fontweight="bold",
-        transform=inset.transAxes,
-    )
-    inset.set_xlabel("Residual", fontsize=8.5, labelpad=1)
-    inset.set_yticks([])
-    inset.tick_params(axis="x", labelsize=8, pad=1)
-    for spine in ("top", "right", "left"):
-        inset.spines[spine].set_visible(False)
-    inset.patch.set_alpha(0.0)
 
 
 def _add_metric_text(ax, panel: ParityData, *, x: float, y: float) -> None:
@@ -384,26 +353,6 @@ def _r2(true: np.ndarray, pred: np.ndarray) -> float:
     return 1.0 - ss_res / ss_tot
 
 
-def _apply_plot_style() -> None:
-    try:
-        import seaborn as sns
-    except ImportError:
-        import matplotlib.pyplot as plt
-
-        plt.style.use("seaborn-v0_8-ticks")
-        return
-    sns.set_theme(
-        style="ticks",
-        context="notebook",
-        font_scale=1.05,
-        rc={
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-            "axes.grid": False,
-            "axes.spines.top": False,
-            "axes.spines.right": False,
-            "axes.linewidth": 1.25,
-            "font.family": "sans-serif",
-            "font.sans-serif": ["Arial", "DejaVu Sans", "Liberation Sans"],
-        },
-    )
+def _close_axes(ax) -> None:
+    for spine in ax.spines.values():
+        spine.set_visible(True)
