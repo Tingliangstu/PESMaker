@@ -140,15 +140,25 @@ jobs:
     assert manifest["workdir"] == str(step2)
 
 
-def test_plot_train_writes_nep_training_figures(tmp_path, monkeypatch):
+def test_plot_train_writes_nep_training_figures(tmp_path, monkeypatch, capsys):
     """`pesmaker plot train` should write high-resolution training plots."""
     _write_training_outputs(tmp_path)
     monkeypatch.chdir(tmp_path)
 
     assert main(["plot", "train"]) == 0
+    output = capsys.readouterr().out
 
     assert (tmp_path / "plot" / "nep_train.png").is_file()
     assert (tmp_path / "plot" / "nep_parity.png").is_file()
+    assert "Summary:" in output
+    assert "Total generations : 3" in output
+    assert "Quantity" in output
+    assert "Energy" in output
+    assert "Force" in output
+    assert "Stress" in output
+    assert "meV/atom" in output
+    assert "meV/A" in output
+    assert "GPa" in output
 
 
 def test_nep_plot_axes_are_closed_and_scaled():
@@ -198,6 +208,7 @@ def test_nep_plot_axes_are_closed_and_scaled():
     fig, ax = plt.subplots()
     _plot_simple_parity(ax, panel)
     assert ax.get_xlim() == ax.get_ylim()
+    assert ax.get_aspect() == "auto"
     assert all(spine.get_visible() for spine in ax.spines.values())
     plt.close(fig)
 
@@ -205,6 +216,8 @@ def test_nep_plot_axes_are_closed_and_scaled():
     _plot_marginal_parity(ax, panel)
     assert len(fig.axes) == 3
     assert fig.axes[0].get_xlim() == fig.axes[0].get_ylim()
+    assert fig.axes[0].get_aspect() == "auto"
+    assert all(patch.get_edgecolor()[3] == 0 for patch in fig.axes[1].patches)
     assert not fig.axes[0].spines["top"].get_visible()
     assert not fig.axes[0].spines["right"].get_visible()
     plt.close(fig)
