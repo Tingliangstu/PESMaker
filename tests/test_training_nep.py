@@ -246,17 +246,19 @@ def test_nep_plot_axes_are_closed_and_scaled():
         decimals=2,
         color="#2878B5",
     )
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(5.0, 3.2))
     _plot_simple_parity(ax, panel)
     assert ax.get_xlim() == ax.get_ylim()
+    assert np.array_equal(ax.get_xticks(), ax.get_yticks())
     assert ax.get_aspect() == "auto"
     assert all(spine.get_visible() for spine in ax.spines.values())
     plt.close(fig)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(5.0, 3.2))
     _plot_marginal_parity(ax, panel)
     assert len(fig.axes) == 3
     assert fig.axes[0].get_xlim() == fig.axes[0].get_ylim()
+    assert np.array_equal(fig.axes[0].get_xticks(), fig.axes[0].get_yticks())
     assert fig.axes[0].get_aspect() == "auto"
     assert all(patch.get_edgecolor()[3] > 0 for patch in fig.axes[1].patches)
     assert all(not spine.get_visible() for spine in fig.axes[1].spines.values())
