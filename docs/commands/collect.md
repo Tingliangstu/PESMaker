@@ -39,9 +39,11 @@ For large folders, collection may take a while. Before parsing starts, PESMaker
 prints:
 
 ```text
-Starting collection:
-  - PESMaker is scanning OUTCAR files and parsing VASP results.
-  - For many calculations this can take several minutes. Please wait.
+Starting dataset collection:
+  - Engine      : VASP
+  - Input files : VASP OUTCAR files
+  - PESMaker is scanning files and parsing labeled results.
+  - Large datasets can take several minutes. Please wait.
 ```
 
 This writes:

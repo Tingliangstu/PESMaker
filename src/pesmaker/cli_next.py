@@ -82,16 +82,25 @@ def print_next_status(result: NextResult, *, config_path: Path) -> None:
     print_next_diagnostics(result, config_path=config_path)
 
 
-def print_next_starting(result: NextResult) -> None:
+def print_next_starting(result: NextResult, config) -> None:
     """Print an immediate progress message before a long local `next` stage."""
     event = result.events[0] if result.events else None
     if _next_action_kind(event) != "run":
         return
     if _event_stage(event) != "collect":
         return
-    print("Starting collection:")
-    print("  - PESMaker is scanning OUTCAR files and parsing VASP results.")
-    print("  - For many calculations this can take several minutes. Please wait.")
+    print_collection_starting(config)
+
+
+def print_collection_starting(config) -> None:
+    """Print the start message for dataset collection."""
+    engine = str(config.collecting.engine or "unknown").strip().lower()
+    engine_label, input_label = _collection_engine_labels(engine)
+    print("Starting dataset collection:")
+    print(f"  - Engine      : {engine_label}")
+    print(f"  - Input files : {input_label}")
+    print("  - PESMaker is scanning files and parsing labeled results.")
+    print("  - Large datasets can take several minutes. Please wait.")
     print(flush=True)
 
 
@@ -299,6 +308,14 @@ def submit_action_label(stage: str) -> str:
     if stage == "training":
         return "Submit training jobs"
     return "Submit SCF jobs"
+
+
+def _collection_engine_labels(engine: str) -> tuple[str, str]:
+    if engine == "vasp":
+        return "VASP", "VASP OUTCAR files"
+    if engine in {"", "none", "unknown"}:
+        return "unspecified", "calculation output files"
+    return engine, "calculation output files"
 
 
 def _print_run_event(event: NextEvent) -> None:

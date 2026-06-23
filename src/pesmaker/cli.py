@@ -24,6 +24,7 @@ from pathlib import Path
 
 from pesmaker import __contact__, __version__
 from pesmaker.cli_next import (
+    print_collection_starting,
     print_next_concise,
     print_next_status,
     print_next_starting,
@@ -191,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "next":
             if args.verbose:
                 preflight = inspect_next(config, args.config)
-                print_next_starting(preflight)
+                print_next_starting(preflight, config)
                 print_next_verbose(
                     preflight,
                     run_next(config, args.config),
@@ -199,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 preflight = inspect_next(config, args.config)
-                print_next_starting(preflight)
+                print_next_starting(preflight, config)
                 print_next_concise(
                     run_next(config, args.config), config_path=args.config
                 )
@@ -222,12 +223,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "collect":
-            print("Starting collection:")
-            print("  - PESMaker is scanning OUTCAR files and parsing VASP results.")
-            print(
-                "  - For many calculations this can take several minutes. Please wait."
-            )
-            print(flush=True)
+            print_collection_starting(config)
             _print_stage_result(collect_labeled_dataset(config))
             return 0
 

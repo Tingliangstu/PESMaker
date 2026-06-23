@@ -333,7 +333,7 @@ def determine_next_step(
             action="collect",
             kind="run",
             stage="collect",
-            message="Collect finished VASP OUTCAR files into the training dataset.",
+            message="Collect finished labeled outputs into the training dataset.",
         )
 
     if _training_enabled(config):

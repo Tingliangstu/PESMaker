@@ -668,8 +668,10 @@ collecting:
     output = capsys.readouterr().out
 
     assert (tmp_path / "train.xyz").exists()
-    assert "Starting collection:" in output
-    assert "PESMaker is scanning OUTCAR files and parsing VASP results." in output
+    assert "Starting dataset collection:" in output
+    assert "Engine      : VASP" in output
+    assert "Input files : VASP OUTCAR files" in output
+    assert "PESMaker is scanning files and parsing labeled results." in output
     assert "Please wait." in output
     assert "Flow             : dataset-collect" in output
     assert "Current          : waiting for training settings" in output
@@ -677,7 +679,43 @@ collecting:
     assert "Collected OUTCAR files." in output
     assert "The dataset is ready; configure model training next." in output
     assert "Add a `training` section to the YAML." in output
-    assert output.index("Starting collection:") < output.index("Work done:")
+    assert output.index("Starting dataset collection:") < output.index("Work done:")
+
+
+def test_next_collect_start_message_uses_collecting_engine(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """The collection start message should not hard-code VASP for all engines."""
+    config_path = tmp_path / "collect.yaml"
+    config_path.write_text(
+        """project: collect_custom
+collecting:
+  engine: custom
+  dataset_path: train.xyz
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    def fake_collect(config):
+        dataset = tmp_path / "train.xyz"
+        dataset.write_text("dataset\n", encoding="utf-8")
+        return StageResult(
+            output_dir=tmp_path,
+            files=(dataset,),
+            message="Collected custom outputs.",
+        )
+
+    monkeypatch.setattr("pesmaker.workflow.next.collect_labeled_dataset", fake_collect)
+
+    assert main(["next", str(config_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Engine      : custom" in output
+    assert "Input files : calculation output files" in output
+    assert "VASP OUTCAR files" not in output
 
 
 def test_next_reports_complete_without_running_when_no_task_exists(
