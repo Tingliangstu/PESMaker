@@ -62,29 +62,44 @@ def plot_nep_training(
 
     energy = _load_matrix(source / "energy_train.out")
     force = _load_matrix(source / "force_train.out")
-    stress_path = source / "stress_train.out"
-    stress_label = "stress"
-    stress_unit = "GPa"
-    stress = None
-    if stress_path.exists():
-        stress = _load_matrix(stress_path)
-        stress = _filter_invalid_tensor_rows(stress)
-    elif (source / "virial_train.out").exists():
-        stress = _load_matrix(source / "virial_train.out")
-        stress = _filter_invalid_tensor_rows(stress)
-        stress_label = "virial"
-        stress_unit = "eV"
+    stress = _load_optional_tensor(source / "stress_train.out")
+    virial = _load_optional_tensor(source / "virial_train.out")
 
-    panels = _parity_panels(energy, force, stress, stress_label, stress_unit)
+    parity_tensor = stress if stress is not None else virial
+    parity_tensor_label = "stress" if stress is not None else "virial"
+    parity_tensor_unit = "GPa" if stress is not None else "eV/atom"
+    panels = _parity_panels(
+        energy,
+        force,
+        parity_tensor,
+        parity_tensor_label,
+        parity_tensor_unit,
+    )
+    train_tensor = virial if virial is not None else parity_tensor
+    train_tensor_label = "virial" if virial is not None else parity_tensor_label
+    train_tensor_unit = "eV/atom" if virial is not None else parity_tensor_unit
+    train_panels = _parity_panels(
+        energy,
+        force,
+        train_tensor,
+        train_tensor_label,
+        train_tensor_unit,
+    )
+    summary_panels = panels
+    if stress is not None and virial is not None:
+        summary_panels = [
+            *panels,
+            _tensor_panel(virial, "virial", "eV/atom"),
+        ]
     files: list[Path] = []
     if (source / "loss.out").exists():
-        files.append(_write_train_overview(source, output, panels, dpi=dpi))
+        files.append(_write_train_overview(source, output, train_panels, dpi=dpi))
     files.append(_write_parity_with_marginals(output, panels, dpi=dpi))
     return PlotResult(
         output,
         tuple(files),
         f"Wrote {len(files)} NEP training plot(s) from {source}",
-        _training_summary_lines(source, panels),
+        _training_summary_lines(source, summary_panels),
     )
 
 
@@ -115,6 +130,15 @@ def _load_matrix(path: Path) -> np.ndarray:
         raise ValueError(f"required NEP output file is missing: {path}")
     data = np.loadtxt(path)
     return np.atleast_2d(data)
+
+
+def _load_optional_tensor(path: Path) -> np.ndarray | None:
+    if not path.exists():
+        return None
+    data = _filter_invalid_tensor_rows(_load_matrix(path))
+    if not data.size:
+        return None
+    return data
 
 
 def _filter_invalid_tensor_rows(data: np.ndarray) -> np.ndarray:
@@ -159,21 +183,28 @@ def _parity_panels(
         ),
     ]
     if tensor is not None and tensor.size and tensor.shape[1] >= 12:
-        panels.append(
-            ParityData(
-                true=tensor[:, 6:12].reshape(-1),
-                pred=tensor[:, 0:6].reshape(-1),
-                title=tensor_label.capitalize(),
-                xlabel=f"DFT {tensor_label} ({tensor_unit})",
-                ylabel=f"NEP {tensor_label} ({tensor_unit})",
-                mae_scale=1.0,
-                rmse_scale=1.0,
-                unit=tensor_unit,
-                decimals=4 if tensor_unit == "GPa" else 3,
-                color=TENSOR_COLOR,
-            )
-        )
+        panels.append(_tensor_panel(tensor, tensor_label, tensor_unit))
     return panels
+
+
+def _tensor_panel(
+    tensor: np.ndarray,
+    tensor_label: str,
+    tensor_unit: str,
+) -> ParityData:
+    decimals = 4 if tensor_unit in {"GPa", "eV/atom"} else 3
+    return ParityData(
+        true=tensor[:, 6:12].reshape(-1),
+        pred=tensor[:, 0:6].reshape(-1),
+        title=tensor_label.capitalize(),
+        xlabel=f"DFT {tensor_label} ({tensor_unit})",
+        ylabel=f"NEP {tensor_label} ({tensor_unit})",
+        mae_scale=1.0,
+        rmse_scale=1.0,
+        unit=tensor_unit,
+        decimals=decimals,
+        color=TENSOR_COLOR,
+    )
 
 
 def _write_train_overview(
