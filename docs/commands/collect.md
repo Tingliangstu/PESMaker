@@ -136,7 +136,13 @@ collecting:
 The summary report is a normal text file. It records matched OUTCAR files,
 collected OUTCAR files, total structures, train/test structures, skipped
 incomplete OUTCAR files, skipped nonconverged OUTCAR files, unreadable OUTCAR
-files, and structure counts grouped by source directory.
+files, structure counts grouped by source directory, detailed `Config_type`
+counts, and skipped OUTCAR paths.
+
+Source grouping does not require PESMaker-created folders. PESMaker first uses
+the closest ancestor directory containing `sub.yaml` when present. If no
+`sub.yaml` exists, it infers the source from the path before folders such as
+`run_vasp_scf`, `*_run_vasp_scf`, or `calc_*`.
 
 The command prints a compact screen summary:
 
@@ -159,25 +165,26 @@ Summary file : train_collection_summary.txt
 
 Sources:
   Source groups : 17
-  source                         structures
-  -----------------------------  ----------
-  1.Te/2.2D-Te/1.perturbed              147
-  2.Pb/2.2D_Pb/1.perturbed               98
-  3.Te-Pd/2.2D-Te-Pd/1.perturbed         98
-  3.Te-Pd/1.Material_project_structure   42
-  2.Pb/2.2D_Pb/2.MD                      40
-  3.Te-Pd/2.2D-Te-Pd/2.MD                40
-  3.Te-Pd/3.Te-Pd-Bulk_MD                39
-  1.Te/3.bulk_MD                         35
-  2.Pb/3.Pd-bulk_MD                      34
-  1.Te/2.2D-Te/2.MD                      30
-  1.Te/1.Material_project_structure      27
-  2.Pb/1.Material_project_structure      12
-  4.bulk_pristine/1.Te                    9
-  4.bulk_pristine/4.large_Te-Pd           7
-  4.bulk_pristine/3.small_Te-Pd           5
-  4.bulk_pristine/2.Pb                    4
-  4.bulk_pristine/5.1_large_Te-Pd         2
+  source                                OUTCARs  structures
+  ------------------------------------  ------  ----------
+  1.Te/1.Material_project_structure         27          27
+  1.Te/2.2D-Te/1.perturbed                 147         147
+  1.Te/2.2D-Te/2.MD                         30          30
+  1.Te/3.bulk_MD                            35          35
+  2.Pb/1.Material_project_structure         12          12
+  2.Pb/2.2D_Pb/1.perturbed                  98          98
+  2.Pb/2.2D_Pb/2.MD                         40          40
+  2.Pb/3.Pd-bulk_MD                         34          34
+  3.Te-Pd/1.Material_project_structure      42          42
+  3.Te-Pd/2.2D-Te-Pd/1.perturbed            98          98
+  3.Te-Pd/2.2D-Te-Pd/2.MD                   40          40
+  3.Te-Pd/3.Te-Pd-Bulk_MD                   39          39
+  4.bulk_pristine/1.Te                       9           9
+  4.bulk_pristine/2.Pb                       4           4
+  4.bulk_pristine/3.small_Te-Pd              5           5
+  4.bulk_pristine/4.large_Te-Pd              7           7
+  4.bulk_pristine/5.1_large_Te-Pd            2           2
+  Total OUTCARs in sources     : 669
   Total structures in sources : 669
 
 Van der Waals correction : not detected in 669/669 collected calculation(s)

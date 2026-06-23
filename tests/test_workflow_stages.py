@@ -42,6 +42,7 @@ def test_collect_writes_concise_summary_grouped_by_source(tmp_path, monkeypatch)
     """Collection should report frame counts by stable source directory."""
     root_a = tmp_path / "1.Te" / "1.Material_project_structure"
     root_b = tmp_path / "2.Pb" / "3.Pd-bulk_MD"
+    root_c = tmp_path / "external" / "manual_batch"
     for root in (root_a, root_b):
         root.mkdir(parents=True)
         (root / "sub.yaml").write_text("project: existing\n", encoding="utf-8")
@@ -50,6 +51,7 @@ def test_collect_writes_concise_summary_grouped_by_source(tmp_path, monkeypatch)
         root_a / "run_vasp_scf" / "mp-1" / "calc_000000" / "OUTCAR",
         root_a / "run_vasp_scf" / "mp-2" / "calc_000001" / "OUTCAR",
         root_b / "run_vasp_scf" / "bulk" / "calc_000000" / "OUTCAR",
+        root_c / "run_vasp_scf" / "calc_000000" / "OUTCAR",
     ]
     for outcar in outcars:
         outcar.parent.mkdir(parents=True)
@@ -77,24 +79,33 @@ collecting:
     assert "Config_type=1.Te_1.Material_project_structure_mp-1" in train_text
     assert "Config_type=1.Te_1.Material_project_structure_mp-2" in train_text
     assert "Totals:" in result.message
-    assert "OUTCAR matched       : 3" in result.message
-    assert "Structures written   : 3" in result.message
+    assert "OUTCAR matched       : 4" in result.message
+    assert "Structures written   : 4" in result.message
     assert "Sources:" in result.message
     assert "1.Te/1.Material_project_structure" in result.message
     assert "2.Pb/3.Pd-bulk_MD" in result.message
+    assert "external/manual_batch" in result.message
+    assert "OUTCARs" in result.message
     assert "mp-1" not in result.message
-    assert "Total structures in sources : 3" in result.message
+    assert "Total OUTCARs in sources     : 4" in result.message
+    assert "Total structures in sources : 4" in result.message
     assert "Van der Waals correction : detected" in result.message
-    assert "in 3/3 collected calculation(s)" in result.message
+    assert "in 4/4 collected calculation(s)" in result.message
     root_a_label = root_a.relative_to(tmp_path).as_posix()
     root_b_label = root_b.relative_to(tmp_path).as_posix()
+    root_c_label = root_c.relative_to(tmp_path).as_posix()
     assert "PESMaker collection summary" in summary
-    assert "OUTCAR files matched          : 3" in summary
+    assert "OUTCAR files matched          : 4" in summary
     assert "Incomplete OUTCAR skipped     : 0" in summary
     assert "Nonconverged OUTCAR skipped   : 0" in summary
+    assert "Non-PESMaker VASP OUTCAR folders can still be collected." in summary
     assert root_a_label in summary
     assert root_b_label in summary
+    assert root_c_label in summary
     assert "       2           2" in summary
+    assert "Collected structures by Config_type" in summary
+    assert "Config_type=external_manual_batch" in train_text
+    assert "external_manual_batch" in summary
 
 
 def test_collect_can_skip_nonconverged_outcars_and_write_test_split(
@@ -152,7 +163,11 @@ collecting:
     assert "Incomplete OUTCAR skipped     : 1" in summary
     assert "Nonconverged OUTCAR skipped   : 1" in summary
     assert "Incomplete OUTCAR by source" in summary
+    assert "Incomplete OUTCAR paths" in summary
+    assert "calc_000003/OUTCAR" in summary
     assert "Nonconverged OUTCAR by source" in summary
+    assert "Nonconverged OUTCAR paths" in summary
+    assert "calc_000002/OUTCAR" in summary
 
 
 def _write_fake_outcar(

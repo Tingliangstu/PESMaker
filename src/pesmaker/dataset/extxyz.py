@@ -110,6 +110,7 @@ def collect_labeled_dataset(config: PESMakerConfig) -> StageResult:
     )
     _write_collection_summary(
         summary_path,
+        frames=frames,
         collected_records=collection_records,
         incomplete_records=incomplete_records,
         nonconverged_records=nonconverged_records,
@@ -598,6 +599,7 @@ def _vdw_summary_line(counts: dict[int, int]) -> str:
 def _write_collection_summary(
     path: Path,
     *,
+    frames: list[LabeledFrame],
     collected_records: list[tuple[Path, int]],
     incomplete_records: list[Path],
     nonconverged_records: list[Path],
@@ -623,15 +625,31 @@ def _write_collection_summary(
         f"  Nonconverged OUTCAR skipped   : {len(nonconverged_records)}",
         f"  Unreadable OUTCAR skipped     : {len(unreadable_records)}",
         "",
+        "Source grouping rule",
+        "  Uses the closest ancestor directory containing sub.yaml when present.",
+        "  If no sub.yaml exists, infers the source from the path before "
+        "run_vasp_scf, *_run_vasp_scf, or calc_*.",
+        "  Non-PESMaker VASP OUTCAR folders can still be collected.",
+        "",
         "Collected structures by source",
     ]
     lines.extend(_format_grouped_counts(collected_grouped, include_frames=True))
+    lines.extend(
+        [
+            "",
+            "Collected structures by Config_type",
+            *_format_config_type_counts(frames),
+        ]
+    )
     if incomplete_records:
         lines.extend(
             [
                 "",
                 "Incomplete OUTCAR by source",
                 *_format_grouped_counts(incomplete_grouped, include_frames=False),
+                "",
+                "Incomplete OUTCAR paths",
+                *_format_path_list(incomplete_records),
             ]
         )
     if nonconverged_records:
@@ -640,6 +658,9 @@ def _write_collection_summary(
                 "",
                 "Nonconverged OUTCAR by source",
                 *_format_grouped_counts(nonconverged_grouped, include_frames=False),
+                "",
+                "Nonconverged OUTCAR paths",
+                *_format_path_list(nonconverged_records),
             ]
         )
     if unreadable_records:
@@ -648,6 +669,9 @@ def _write_collection_summary(
                 "",
                 "Unreadable OUTCAR by source",
                 *_format_grouped_counts(unreadable_grouped, include_frames=False),
+                "",
+                "Unreadable OUTCAR paths",
+                *_format_path_list(unreadable_records),
             ]
         )
 
@@ -696,26 +720,52 @@ def _format_source_overview(
 ) -> list[str]:
     if not grouped:
         return ["  none"]
-    sorted_items = sorted(
-        grouped.items(),
-        key=lambda item: (-item[1]["frames"], item[0]),
-    )
     show_all = len(grouped) <= limit
+    if show_all:
+        sorted_items = sorted(grouped.items())
+    else:
+        sorted_items = sorted(
+            grouped.items(),
+            key=lambda item: (-item[1]["frames"], item[0]),
+        )
     shown = sorted_items if show_all else sorted_items[:limit]
     name_width = max(len("source"), *(len(name) for name, _ in shown))
     lines = [f"  Source groups : {len(grouped)}"]
     if not show_all:
         lines.append(f"  Showing top {limit} groups by structure count.")
-    lines.append(f"  {'source'.ljust(name_width)}  structures")
-    lines.append(f"  {'-' * name_width}  ----------")
+    lines.append(f"  {'source'.ljust(name_width)}  OUTCARs  structures")
+    lines.append(f"  {'-' * name_width}  ------  ----------")
     for source, counts in shown:
-        lines.append(f"  {source.ljust(name_width)}  {counts['frames']:>10}")
+        lines.append(
+            f"  {source.ljust(name_width)}  "
+            f"{counts['outcars']:>6}  {counts['frames']:>10}"
+        )
+    total_outcars = sum(counts["outcars"] for counts in grouped.values())
     total_structures = sum(counts["frames"] for counts in grouped.values())
     if not show_all:
         remaining = len(grouped) - limit
         lines.append(f"  ... {remaining} more group(s); see summary file.")
+    lines.append(f"  Total OUTCARs in sources     : {total_outcars}")
     lines.append(f"  Total structures in sources : {total_structures}")
     return lines
+
+
+def _format_config_type_counts(frames: list[LabeledFrame]) -> list[str]:
+    if not frames:
+        return ["  none"]
+    counts = Counter(frame.config_type for frame in frames)
+    name_width = max(len("Config_type"), *(len(name) for name in counts))
+    lines = [f"  {'Config_type'.ljust(name_width)}  structures"]
+    lines.append(f"  {'-' * name_width}  ----------")
+    for config_type, count in sorted(counts.items()):
+        lines.append(f"  {config_type.ljust(name_width)}  {count:>10}")
+    return lines
+
+
+def _format_path_list(paths: list[Path]) -> list[str]:
+    if not paths:
+        return ["  none"]
+    return [f"  - {path.as_posix()}" for path in sorted(paths)]
 
 
 def _source_counts(records: list[tuple[Path, int]]) -> dict[str, dict[str, int]]:
