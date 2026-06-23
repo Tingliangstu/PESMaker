@@ -218,6 +218,8 @@ def test_nep_plot_axes_are_closed_and_scaled():
     assert fig.axes[0].get_xlim() == fig.axes[0].get_ylim()
     assert fig.axes[0].get_aspect() == "auto"
     assert all(patch.get_edgecolor()[3] == 0 for patch in fig.axes[1].patches)
+    assert all(not spine.get_visible() for spine in fig.axes[1].spines.values())
+    assert all(not spine.get_visible() for spine in fig.axes[2].spines.values())
     assert not fig.axes[0].spines["top"].get_visible()
     assert not fig.axes[0].spines["right"].get_visible()
     plt.close(fig)

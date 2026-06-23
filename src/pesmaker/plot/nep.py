@@ -190,7 +190,7 @@ def _write_train_overview(
 
     apply_plot_style()
     loss = _load_matrix(source / "loss.out")
-    fig, axes = plt.subplots(2, 2, figsize=(10.2, 7.0))
+    fig, axes = plt.subplots(2, 2, figsize=(10.8, 7.2))
     _plot_loss_panel(axes[0, 0], loss, panels)
     _label_panel(axes[0, 0], 0)
     for index, (ax, panel) in enumerate(zip(axes.flat[1:], panels), start=1):
@@ -203,8 +203,8 @@ def _write_train_overview(
         bottom=0.09,
         left=0.075,
         right=0.985,
-        hspace=0.30,
-        wspace=0.16,
+        hspace=0.34,
+        wspace=0.26,
     )
     path = output / "nep_train.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -278,7 +278,7 @@ def _write_parity_with_marginals(
     import matplotlib.pyplot as plt
 
     apply_plot_style()
-    fig, axes = plt.subplots(1, len(panels), figsize=(4.6 * len(panels), 3.75))
+    fig, axes = plt.subplots(1, len(panels), figsize=(5.15 * len(panels), 3.75))
     if len(panels) == 1:
         axes = [axes]
     for index, (ax, panel) in enumerate(zip(axes, panels)):
@@ -289,7 +289,7 @@ def _write_parity_with_marginals(
         bottom=0.18,
         left=0.055,
         right=0.985,
-        wspace=0.16,
+        wspace=0.42,
     )
     path = output / "nep_parity.png"
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -398,7 +398,8 @@ def _clean_marginal_axis(ax, *, axis: str) -> None:
     else:
         ax.tick_params(axis="y", labelleft=False, left=False)
         ax.tick_params(axis="x", bottom=False, labelbottom=False)
-    _open_axes(ax)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
     ax.grid(False)
 
 
