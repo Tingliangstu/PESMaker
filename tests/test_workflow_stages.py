@@ -87,8 +87,8 @@ collecting:
     assert "external/manual_batch" in result.message
     assert "OUTCARs" in result.message
     assert "mp-1" not in result.message
-    assert "Total OUTCARs in sources     : 4" in result.message
-    assert "Total structures in sources : 4" in result.message
+    assert "Collected OUTCARs total : 4" in result.message
+    assert "Collected structures total : 4" in result.message
     assert "Van der Waals correction : detected" in result.message
     assert "in 4/4 collected calculation(s)" in result.message
     root_a_label = root_a.relative_to(tmp_path).as_posix()
@@ -103,6 +103,8 @@ collecting:
     assert root_b_label in summary
     assert root_c_label in summary
     assert "       2           2" in summary
+    assert "Collected OUTCARs total : 4" in summary
+    assert "Collected structures total : 4" in summary
     assert "Collected structures by Config_type" in summary
     assert "Config_type=external_manual_batch" in train_text
     assert "external_manual_batch" in summary
@@ -165,9 +167,11 @@ collecting:
     assert "Incomplete OUTCAR by source" in summary
     assert "Incomplete OUTCAR paths" in summary
     assert "calc_000003/OUTCAR" in summary
+    assert "Incomplete OUTCARs total : 1" in summary
     assert "Nonconverged OUTCAR by source" in summary
     assert "Nonconverged OUTCAR paths" in summary
     assert "calc_000002/OUTCAR" in summary
+    assert "Nonconverged OUTCARs total : 1" in summary
 
 
 def _write_fake_outcar(

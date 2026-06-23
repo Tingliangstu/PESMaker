@@ -184,8 +184,9 @@ Sources:
   4.bulk_pristine/3.small_Te-Pd              5           5
   4.bulk_pristine/4.large_Te-Pd              7           7
   4.bulk_pristine/5.1_large_Te-Pd            2           2
-  Total OUTCARs in sources     : 669
-  Total structures in sources : 669
+
+  Collected OUTCARs total : 669
+  Collected structures total : 669
 
 Van der Waals correction : not detected in 669/669 collected calculation(s)
 ```
