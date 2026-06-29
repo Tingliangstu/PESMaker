@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,11 +43,27 @@ class ParityData:
     color: str
 
 
+@dataclass(frozen=True)
+class TrainingRunInfo:
+    """Training-output metadata inferred from files in the source directory."""
+
+    engine: str
+    stage2_epoch: int | None = None
+
+    @property
+    def is_torchnep(self) -> bool:
+        return self.engine == "torchnep"
+
+
 ENERGY_COLOR = "#2878B5"
 FORCE_COLOR = "#2F9E44"
 TENSOR_COLOR = "#F28E2B"
 TOTAL_LOSS_COLOR = "#3D3D3D"
 REG_LOSS_COLORS = ("#8172B3", "#8C564B")
+_STAGE2_PATTERNS = (
+    re.compile(r"Stage\s+2\s+from\s+epoch\s+(\d+)", re.IGNORECASE),
+    re.compile(r"Stage\s+2\s+started\s+at\s+epoch\s+(\d+)", re.IGNORECASE),
+)
 
 
 def plot_nep_training(
@@ -59,6 +76,7 @@ def plot_nep_training(
     source = _resolve_training_source(source_dir or Path("."))
     output = output_dir or Path("plot")
     output.mkdir(parents=True, exist_ok=True)
+    run_info = _detect_training_run(source)
 
     energy = _load_matrix(source / "energy_train.out")
     force = _load_matrix(source / "force_train.out")
@@ -93,20 +111,26 @@ def plot_nep_training(
         ]
     files: list[Path] = []
     if (source / "loss.out").exists():
-        files.append(_write_train_overview(source, output, train_panels, dpi=dpi))
+        files.append(
+            _write_train_overview(source, output, train_panels, run_info, dpi=dpi)
+        )
     files.append(_write_parity_with_marginals(output, panels, dpi=dpi))
+    engine_label = "torchnep" if run_info.is_torchnep else "NEP"
     return PlotResult(
         output,
         tuple(files),
-        f"Wrote {len(files)} NEP training plot(s) from {source}",
-        _training_summary_lines(source, summary_panels),
+        f"Wrote {len(files)} {engine_label} training plot(s) from {source}",
+        _training_summary_lines(source, summary_panels, run_info),
     )
 
 
 def _resolve_training_source(path: Path) -> Path:
+    if path.is_file():
+        path = path.parent
     if _has_training_outputs(path):
         return path
     candidates = [
+        path / "output",
         path / "training" / "step2",
         path / "training" / "step1",
         path / "training",
@@ -125,10 +149,45 @@ def _has_training_outputs(path: Path) -> bool:
     return (path / "energy_train.out").is_file() and (path / "force_train.out").is_file()
 
 
+def _detect_training_run(source: Path) -> TrainingRunInfo:
+    log_text = _read_optional_text(source / "output.log")
+    loss_header = _first_nonempty_line(source / "loss.out")
+    is_torchnep = "torchnep" in log_text.lower() or (
+        loss_header.lower().startswith("epoch") and "rmse_e" in loss_header.lower()
+    )
+    stage2_epoch = _parse_stage2_epoch(log_text)
+    return TrainingRunInfo("torchnep" if is_torchnep else "nep", stage2_epoch)
+
+
+def _read_optional_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _first_nonempty_line(path: Path) -> str:
+    if not path.exists():
+        return ""
+    with path.open(encoding="utf-8", errors="ignore") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped:
+                return stripped
+    return ""
+
+
+def _parse_stage2_epoch(text: str) -> int | None:
+    for pattern in _STAGE2_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def _load_matrix(path: Path) -> np.ndarray:
     if not path.exists():
         raise ValueError(f"required NEP output file is missing: {path}")
-    data = np.loadtxt(path)
+    data = np.loadtxt(path, skiprows=_numeric_table_skiprows(path))
     return np.atleast_2d(data)
 
 
@@ -145,8 +204,24 @@ def _filter_invalid_tensor_rows(data: np.ndarray) -> np.ndarray:
     if data.size == 0:
         return data
     columns = min(12, data.shape[1])
-    valid = ~np.any(np.abs(data[:, :columns]) >= 1e6, axis=1)
+    values = data[:, :columns]
+    valid = np.all(np.isfinite(values), axis=1) & ~np.any(
+        np.abs(values) >= 1e6,
+        axis=1,
+    )
     return data[valid]
+
+
+def _numeric_table_skiprows(path: Path) -> int:
+    first_line = _first_nonempty_line(path)
+    if not first_line:
+        return 0
+    first_token = first_line.split()[0]
+    try:
+        float(first_token)
+    except ValueError:
+        return 1
+    return 0
 
 
 def _parity_panels(
@@ -212,6 +287,7 @@ def _write_train_overview(
     source: Path,
     output: Path,
     panels: list[ParityData],
+    run_info: TrainingRunInfo | None = None,
     *,
     dpi: int,
 ) -> Path:
@@ -223,7 +299,7 @@ def _write_train_overview(
     apply_plot_style()
     loss = _load_matrix(source / "loss.out")
     fig, axes = plt.subplots(2, 2, figsize=(9.4, 7.8))
-    _plot_loss_panel(axes[0, 0], loss, panels)
+    _plot_loss_panel(axes[0, 0], loss, panels, run_info)
     _label_panel(axes[0, 0], 0)
     for index, (ax, panel) in enumerate(zip(axes.flat[1:], panels), start=1):
         _plot_simple_parity(ax, panel)
@@ -248,27 +324,83 @@ def _plot_loss_panel(
     ax,
     loss: np.ndarray,
     panels: list[ParityData] | None = None,
+    run_info: TrainingRunInfo | None = None,
 ) -> None:
     x = loss[:, 0]
-    if x[0] == 100:
+    if run_info is not None and run_info.is_torchnep:
+        labels = ["Total", "Energy RMSE", "Force RMSE", "Virial RMSE", "Stress RMSE"]
+        columns = range(1, min(loss.shape[1], 6))
+        ylabel = "Loss / RMSE"
+    elif x[0] == 100:
         labels = ["Total", "L1-Reg", "L2-Reg", "Energy", "Force", "Virial"]
         columns = range(1, min(loss.shape[1], 7))
+        ylabel = "Loss"
     else:
         labels = ["Total", "Energy", "Force", "Virial"]
         columns = range(1, min(loss.shape[1], 5))
-    ax.set_xlabel("Generation", labelpad=2)
+        ylabel = "Loss"
+    xlabel = "Epoch" if run_info is not None and run_info.is_torchnep else "Generation"
+    ax.set_xlabel(xlabel, labelpad=2)
     colors = _loss_colors(labels, panels or [])
     for column, label, color in zip(columns, labels, colors):
         values = loss[:, column]
         mask = (x > 0.0) & (values > 0.0)
-        if np.any(mask):
-            ax.plot(x[mask], values[mask], linewidth=1.9, color=color, label=label)
+        _plot_loss_series(ax, x, values, mask, label, color, run_info)
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_ylabel("Loss")
+    ax.set_ylabel(ylabel)
     ax.set_title("Training loss", pad=6)
+    if run_info is not None and run_info.stage2_epoch is not None:
+        ax.axvline(
+            run_info.stage2_epoch,
+            color="#9a9a9a",
+            linestyle=":",
+            linewidth=1.2,
+            zorder=0,
+        )
+        ax.text(
+            run_info.stage2_epoch,
+            0.98,
+            "Stage 2",
+            transform=ax.get_xaxis_transform(),
+            fontsize=8.5,
+            color="#555555",
+            rotation=90,
+            va="top",
+            ha="right",
+        )
     ax.legend(frameon=False, fontsize=8, loc="best")
     _close_axes(ax)
+
+
+def _plot_loss_series(
+    ax,
+    x: np.ndarray,
+    values: np.ndarray,
+    mask: np.ndarray,
+    label: str,
+    color: str,
+    run_info: TrainingRunInfo | None,
+) -> None:
+    if not np.any(mask):
+        return
+    if run_info is None or run_info.stage2_epoch is None:
+        ax.plot(x[mask], values[mask], linewidth=1.9, color=color, label=label)
+        return
+
+    stage1 = mask & (x < run_info.stage2_epoch)
+    stage2 = mask & (x >= run_info.stage2_epoch)
+    if np.any(stage1):
+        ax.plot(x[stage1], values[stage1], linewidth=1.9, color=color, label=label)
+    if np.any(stage2):
+        ax.plot(
+            x[stage2],
+            values[stage2],
+            linewidth=1.9,
+            color=color,
+            linestyle="--",
+            label=None if np.any(stage1) else label,
+        )
 
 
 def _loss_colors(labels: list[str], panels: list[ParityData]) -> list[str]:
@@ -279,8 +411,14 @@ def _loss_colors(labels: list[str], panels: list[ParityData]) -> list[str]:
         "l2-reg": REG_LOSS_COLORS[1],
         "energy": panel_colors.get("energy", ENERGY_COLOR),
         "force": panel_colors.get("force", FORCE_COLOR),
+        "force rmse": panel_colors.get("force", FORCE_COLOR),
         "virial": panel_colors.get("virial", panel_colors.get("stress", TENSOR_COLOR)),
+        "virial rmse": panel_colors.get(
+            "virial", panel_colors.get("stress", TENSOR_COLOR)
+        ),
         "stress": panel_colors.get("stress", TENSOR_COLOR),
+        "stress rmse": panel_colors.get("stress", TENSOR_COLOR),
+        "energy rmse": panel_colors.get("energy", ENERGY_COLOR),
     }
     return [colors.get(label.lower(), TOTAL_LOSS_COLOR) for label in labels]
 
@@ -376,12 +514,20 @@ def _plot_marginal_parity(ax, panel: ParityData) -> None:
 def _training_summary_lines(
     source: Path,
     panels: list[ParityData],
+    run_info: TrainingRunInfo | None = None,
 ) -> tuple[str, ...]:
     lines: list[str] = []
+    if run_info is not None and run_info.is_torchnep:
+        lines.append("Training engine : torchnep (PyTorch)")
+        if run_info.stage2_epoch is not None:
+            lines.append(f"Stage 2 starts  : epoch {run_info.stage2_epoch}")
     loss_path = source / "loss.out"
     if loss_path.exists():
         loss = _load_matrix(loss_path)
-        lines.append(f"Total generations : {_format_generation(loss[:, 0])}")
+        if run_info is not None and run_info.is_torchnep:
+            lines.append(f"Total epochs    : {_format_generation(loss[:, 0])}")
+        else:
+            lines.append(f"Total generations : {_format_generation(loss[:, 0])}")
     rows = [_metric_row(panel) for panel in panels]
     if rows:
         lines.append("")

@@ -163,6 +163,30 @@ def test_plot_train_writes_nep_training_figures(tmp_path, monkeypatch, capsys):
     assert "eV/atom" in output
 
 
+def test_plot_train_supports_torchnep_two_stage_outputs(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """`pesmaker plot train` should detect torchnep outputs and split stage loss."""
+    _write_torchnep_outputs(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["plot", "train"]) == 0
+    output = capsys.readouterr().out
+
+    assert (tmp_path / "plot" / "nep_train.png").is_file()
+    assert (tmp_path / "plot" / "nep_parity.png").is_file()
+    assert "torchnep training plot" in output
+    assert "Training engine : torchnep (PyTorch)" in output
+    assert "Stage 2 starts  : epoch 3" in output
+    assert "Total epochs    : 4" in output
+    assert "Energy" in output
+    assert "Force" in output
+    assert "Stress" not in output
+    assert "Virial" not in output
+
+
 def test_nep_plot_uses_virial_in_train_panel_and_keeps_stress_parity(
     tmp_path,
     monkeypatch,
@@ -173,7 +197,7 @@ def test_nep_plot_uses_virial_in_train_panel_and_keeps_stress_parity(
     _write_training_outputs(tmp_path)
     captured: dict[str, list[str]] = {}
 
-    def fake_train_overview(source, output, panels, *, dpi):
+    def fake_train_overview(source, output, panels, run_info=None, *, dpi):
         captured["train"] = [panel.title for panel in panels]
         path = output / "nep_train.png"
         path.write_text("train\n", encoding="utf-8")
@@ -313,3 +337,40 @@ def _write_training_outputs(path):
     np.savetxt(path / "force_train.out", force)
     np.savetxt(path / "stress_train.out", stress)
     np.savetxt(path / "virial_train.out", virial)
+
+
+def _write_torchnep_outputs(path):
+    (path / "output.log").write_text(
+        """torchnep  v1.0.0
+Training: epochs 1..4, Stage 2 from epoch 3 (SWA=off)
+Stage 2 started at epoch 3: E_w=1.0, F_w=0.05, V_w=0.1, lr=1.00e-03
+""",
+        encoding="utf-8",
+    )
+    (path / "loss.out").write_text(
+        """epoch  loss  rmse_e(eV/atom)  rmse_f(eV/A)  rmse_v(eV/atom)  rmse_stress(GPa)  gnorm
+1 1.0e-01 0.10 0.30 0.000000 0.0000 1.0
+2 5.0e-02 0.05 0.20 0.000000 0.0000 0.5
+3 1.0e-02 0.01 0.10 0.000000 0.0000 0.1
+4 5.0e-03 0.005 0.05 0.000000 0.0000 0.0
+""",
+        encoding="utf-8",
+    )
+    energy = np.array([[-1.01, -1.0], [-1.95, -2.0], [-2.98, -3.0]])
+    force = np.array(
+        [
+            [0.1, 0.0, 0.0, 0.11, 0.01, 0.0],
+            [0.0, 0.2, 0.0, 0.02, 0.18, 0.01],
+            [0.0, 0.0, 0.3, -0.01, 0.02, 0.32],
+        ]
+    )
+    missing_tensor_labels = np.array(
+        [
+            [0.2, 0.3, 0.4, 0.01, 0.02, 0.03, *([np.nan] * 6)],
+            [0.3, 0.4, 0.5, 0.02, 0.03, 0.04, *([np.nan] * 6)],
+        ]
+    )
+    np.savetxt(path / "energy_train.out", energy)
+    np.savetxt(path / "force_train.out", force)
+    np.savetxt(path / "stress_train.out", missing_tensor_labels)
+    np.savetxt(path / "virial_train.out", missing_tensor_labels)
