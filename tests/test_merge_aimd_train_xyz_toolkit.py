@@ -133,7 +133,7 @@ def test_merge_interval_sources_end_to_end(tmp_path: Path):
     assert [record["merged_start_0based"] for record in records] == ["0", "2"]
     assert [record["merged_end_0based"] for record in records] == ["1", "2"]
     readme = (output / "README.md").read_text(encoding="utf-8")
-    assert "采样来源：`interval`" in readme
+    assert "Sampling source: `interval`" in readme
     assert "0–1" in readme
     assert "3" in readme
 

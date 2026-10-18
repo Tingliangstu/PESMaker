@@ -1,82 +1,83 @@
 # PESMaker VASP AIMD → NEP Toolkit
 
-本目录提供独立于 PESMaker 工作流的辅助脚本，用于从 VASP AIMD 生成、合并 GPUMD/NEP 数据集，并准备不与已有训练帧重叠的测试集。
+This directory provides helper scripts that operate independently of the PESMaker workflow. They generate and merge GPUMD/NEP datasets from VASP AIMD calculations and prepare test sets that do not overlap existing training frames.
 
-| 脚本 | 选择方式 | 适合用途 |
+| Script | Selection method | Intended use |
 | --- | --- | --- |
-| `aimd_fps_to_nep.py` | PESMaker 最远点采样（FPS） | 根据构型差异选择代表性结构 |
-| `aimd_interval_to_nep.py` | 等间距采样 | 按固定轨迹帧间隔抽稀 AIMD 时间序列 |
-| `merge_aimd_train_xyz.py` | 指定来源合并 | 将多个正式 FPS 或 Interval `train.xyz` 合并并记录来源范围 |
-| `prepare_aimd_testset.py` | 排除训练帧后均衡采样 | 从多个 AIMD 轨迹生成带标签的 NEP `test.xyz` |
-| `run_vasp_gpu_pool.py` | 本地 GPU 工作池 | 在无 Slurm 服务器上将已准备的 VASP 单点目录按空闲 GPU 排队运行 |
+| `aimd_fps_to_nep.py` | PESMaker farthest-point sampling (FPS) | Select representative structures based on configurational differences |
+| `aimd_interval_to_nep.py` | Fixed-interval sampling | Thin an AIMD time series at a fixed trajectory-frame interval |
+| `merge_aimd_train_xyz.py` | Explicit-source merge | Merge multiple finalized FPS or Interval `train.xyz` files and record source ranges |
+| `prepare_aimd_testset.py` | Balanced sampling after excluding training frames | Generate a labeled NEP `test.xyz` from multiple AIMD trajectories |
+| `run_vasp_gpu_pool.py` | Local GPU worker pool | Queue prepared VASP single-point directories on idle GPUs without Slurm |
 
-FPS 和等间距脚本不会修改或导入 PESMaker 私有源码，而是调用正式命令：
+The FPS and fixed-interval scripts neither modify nor import private PESMaker source code. They invoke the public command:
 
 ```text
-python -m pesmaker select <自动生成的 YAML>
+python -m pesmaker select <automatically generated YAML>
 ```
 
-## 共同工作流程
+## Shared Workflow
 
 ```text
 XDATCAR
-  → PESMaker 选择构型
-  → 根据 manifest.jsonl 和 NBLOCK 定位 OUTCAR 离子步
-  → 流式提取 TOTEN、力和 stress
-  → 构型匹配与标签检查
+  → PESMaker selects configurations
+  → Locate OUTCAR ionic steps using manifest.jsonl and NBLOCK
+  → Stream TOTEN, forces, and stress
+  → Verify configuration matching and labels
   → train.xyz
 ```
 
-OUTCAR 一次只解析一个离子步，不会一次性把全部帧读入内存。FPS 仍需要 PESMaker 读取 XDATCAR 并计算几何特征；等间距脚本会先以文本流方式统计 XDATCAR 帧数。
+OUTCAR is parsed one ionic step at a time rather than loading every frame into memory. FPS still requires PESMaker to read XDATCAR and calculate geometric features; the fixed-interval script first counts XDATCAR frames as a text stream.
 
-## 适用范围
+## Scope
 
-当前版本支持：
+The current version supports:
 
-- 单个 VASP AIMD 目录。
-- 固定晶胞轨迹。
-- AIMD 过程中原子数和原子顺序保持不变。
-- XDATCAR 与 OUTCAR 来自同一次计算。
-- 没有人工拼接的 XDATCAR 或 OUTCAR。
-- 三维周期性体系。
+- One VASP AIMD directory.
+- Fixed-cell trajectories.
+- A constant atom count and atom order throughout AIMD.
+- XDATCAR and OUTCAR produced by the same calculation.
+- XDATCAR and OUTCAR files that have not been concatenated manually.
+- Three-dimensional periodic systems.
 
-当前版本不处理：
+The current version does not handle:
 
-- 变胞 AIMD。
-- 多个 AIMD 目录合并。
-- 拼接或混用的续算轨迹。
-- 任意比例的随机 train/test 划分；测试集脚本只按已有帧映射排除训练帧并均衡选帧。
-- 电子步收敛质量过滤。
-- 已有输出目录覆盖或续跑。
+- Variable-cell AIMD.
+- Merging multiple AIMD directories during extraction.
+- Concatenated trajectories or mixed restart segments.
+- Arbitrary random train/test splits; the test-set script only excludes frames through existing frame mappings and performs balanced selection.
+- Electronic-step convergence-quality filtering.
+- Overwriting or resuming an existing output directory.
 
-## 环境要求
+## Environment Requirements
 
-必须使用已经安装 PESMaker 的同一个 Python 环境运行脚本。环境至少需要：
+Run these scripts with the same Python environment in which PESMaker is installed. The environment requires at least:
 
-- Python 3.10 或更高版本。
-- PESMaker。
-- ASE。
-- NumPy。
-- PyYAML。
-- Matplotlib（FPS 绘图需要）。
+- Python 3.10 or later.
+- PESMaker.
+- ASE.
+- NumPy.
+- PyYAML.
+- Matplotlib (required for FPS plots).
 
-可以使用以下命令检查环境：
+Check the environment with:
 
 ```bash
 python -m pesmaker --help
 python -c "import ase, numpy, yaml; print(ase.__version__)"
 ```
 
-脚本通过 `sys.executable -m pesmaker select` 启动 PESMaker。因此，运行脚本的 Python 环境必须就是安装 PESMaker 的环境。
+The scripts start PESMaker through `sys.executable -m pesmaker select`. The Python interpreter running the script must therefore belong to the environment where PESMaker is installed.
 
-## 无 Slurm 服务器上的 VASP GPU 工作池
+## VASP GPU Worker Pool on Servers Without Slurm
 
-`run_vasp_gpu_pool.py` 独立于 PESMaker 源码。它递归发现同时包含
-`POSCAR` 和 `submit.sh` 的计算目录，每张候选 GPU 同时直接运行一个
-`bash submit.sh`。某张 GPU 上的进程退出后，该 GPU 立即领取队列中的下一个
-目录；不同 GPU 之间并行。
+`run_vasp_gpu_pool.py` is independent of the PESMaker source code. It recursively
+discovers calculation directories containing both `POSCAR` and `submit.sh` and
+runs one `bash submit.sh` process at a time on each candidate GPU. When a process
+exits, that GPU immediately takes the next directory from the queue; different
+GPUs operate in parallel.
 
-先预览任务和当前 GPU 状态：
+Preview the jobs and current GPU status first:
 
 ```bash
 python run_vasp_gpu_pool.py /path/to/labeling \
@@ -84,7 +85,7 @@ python run_vasp_gpu_pool.py /path/to/labeling \
   --dry-run
 ```
 
-让 Python 控制器自身脱离终端，并使用所有自动识别为空闲的 GPU 运行：
+Detach the Python controller from the terminal and use all GPUs detected as idle:
 
 ```bash
 python run_vasp_gpu_pool.py /path/to/labeling \
@@ -92,21 +93,23 @@ python run_vasp_gpu_pool.py /path/to/labeling \
   --background
 ```
 
-命令返回后，控制器 PID 位于 `labeling/gpu_pool.pid`，控制器输出追加到
-`labeling/gpu_pool_driver.log`。可以关闭 SSH 或终端窗口；查看控制器输出使用：
+After the command returns, the controller PID is stored in `labeling/gpu_pool.pid`
+and controller output is appended to `labeling/gpu_pool_driver.log`. The SSH or
+terminal window may then be closed. Follow the controller output with:
 
 ```bash
 tail -f /path/to/labeling/gpu_pool_driver.log
 ```
 
-只允许物理 GPU 0、2 和 3：
+Allow only physical GPUs 0, 2, and 3:
 
 ```bash
 python run_vasp_gpu_pool.py /path/to/labeling --gpus 0,2,3
 ```
 
-默认只有在 GPU 已用显存不超过 1024 MB 且利用率不超过 10% 时才启动任务。
-阈值可以按服务器的显示服务、ECC 和驱动常驻显存调整：
+By default, a job starts only when used GPU memory is no more than 1024 MB and
+GPU utilization is no more than 10%. Adjust these thresholds for display
+services, ECC, and resident driver memory on the server:
 
 ```bash
 python run_vasp_gpu_pool.py /path/to/labeling \
@@ -116,92 +119,101 @@ python run_vasp_gpu_pool.py /path/to/labeling \
   --poll-seconds 10
 ```
 
-脚本将物理 GPU 编号写入每个子进程的 `CUDA_VISIBLE_DEVICES`，并设置
-`PESMAKER_GPU_POOL=1`。因此 `submit.sh` 不得在工作池模式下再次硬编码或覆盖
-GPU，也不能在该模式下把 VASP 放到后台，否则调度器会过早释放这张 GPU。
+The script writes the physical GPU index to `CUDA_VISIBLE_DEVICES` for each child
+process and sets `PESMAKER_GPU_POOL=1`. Therefore, `submit.sh` must not hard-code
+or override the GPU in pool mode, nor may it place VASP in the background in that
+mode; otherwise, the scheduler would release the GPU too early.
 
-`templates/submit.sh` 已经兼容两种调用方式。手工测试一个目录并将其独立提交
-到后台时使用：
+`templates/submit.sh` supports both invocation modes. To test one directory
+manually and submit it independently in the background, use:
 
 ```bash
 bash submit.sh --background --gpu 0
 ```
 
-这会生成 `vasp.log` 和运行期间的 `vasp.pid`，并且不受 Python 工作池控制。
-工作池执行同一个文件时会自动设置 `PESMAKER_GPU_POOL=1` 并在前台等待真实
-VASP 进程结束，不需要改变任务脚本。也可以手工以前台模式调试：
+This creates `vasp.log` and a `vasp.pid` file while the process is running; the
+job is not controlled by the Python worker pool. When the pool executes the same
+file, it automatically sets `PESMAKER_GPU_POOL=1` and waits in the foreground for
+the actual VASP process to finish, so the job script does not need to change.
+For manual foreground debugging, use:
 
 ```bash
 bash submit.sh --gpu 0
 ```
 
-模板默认采用参考脚本中的 VASP 6.5.1 路径；如服务器路径不同，可以修改模板
-顶部默认值，或者在调用前设置 `VASP_ENV_FILE` 和 `VASP_BINARY`。一张 GPU 对应
-一个任务时，模板最终运行的核心命令为：
+The template defaults to the VASP 6.5.1 paths from the reference script. If the
+server uses different paths, edit the defaults at the top of the template or set
+`VASP_ENV_FILE` and `VASP_BINARY` before invocation. With one job per GPU, the
+template ultimately runs the core command:
 
 ```bash
 mpirun -np 1 /path/to/vasp_std
 ```
 
-### oneAPI 与非交互式 Conda 环境
+### oneAPI and Non-Interactive Conda Environments
 
-工作池通过非交互式 `bash submit.sh` 启动单点任务。若 Python 控制器是在 Conda
-环境中启动的，子 Shell 会继承 `CONDA_PREFIX`、`CONDA_EXE` 等环境变量，但通常
-不会继承交互式 Shell 中的 `conda` 函数。某些 Intel oneAPI `setvars.sh` 会在
-初始化 `intelpython` 时调用 `conda deactivate`，此时可能出现：
+The pool starts single-point jobs through non-interactive `bash submit.sh`
+processes. If the Python controller starts inside a Conda environment, child
+shells inherit environment variables such as `CONDA_PREFIX` and `CONDA_EXE`, but
+usually do not inherit the `conda` function from the interactive shell. Some
+Intel oneAPI `setvars.sh` scripts call `conda deactivate` while initializing
+`intelpython`, which can produce:
 
 ```text
 CondaError: Run 'conda init' before 'conda deactivate'
 ```
 
-随工具提供的 `templates/submit.sh` 已在加载 VASP 环境之前处理这种情况：仅当
-存在 `CONDA_EXE` 且当前 Shell 没有 `conda` 函数时，自动从 Conda 安装根目录
-加载 `etc/profile.d/conda.sh`。没有使用 Conda 或已经完成 Shell 初始化的环境
-不会重复执行该操作，也不需要运行 `conda init bash`。
+The bundled `templates/submit.sh` handles this case before loading the VASP
+environment. Only when `CONDA_EXE` exists and the current shell lacks a `conda`
+function does it load `etc/profile.d/conda.sh` from the Conda installation root.
+Environments that do not use Conda or have already initialized the shell do not
+repeat this step, and `conda init bash` is not required.
 
-更换服务器后，建议先在一个计算目录以前台模式验证环境：
+After moving to another server, first validate the environment in one calculation
+directory in foreground mode:
 
 ```bash
 bash submit.sh --gpu 0
 ```
 
-若使用自行维护的旧模板，应把同样的 Conda 初始化保护放在：
+When using an older custom template, place the same Conda initialization guard before:
 
 ```bash
 source "$vasp_env_file"
 ```
 
-之前。已经生成的单点目录包含模板的独立副本；只修改源模板不会自动更新这些
-已有副本。
+Prepared single-point directories contain independent copies of the template;
+editing only the source template does not update those existing copies.
 
-默认断点续跑规则：
+Default restart behavior:
 
-- OUTCAR 包含正常 VASP timing/accounting 结尾且没有电子不收敛标记：跳过；
-- 没有 OUTCAR、OUTCAR 不完整或有电子不收敛标记：进入待运行队列；
-- shell 返回 0 但 OUTCAR 没有正常结尾：仍报告失败；
-- `--failure-policy continue`：单个失败后继续其他任务；
-- `--failure-policy stop`：停止启动新任务，但不杀死已经运行的任务。
+- Skip an OUTCAR that contains the normal VASP timing/accounting footer and no electronic non-convergence marker.
+- Queue a directory when OUTCAR is missing, incomplete, or electronically non-converged.
+- Still report failure when the shell returns 0 but OUTCAR lacks the normal footer.
+- `--failure-policy continue`: continue with other jobs after an individual failure.
+- `--failure-policy stop`: stop launching new jobs without killing jobs already running.
 
-主要输出为：
+Primary outputs:
 
 ```text
-labeling/gpu_pool_events.jsonl       # 全局启动、完成和失败事件
-labeling/gpu_pool_driver.log         # 后台 Python 控制器输出
-labeling/gpu_pool.pid                # 后台 Python 控制器运行期间的 PID
-labeling/**/gpu_pool.log             # 每个 submit.sh 的 stdout/stderr
-labeling/**/OUTCAR                   # VASP 自身输出
-labeling/**/vasp.exitcode             # 模板判定的最终退出码
-labeling/**/vasp.done|vasp.failed     # 单点成功或失败摘要
+labeling/gpu_pool_events.jsonl       # Global start, completion, and failure events
+labeling/gpu_pool_driver.log         # Background Python controller output
+labeling/gpu_pool.pid                # PID while the background Python controller is running
+labeling/**/gpu_pool.log             # stdout/stderr from each submit.sh
+labeling/**/OUTCAR                   # VASP output
+labeling/**/vasp.exitcode            # Final exit status determined by the template
+labeling/**/vasp.done|vasp.failed    # Per-job success or failure summary
 ```
 
-脚本用 `/tmp/pesmaker_gpu_pool_locks/` 中的 Linux 文件锁协调多个该脚本实例，
-但无法阻止其他不使用该锁的软件在状态检查后抢占 GPU。因此共享服务器上仍建议
-明确指定 `--gpus`，并与其他用户约定 GPU 所有权；正式多用户资源管理仍应使用
-Slurm 等调度器。
+The script coordinates multiple instances through Linux file locks in
+`/tmp/pesmaker_gpu_pool_locks/`, but it cannot prevent software that does not use
+those locks from claiming a GPU after the status check. On shared servers,
+explicitly specify `--gpus` and coordinate GPU ownership with other users. Use a
+formal scheduler such as Slurm for production multi-user resource management.
 
-## 预期输入
+## Expected Input
 
-`--aimd-dir` 必须明确指向包含以下文件的目录：
+`--aimd-dir` must explicitly point to a directory containing:
 
 ```text
 VASP_AIMD/
@@ -210,9 +222,10 @@ VASP_AIMD/
 └── OUTCAR
 ```
 
-三个 VASP 文件只读打开。脚本不会修改、移动、删除、压缩或重命名它们。
+All three VASP files are opened read-only. The scripts do not modify, move,
+delete, compress, or rename them.
 
-## FPS 脚本用法
+## FPS Script Usage
 
 ```bash
 python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_fps_to_nep.py \
@@ -221,23 +234,23 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_fps_to_nep.py \
   --min-distance 0.0
 ```
 
-参数：
+Arguments:
 
-| 参数 | 是否必填 | 说明 |
+| Argument | Required | Description |
 | --- | --- | --- |
-| `--aimd-dir` | 是 | 包含 INCAR、XDATCAR 和 OUTCAR 的目录 |
-| `--max-count` | 是 | FPS 最多选择多少个构型，必须是正整数 |
-| `--min-distance` | 否 | PESMaker 简单几何描述符空间中的最小距离，默认 `0.0`，不是 Å |
+| `--aimd-dir` | Yes | Directory containing INCAR, XDATCAR, and OUTCAR |
+| `--max-count` | Yes | Maximum number of configurations selected by FPS; must be a positive integer |
+| `--min-distance` | No | Minimum distance in PESMaker's simple geometric-descriptor space; defaults to `0.0` and is not measured in Å |
 
-首次使用建议保持 `--min-distance 0.0`，仅通过 `--max-count` 控制数量。
+For an initial run, keep `--min-distance 0.0` and control the selection count only through `--max-count`.
 
-FPS 输出目录固定为：
+The FPS output directory is fixed at:
 
 ```text
 <aimd-dir>/PESMakerToolkit_AIMD_FPS_to_NEP/
 ```
 
-成功后的预期输出：
+Expected output after success:
 
 ```text
 PESMakerToolkit_AIMD_FPS_to_NEP/
@@ -251,9 +264,9 @@ PESMakerToolkit_AIMD_FPS_to_NEP/
 └── toolkit.log
 ```
 
-## 等间距脚本用法
+## Fixed-Interval Script Usage
 
-最简调用：
+Minimal invocation:
 
 ```bash
 python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
@@ -261,7 +274,7 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
   --interval 100
 ```
 
-指定起始帧和结束帧：
+Specify start and end frames:
 
 ```bash
 python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
@@ -271,20 +284,20 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
   --end-frame 10000
 ```
 
-参数：
+Arguments:
 
-| 参数 | 是否必填 | 默认值 | 说明 |
+| Argument | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--aimd-dir` | 是 | 无 | 包含 INCAR、XDATCAR 和 OUTCAR 的目录 |
-| `--interval` | 是 | 无 | 每隔多少个 XDATCAR 帧选择一个构型，必须是正整数 |
-| `--start-frame` | 否 | `0` | 允许选择的第一个 XDATCAR 帧，采用零基编号 |
-| `--end-frame` | 否 | 最后一帧 | 允许选择的最后一个 XDATCAR 帧，采用包含式边界 |
+| `--aimd-dir` | Yes | None | Directory containing INCAR, XDATCAR, and OUTCAR |
+| `--interval` | Yes | None | Select one configuration every this many XDATCAR frames; must be a positive integer |
+| `--start-frame` | No | `0` | First eligible XDATCAR frame, using zero-based indexing |
+| `--end-frame` | No | Last frame | Last eligible XDATCAR frame, using an inclusive boundary |
 
-### 帧号和结束边界
+### Frame Numbers and End Boundary
 
-`start-frame=0` 表示 XDATCAR 中保存的第一帧，不表示 VASP 离子步 0。
+`start-frame=0` means the first frame stored in XDATCAR, not VASP ionic step 0.
 
-例如：
+For example:
 
 ```text
 --start-frame 100
@@ -292,48 +305,54 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
 --interval 200
 ```
 
-实际选择：
+Actual selection:
 
 ```text
 100, 300, 500, 700, 900
 ```
 
-`end-frame` 是允许范围的包含式上边界，但只有落在等间距序列上的帧才会被选择。脚本不会为了包含结束帧而额外加入一个非等间距构型。
+`end-frame` is the inclusive upper bound of the eligible range, but only frames
+on the fixed-interval sequence are selected. The script does not add an extra,
+off-interval configuration solely to include the end frame.
 
-如果不设置 `--end-frame`，采样范围延伸到 XDATCAR 最后一帧。显式结束帧超过轨迹范围时会报错，不会静默截断。
+If `--end-frame` is omitted, sampling extends through the last XDATCAR frame. An
+explicit end frame beyond the trajectory raises an error rather than being
+silently truncated.
 
-### interval 与 NBLOCK
+### `interval` and `NBLOCK`
 
-`--interval` 的单位是 XDATCAR 帧，不是 VASP 离子步。候选 OUTCAR 离子步按以下公式计算：
+`--interval` is measured in XDATCAR frames, not VASP ionic steps. Candidate
+OUTCAR ionic steps are calculated as:
 
 ```text
 ionic_step = (source_frame + 1) × NBLOCK
 ```
 
-例如：
+For example:
 
 ```text
 NBLOCK = 5
 --interval 100
 ```
 
-相邻训练构型对应的 VASP 离子步间隔约为：
+The approximate VASP ionic-step interval between adjacent training configurations is:
 
 ```text
 100 × 5 = 500
 ```
 
-帧号公式只负责候选定位；每个候选仍必须通过晶胞、元素顺序和周期性坐标比较。
+The frame-number formula only locates candidates. Every candidate must still pass
+comparisons of the cell, element order, and periodic coordinates.
 
-### 等间距脚本预期输出
+### Expected Fixed-Interval Output
 
-输出目录固定为：
+The output directory is fixed at:
 
 ```text
 <aimd-dir>/PESMakerToolkit_AIMD_Interval_to_NEP/
 ```
 
-成功后的预期输出：
+Expected output after success:
 
 ```text
 PESMakerToolkit_AIMD_Interval_to_NEP/
@@ -345,13 +364,21 @@ PESMakerToolkit_AIMD_Interval_to_NEP/
 └── toolkit.log
 ```
 
-等间距采样不计算 FPS 描述符，因此不会生成 `selection_features.npy` 或 `fps_selection.png`。
+Fixed-interval sampling does not calculate FPS descriptors, so it does not
+generate `selection_features.npy` or `fps_selection.png`.
 
-## 未训练 AIMD 帧测试集
+## Test Set from Untrained AIMD Frames
 
-`prepare_aimd_testset.py` 用于从多个 AIMD 项目中准备一个带标签的 `test.xyz`。脚本读取已有 Toolkit 训练输出中的 `frame_mapping.jsonl`，将其中的 `source_frame` 作为排除清单，因此不会把已经参与训练的帧再次放入测试集。
+`prepare_aimd_testset.py` prepares a labeled `test.xyz` from multiple AIMD
+projects. It reads `frame_mapping.jsonl` from existing Toolkit training outputs
+and uses each `source_frame` as an exclusion list, so frames already used for
+training do not reappear in the test set.
 
-脚本不调用或修改 PESMaker 本体；XDATCAR 和 OUTCAR 均按流读取。每条轨迹被划分为等宽时间区间，每个区间选择一个未训练且与最近训练帧时间距离尽可能大的构型，从而兼顾时间覆盖和训练/测试帧分离。
+The script neither invokes nor modifies PESMaker itself; XDATCAR and OUTCAR are
+both read as streams. Each trajectory is divided into equal-width time bins. One
+untrained configuration, as far as possible in time from the nearest training
+frame, is selected from each bin to balance temporal coverage with train/test
+separation.
 
 ```bash
 python PESMaker_AIMD_and_SinglePoint_Toolkit/prepare_aimd_testset.py \
@@ -360,17 +387,17 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/prepare_aimd_testset.py \
   --count-per-trajectory 20
 ```
 
-参数：
+Arguments:
 
-| 参数 | 是否必填 | 默认值 | 说明 |
+| Argument | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--aimd-root` | 是 | 无 | 多个真实 AIMD 项目的直接上级目录 |
-| `--training-source` | 是 | 无 | 要排除的训练来源：`interval` 或 `fps` |
-| `--count-per-trajectory` | 否 | `20` | 每条轨迹选择的测试帧数 |
-| `--all-unused` | 否 | 关闭 | 使用所有未进入指定训练集、且可从 OUTCAR 获得完整标签的帧；不能与 `--count-per-trajectory` 同时指定 |
-| `--output-dir-name` | 否 | `test_verification_testset` | 在 AIMD 根目录下创建的输出目录名称 |
+| `--aimd-root` | Yes | None | Direct parent directory of multiple real AIMD projects |
+| `--training-source` | Yes | None | Training source to exclude: `interval` or `fps` |
+| `--count-per-trajectory` | No | `20` | Number of test frames selected from each trajectory |
+| `--all-unused` | No | Disabled | Use every frame absent from the specified training set for which complete OUTCAR labels are available; cannot be combined with `--count-per-trajectory` |
+| `--output-dir-name` | No | `test_verification_testset` | Name of the output directory created below the AIMD root |
 
-例如，准备一个尽可能完整的 Interval 外部帧测试集：
+For example, prepare the most complete possible test set of external Interval frames:
 
 ```bash
 python PESMaker_AIMD_and_SinglePoint_Toolkit/prepare_aimd_testset.py \\
@@ -380,9 +407,13 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/prepare_aimd_testset.py \\
   --output-dir-name test_veirfication_testset99pct
 ```
 
-`--all-unused` 不会将所有构型读入内存；脚本按 XDATCAR 与 OUTCAR 流式同步处理。若 XDATCAR 尾帧没有相应 OUTCAR 标签（例如计算未完整写出末步），该帧不能成为监督测试样本，会记录在 `skipped_unlabeled_frames.tsv`。
+`--all-unused` does not load every configuration into memory; the script processes
+XDATCAR and OUTCAR synchronously as streams. If trailing XDATCAR frames lack
+corresponding OUTCAR labels, for example because the final step was not fully
+written, those frames cannot become supervised test samples and are recorded in
+`skipped_unlabeled_frames.tsv`.
 
-以 `--training-source interval` 为例，脚本只识别以下结构：
+With `--training-source interval`, for example, the script recognizes only this structure:
 
 ```text
 AIMD_ROOT/
@@ -396,7 +427,7 @@ AIMD_ROOT/
     └── ...
 ```
 
-输出目录固定为：
+The output directory is fixed at:
 
 ```text
 <aimd-root>/test_verification_testset/
@@ -408,15 +439,24 @@ AIMD_ROOT/
 └── toolkit.log
 ```
 
-如果目标目录已经存在但为空，脚本可以使用它；如果目录中已有任何文件，则拒绝覆盖。`test.xyz` 先写为 `.partial`，所有项目均完成构型和标签验证后才成为正式文件。
+The script may use an existing but empty target directory; it refuses to
+overwrite a directory containing any files. `test.xyz` is first written as a
+`.partial` file and becomes final only after configuration and label validation
+succeeds for every project.
 
-需要注意：未参与训练并不等于严格独立。这里的测试帧仍来自与训练集相同的 AIMD 轨迹，主要用于评估同分布插值误差；对新温度、新成分、新结构类型或新演化路径的泛化能力还需要另建外部验证集。
+Note that absence from training does not imply strict independence. These test
+frames still come from the same AIMD trajectories as the training set and mainly
+measure in-distribution interpolation error. Evaluating generalization to new
+temperatures, compositions, structure types, or evolution pathways requires a
+separate external validation set.
 
-## 合并脚本用途与语法
+## Merge Script Purpose and Syntax
 
-`merge_aimd_train_xyz.py` 用于合并多个 AIMD 子目录中已经生成并验证的正式 `train.xyz`。它不重新解析 AIMD、不调用 PESMaker，也不修改任何 PESMaker 源码。
+`merge_aimd_train_xyz.py` merges finalized, validated `train.xyz` files already
+generated in multiple AIMD subdirectories. It does not reparse AIMD, invoke
+PESMaker, or modify any PESMaker source code.
 
-用户必须明确指定合并来源，不允许脚本自动猜测或混合 FPS 与 Interval：
+The merge source must be specified explicitly; the script never guesses or mixes FPS and Interval sources:
 
 ```bash
 python PESMaker_AIMD_and_SinglePoint_Toolkit/merge_aimd_train_xyz.py \
@@ -424,7 +464,7 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/merge_aimd_train_xyz.py \
   --source interval
 ```
 
-合并 FPS 来源：
+Merge FPS sources:
 
 ```bash
 python PESMaker_AIMD_and_SinglePoint_Toolkit/merge_aimd_train_xyz.py \
@@ -432,16 +472,16 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/merge_aimd_train_xyz.py \
   --source fps
 ```
 
-参数：
+Arguments:
 
-| 参数 | 是否必填 | 说明 |
+| Argument | Required | Description |
 | --- | --- | --- |
-| `--aimd-root` | 是 | 直接包含多个 VASP AIMD 运行目录的根目录 |
-| `--source` | 是 | 只能是 `interval` 或 `fps`，不提供默认值 |
+| `--aimd-root` | Yes | Root directory directly containing multiple VASP AIMD run directories |
+| `--source` | Yes | Must be `interval` or `fps`; there is no default |
 
-### 预期输入结构
+### Expected Input Layout
 
-`--aimd-root` 的直接子目录中，正式 AIMD 目录必须同时包含 INCAR、XDATCAR 和 OUTCAR：
+Each production AIMD directory directly below `--aimd-root` must contain INCAR, XDATCAR, and OUTCAR:
 
 ```text
 AIMD_ROOT/
@@ -458,42 +498,47 @@ AIMD_ROOT/
 │   ├── XDATCAR
 │   ├── OUTCAR
 │   └── ...
-└── scripts/                 # 不含三项 VASP 文件，因此忽略
+└── scripts/                 # Ignored because it lacks the three VASP files
 ```
 
-来源参数和实际查找路径严格对应：
+The source argument maps strictly to the lookup path:
 
 ```text
 --source interval
-→ <AIMD子目录>/PESMakerToolkit_AIMD_Interval_to_NEP/train.xyz
+→ <AIMD-subdirectory>/PESMakerToolkit_AIMD_Interval_to_NEP/train.xyz
 
 --source fps
-→ <AIMD子目录>/PESMakerToolkit_AIMD_FPS_to_NEP/train.xyz
+→ <AIMD-subdirectory>/PESMakerToolkit_AIMD_FPS_to_NEP/train.xyz
 ```
 
-脚本只检查 AIMD 根目录的直接子目录，不递归搜索任意 `train.xyz`。因此不会误收集 `_smoke_test`、`_failed_*` 或其他临时目录。
+The script checks only direct children of the AIMD root and does not recursively
+search for arbitrary `train.xyz` files. It therefore does not accidentally
+collect `_smoke_test`, `_failed_*`, or other temporary directories.
 
-每一个识别出的正式 AIMD 子目录都必须存在所选来源的 `train.xyz`。如果任一目录缺失，脚本会在创建合并输出前失败并列出缺失目录，不会静默跳过。
+Every recognized production AIMD subdirectory must contain `train.xyz` from the
+selected source. If any directory lacks it, the script fails before creating
+merged output and lists the missing directories instead of silently skipping
+them.
 
-### 合并输出目录
+### Merged Output Directory
 
-输出位于 AIMD 根目录内部，与其中各个 AIMD 项目目录同级，名称明确包含来源：
+Output is created inside the AIMD root alongside its AIMD project directories, with the source stated explicitly in the name:
 
 ```text
 <aimd-root>/Merged_Interval_NEP_TrainXYZ/
 <aimd-root>/Merged_FPS_NEP_TrainXYZ/
 ```
 
-例如：
+For example:
 
 ```text
 /mnt/d/ResearchData/growthDatasetPreparation_AIMD/
-├── AIMD项目1/
-├── AIMD项目2/
+├── AIMD_project_1/
+├── AIMD_project_2/
 └── Merged_Interval_NEP_TrainXYZ/
 ```
 
-输出文件结构：
+Output layout:
 
 ```text
 Merged_Interval_NEP_TrainXYZ/
@@ -503,12 +548,12 @@ Merged_Interval_NEP_TrainXYZ/
 └── merge.log
 ```
 
-- `train.xyz`：按照 AIMD 目录名称不区分大小写排序后直接拼接的训练集，不重新格式化标签。
-- `source_ranges.tsv`：机器可读的来源、帧数、元素、原子数和合并范围。
-- `README.md`：自动生成的人类可读来源表、目录说明、合并规则和复现命令。
-- `merge.log`：来源验证、帧数范围、总帧数和失败原因。
+- `train.xyz`: training sets concatenated directly after case-insensitive sorting by AIMD directory name, without reformatting labels.
+- `source_ranges.tsv`: machine-readable sources, frame counts, elements, atom counts, and merged ranges.
+- `README.md`: automatically generated, human-readable source table, directory description, merge rules, and reproduction command.
+- `merge.log`: source validation, frame ranges, total frame count, and failure reasons.
 
-`source_ranges.tsv` 包含：
+`source_ranges.tsv` contains:
 
 ```text
 order
@@ -524,20 +569,22 @@ merged_start_1based
 merged_end_1based
 ```
 
-零基和一基范围均为包含式。脚本根据实际读取帧数动态计算范围，不硬编码当前数据集的数量。
+Both zero-based and one-based ranges are inclusive. The script calculates ranges
+dynamically from the frames actually read and does not hard-code counts from the
+current dataset.
 
-### 合并验证与安全行为
+### Merge Validation and Safety Behavior
 
-每个来源和最终合并文件均使用 ASE 流式验证：
+Every source and the final merged file are validated as ASE streams:
 
-- extxyz 至少包含一帧。
-- 晶胞、位置、Energy、force 和 Virial 均存在且为有限值。
-- force 形状严格为 `N×3`。
-- Virial 恰好包含 9 个分量。
-- 合并总帧数等于所有来源帧数之和。
-- 合并元素集合与来源元素集合一致。
+- The extxyz contains at least one frame.
+- Cell, positions, Energy, force, and Virial are present and finite.
+- The force array has exactly shape `N×3`.
+- Virial has exactly nine components.
+- The merged frame count equals the sum of all source frame counts.
+- The merged element set matches the source element sets.
 
-合并过程先生成：
+The merge first creates:
 
 ```text
 train.xyz.partial
@@ -545,13 +592,16 @@ source_ranges.tsv.partial
 README.md.partial
 ```
 
-全部验证通过后才改名为正式文件，其中 `train.xyz` 最后改名。输出目录已经存在时脚本拒绝覆盖。
+Files receive their final names only after every validation passes, with
+`train.xyz` renamed last. The script refuses to overwrite an existing output
+directory.
 
-第一版不会执行随机打乱、去重、二次 FPS、train/test 划分或标签单位转换。
+The initial implementation does not perform random shuffling, deduplication,
+secondary FPS, train/test splitting, or label-unit conversion.
 
-## WSL 调用示例
+## WSL Invocation Example
 
-Windows D 盘在 WSL 中通常映射到 `/mnt/d`。例如：
+The Windows D drive is usually mounted at `/mnt/d` in WSL. For example:
 
 ```bash
 conda run -n pesmaker python \
@@ -561,7 +611,7 @@ conda run -n pesmaker python \
   --start-frame 0
 ```
 
-查看命令行帮助：
+Display command-line help:
 
 ```bash
 python aimd_fps_to_nep.py --help
@@ -569,39 +619,39 @@ python aimd_interval_to_nep.py --help
 python merge_aimd_train_xyz.py --help
 ```
 
-## 输出文件说明
+## Output File Reference
 
-| 文件 | 用途 |
+| File | Purpose |
 | --- | --- |
-| `train.xyz` | 最终 NEP 训练数据，每帧包含总能量、力和总 Virial |
-| `selected.xyz` | PESMaker 选中的无标签构型 |
-| `manifest.jsonl` | PESMaker 选择清单，包含原始零基 `source_frame` |
-| `frame_mapping.jsonl` | `train.xyz` 帧与 XDATCAR/OUTCAR 帧号的对应关系 |
-| `pesmaker_fps.yaml` | FPS 脚本自动生成的 PESMaker 配置 |
-| `pesmaker_interval.yaml` | 等间距脚本自动生成的 PESMaker 配置 |
-| `selection_features.npy` | FPS 使用的简单几何特征 |
-| `fps_selection.png` | FPS 选择过程图 |
-| `toolkit.log` | 参数、路径、NBLOCK、帧数、标签范围、几何偏差和错误原因 |
+| `train.xyz` | Final NEP training data; each frame contains total energy, forces, and total Virial |
+| `selected.xyz` | Unlabeled configurations selected by PESMaker |
+| `manifest.jsonl` | PESMaker selection manifest containing the original zero-based `source_frame` |
+| `frame_mapping.jsonl` | Mapping between `train.xyz` frames and XDATCAR/OUTCAR frame numbers |
+| `pesmaker_fps.yaml` | PESMaker configuration generated automatically by the FPS script |
+| `pesmaker_interval.yaml` | PESMaker configuration generated automatically by the fixed-interval script |
+| `selection_features.npy` | Simple geometric features used by FPS |
+| `fps_selection.png` | FPS selection-process plot |
+| `toolkit.log` | Arguments, paths, NBLOCK, frame counts, label ranges, geometric deviations, and error reasons |
 
-两个脚本都会拒绝覆盖已存在的身份目录，也不会自动创建编号子目录。
+Both scripts refuse to overwrite an existing identity directory and do not automatically create numbered subdirectories.
 
-## 构型与标签检查
+## Configuration and Label Checks
 
-每个选中帧必须满足：
+Every selected frame must satisfy:
 
-- 原子数完全一致。
-- 元素及原子顺序完全一致。
-- 固定晶胞矩阵元素最大差不超过 `1e-4 Å`。
-- 周期性最小镜像下最大原子位移不超过 `1e-4 Å`。
-- `free_energy`、力和 stress 均存在且为有限值。
-- 力数组形状严格为 `N×3`。
-- 对应离子步能在 OUTCAR 中找到。
+- Atom counts match exactly.
+- Elements and atom order match exactly.
+- The maximum difference between fixed-cell matrix elements is no more than `1e-4 Å`.
+- The maximum atomic displacement under the periodic minimum-image convention is no more than `1e-4 Å`.
+- `free_energy`, forces, and stress are present and finite.
+- The force array has exactly shape `N×3`.
+- The corresponding ionic step can be found in OUTCAR.
 
-任一选中帧不满足要求时，整个转换失败，不会生成正式 `train.xyz`。
+If any selected frame fails these requirements, the entire conversion fails and no final `train.xyz` is generated.
 
-## train.xyz 标签定义
+## `train.xyz` Label Definitions
 
-每个构型使用 GPUMD/NEP 扩展 XYZ 格式：
+Each configuration uses GPUMD/NEP extended XYZ format:
 
 ```text
 Lattice="ax ay az bx by bz cx cy cz"
@@ -611,81 +661,84 @@ Virial="vxx vxy vxz vyx vyy vyz vzx vzy vzz"
 pbc="T T T"
 ```
 
-- `Energy`：VASP `free energy TOTEN`，单位 eV，是总能量。
-- `force`：每个原子的力，单位 eV/Å。
-- `Virial`：整个构型的 3×3 总 Virial，单位 eV，不是每原子值。
+- `Energy`: VASP `free energy TOTEN`, in eV; this is the total energy.
+- `force`: force on each atom, in eV/Å.
+- `Virial`: total 3×3 Virial for the configuration, in eV; it is not a per-atom value.
 
-Virial 转换采用：
+Virial conversion uses:
 
 ```text
 Virial = -V × stress_ASE
 ```
 
-ASE 使用拉伸为正的 stress 约定，转换后的总 Virial 符合 GPUMD/NEP 使用的符号约定。
+ASE uses the tensile-positive stress convention. The converted total Virial
+follows the sign convention used by GPUMD/NEP.
 
-## 安全输出与失败行为
+## Safe Output and Failure Behavior
 
-脚本先写入：
+The scripts first write:
 
 ```text
 train.xyz.partial
 frame_mapping.jsonl.partial
 ```
 
-所有选中帧都匹配并通过标签检查后，才改名为正式文件：
+These files receive their final names only after every selected frame matches and passes label validation:
 
 ```text
 train.xyz
 frame_mapping.jsonl
 ```
 
-如果失败：
+On failure:
 
-- 不生成正式 `train.xyz`。
-- 已完成的选择结果和 `toolkit.log` 会保留。
-- `.partial` 文件可能保留，但不能用于训练。
-- 失败原因会写入日志并显示在终端。
+- No final `train.xyz` is generated.
+- Completed selection results and `toolkit.log` are retained.
+- `.partial` files may remain but must not be used for training.
+- The failure reason is written to the log and displayed in the terminal.
 
-## 常见错误
+## Common Errors
 
-### 输出目录已经存在
+### Output Directory Already Exists
 
-脚本不会覆盖已有结果：
+The scripts do not overwrite existing results:
 
 ```text
 Error: output directory already exists; refusing to overwrite
 ```
 
-请先检查已有 `train.xyz` 和 `toolkit.log`，再决定是否保留或移走目录。
+Inspect the existing `train.xyz` and `toolkit.log` before deciding whether to retain or move the directory.
 
-### 构型不匹配
+### Configuration Mismatch
 
-常见原因包括：
+Common causes include:
 
-- XDATCAR 与 OUTCAR 不是同一次计算。
-- 文件被拼接或截断。
-- INCAR 中的 `NBLOCK` 与实际轨迹写出不一致。
-- AIMD 使用变胞设置。
-- 原子顺序被其他工具修改。
+- XDATCAR and OUTCAR come from different calculations.
+- Files were concatenated or truncated.
+- `NBLOCK` in INCAR does not match the actual trajectory output.
+- AIMD used variable-cell settings.
+- Another tool changed the atom order.
 
-### 缺少能量、力或 stress
+### Missing Energy, Forces, or Stress
 
-脚本不会用其他能量定义代替 TOTEN，也不会生成缺少 Virial 的训练帧。应检查 OUTCAR 是否完整，以及相应离子步是否正常结束。
+The scripts do not substitute another energy definition for TOTEN and do not
+generate training frames without Virial. Check whether OUTCAR is complete and
+whether the corresponding ionic step ended normally.
 
-## 已完成的真实数据验证
+## Completed Real-Data Validation
 
-FPS 脚本已在一个固定晶胞 VASP AIMD 目录上完成端到端测试：
+The FPS script has completed an end-to-end test on a fixed-cell VASP AIMD directory:
 
-- XDATCAR：16,851 帧。
-- OUTCAR：约 1.46 GB。
-- FPS 测试选择：5 帧。
-- 选中离子步：1、5883、10596、14036、16583。
-- 每帧原子数：156。
-- `train.xyz` 可由 ASE 重新读取。
-- TOTEN 与 PESMaker `collect` 解析结果一致。
-- Virial 最大差约 `6.54×10⁻⁵ eV`，来自 OUTCAR 文本打印精度。
+- XDATCAR: 16,851 frames.
+- OUTCAR: approximately 1.46 GB.
+- FPS test selection: 5 frames.
+- Selected ionic steps: 1, 5883, 10596, 14036, and 16583.
+- Atoms per frame: 156.
+- `train.xyz` can be read back by ASE.
+- TOTEN agrees with the PESMaker `collect` parser result.
+- The maximum Virial difference is approximately `6.54×10⁻⁵ eV`, arising from OUTCAR text-printing precision.
 
-等间距脚本已在同一条 16,851 帧轨迹上使用以下参数完成端到端测试：
+The fixed-interval script completed an end-to-end test on the same 16,851-frame trajectory with:
 
 ```text
 --start-frame 100
@@ -693,13 +746,15 @@ FPS 脚本已在一个固定晶胞 VASP AIMD 目录上完成端到端测试：
 --interval 4000
 ```
 
-验证结果：
+Validation results:
 
-- 实际源帧：100、4100、8100、12100、16100。
-- 对应 OUTCAR 离子步：101、4101、8101、12101、16101（`NBLOCK=1`）。
-- `manifest.jsonl`、`frame_mapping.jsonl` 和预期帧号完全一致。
-- 5 个结构均包含有限的 Energy、`156×3` force 和 9 个 Virial 分量。
-- `train.xyz` 可由 ASE 重新读取。
-- 没有残留 `.partial` 文件。
+- Actual source frames: 100, 4100, 8100, 12100, and 16100.
+- Corresponding OUTCAR ionic steps: 101, 4101, 8101, 12101, and 16101 (`NBLOCK=1`).
+- `manifest.jsonl`, `frame_mapping.jsonl`, and the expected frame numbers agree exactly.
+- All five structures contain finite Energy, `156×3` force, and nine Virial components.
+- `train.xyz` can be read back by ASE.
+- No `.partial` files remain.
 
-真实测试只能证明对应数据及当前适用范围内的流程可用，不能替代对其他 VASP 版本、变胞或拼接轨迹的单独验证。
+Real-data tests demonstrate only that the workflow works for the corresponding
+data within the current scope. They do not replace separate validation for other
+VASP versions, variable-cell trajectories, or concatenated trajectories.
