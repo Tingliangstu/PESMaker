@@ -11,7 +11,10 @@ from ase import Atoms
 from ase.io import read
 
 
-TOOLKIT_DIR = Path(__file__).resolve().parents[1] / "PESMaker_AIMD_Toolkit"
+TOOLKIT_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "PESMaker_AIMD_and_SinglePoint_Toolkit"
+)
 if str(TOOLKIT_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLKIT_DIR))
 
@@ -130,7 +133,7 @@ def test_merge_interval_sources_end_to_end(tmp_path: Path):
     assert [record["merged_start_0based"] for record in records] == ["0", "2"]
     assert [record["merged_end_0based"] for record in records] == ["1", "2"]
     readme = (output / "README.md").read_text(encoding="utf-8")
-    assert "采样来源：`interval`" in readme
+    assert "Sampling source: `interval`" in readme
     assert "0–1" in readme
     assert "3" in readme
 

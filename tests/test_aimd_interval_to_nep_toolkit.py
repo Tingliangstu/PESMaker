@@ -9,7 +9,10 @@ import pytest
 import yaml
 
 
-TOOLKIT_DIR = Path(__file__).resolve().parents[1] / "PESMaker_AIMD_Toolkit"
+TOOLKIT_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "PESMaker_AIMD_and_SinglePoint_Toolkit"
+)
 if str(TOOLKIT_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLKIT_DIR))
 TOOL_PATH = TOOLKIT_DIR / "aimd_interval_to_nep.py"
