@@ -21,7 +21,7 @@ import pytest
 
 TOOLKIT_DIR = (
     Path(__file__).resolve().parents[1]
-    / "PESMaker_AIMD_and_SinglePoint_Toolkit"
+    / "toolkit"
 )
 SCRIPT_PATH = TOOLKIT_DIR / "run_vasp_gpu_pool.py"
 SUBMIT_TEMPLATE_PATH = TOOLKIT_DIR / "templates" / "submit.sh"

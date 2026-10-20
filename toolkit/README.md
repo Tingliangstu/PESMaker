@@ -1,4 +1,4 @@
-# PESMaker VASP AIMD → NEP Toolkit
+# PESMaker Toolkit
 
 This directory provides helper scripts that operate independently of the PESMaker workflow. They generate and merge GPUMD/NEP datasets from VASP AIMD calculations and prepare test sets that do not overlap existing training frames.
 
@@ -228,7 +228,7 @@ delete, compress, or rename them.
 ## FPS Script Usage
 
 ```bash
-python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_fps_to_nep.py \
+python toolkit/aimd_fps_to_nep.py \
   --aimd-dir /absolute/path/to/VASP_AIMD \
   --max-count 200 \
   --min-distance 0.0
@@ -269,7 +269,7 @@ PESMakerToolkit_AIMD_FPS_to_NEP/
 Minimal invocation:
 
 ```bash
-python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
+python toolkit/aimd_interval_to_nep.py \
   --aimd-dir /absolute/path/to/VASP_AIMD \
   --interval 100
 ```
@@ -277,7 +277,7 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
 Specify start and end frames:
 
 ```bash
-python PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
+python toolkit/aimd_interval_to_nep.py \
   --aimd-dir /absolute/path/to/VASP_AIMD \
   --interval 100 \
   --start-frame 1000 \
@@ -381,7 +381,7 @@ frame, is selected from each bin to balance temporal coverage with train/test
 separation.
 
 ```bash
-python PESMaker_AIMD_and_SinglePoint_Toolkit/prepare_aimd_testset.py \
+python toolkit/prepare_aimd_testset.py \
   --aimd-root /absolute/path/to/AIMD_ROOT \
   --training-source interval \
   --count-per-trajectory 20
@@ -400,7 +400,7 @@ Arguments:
 For example, prepare the most complete possible test set of external Interval frames:
 
 ```bash
-python PESMaker_AIMD_and_SinglePoint_Toolkit/prepare_aimd_testset.py \\
+python toolkit/prepare_aimd_testset.py \\
   --aimd-root /absolute/path/to/AIMD_ROOT \\
   --training-source interval \\
   --all-unused \\
@@ -459,7 +459,7 @@ PESMaker, or modify any PESMaker source code.
 The merge source must be specified explicitly; the script never guesses or mixes FPS and Interval sources:
 
 ```bash
-python PESMaker_AIMD_and_SinglePoint_Toolkit/merge_aimd_train_xyz.py \
+python toolkit/merge_aimd_train_xyz.py \
   --aimd-root /absolute/path/to/AIMD_ROOT \
   --source interval
 ```
@@ -467,7 +467,7 @@ python PESMaker_AIMD_and_SinglePoint_Toolkit/merge_aimd_train_xyz.py \
 Merge FPS sources:
 
 ```bash
-python PESMaker_AIMD_and_SinglePoint_Toolkit/merge_aimd_train_xyz.py \
+python toolkit/merge_aimd_train_xyz.py \
   --aimd-root /absolute/path/to/AIMD_ROOT \
   --source fps
 ```
@@ -605,7 +605,7 @@ The Windows D drive is usually mounted at `/mnt/d` in WSL. For example:
 
 ```bash
 conda run -n pesmaker python \
-  /mnt/d/ResearchData/PESMaker_litupVer/PESMaker_AIMD_and_SinglePoint_Toolkit/aimd_interval_to_nep.py \
+  /mnt/d/ResearchData/PESMaker_litupVer/toolkit/aimd_interval_to_nep.py \
   --aimd-dir /mnt/d/ResearchData/example_AIMD \
   --interval 100 \
   --start-frame 0

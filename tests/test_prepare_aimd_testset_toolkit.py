@@ -9,7 +9,7 @@ import pytest
 
 TOOLKIT_DIR = (
     Path(__file__).resolve().parents[1]
-    / "PESMaker_AIMD_and_SinglePoint_Toolkit"
+    / "toolkit"
 )
 if str(TOOLKIT_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLKIT_DIR))

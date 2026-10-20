@@ -231,6 +231,12 @@ geometry FPS or evenly spaced sampling from existing VASP AIMD `XDATCAR` files,
 VASP SCF setup, scheduler submission, extxyz dataset collection, and NEP
 training setup.
 
+## Toolkit
+
+The [toolkit](toolkit/README.md) provides standalone helpers for extracting and
+merging AIMD datasets, preparing test sets, and running VASP single-point jobs
+with a local GPU pool.
+
 ## License
 
 PESMaker is free software distributed under the GNU General Public License,

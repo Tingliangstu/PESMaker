@@ -16,7 +16,7 @@ from ase.io import read, write
 
 TOOL_PATH = (
     Path(__file__).resolve().parents[1]
-    / "PESMaker_AIMD_and_SinglePoint_Toolkit"
+    / "toolkit"
     / "aimd_fps_to_nep.py"
 )
 SPEC = importlib.util.spec_from_file_location("aimd_fps_to_nep", TOOL_PATH)
